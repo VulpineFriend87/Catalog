@@ -6,7 +6,7 @@ plugins {
 description = "Velocity frontend for Catalog."
 
 dependencies {
-    implementation(project(":common"))
+    implementation(project(":core"))
 
     implementation(libs.okaeri.yaml.snakeyaml)
     implementation(libs.bstats.velocity)

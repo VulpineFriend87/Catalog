@@ -7,7 +7,7 @@ plugins {
 description = "A free and open source Modrinth plugin manager with automatic tracking, updates and dependency management."
 
 dependencies {
-    implementation(project(":common"))
+    implementation(project(":core"))
 
     implementation(libs.okaeri.yaml.bukkit)
     implementation(libs.okaeri.serdes.bukkit)

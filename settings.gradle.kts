@@ -1,5 +1,5 @@
 rootProject.name = "Catalog"
 
-include("common")
+include("core")
 include("paper")
 include("velocity")

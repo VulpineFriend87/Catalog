@@ -35,7 +35,7 @@ Under initial development. Not yet released.
 
 | Module | Contents |
 |---|---|
-| `common` | Modrinth client, jar index, tracking state, update and dependency logic. No platform dependencies. |
+| `core` | Modrinth client, jar index, tracking state, update and dependency logic. No platform dependencies. |
 | `paper` | Paper, Purpur and Folia frontend, including the inventory GUI. |
 | `velocity` | Velocity frontend, with a chat-based interface. |
 
