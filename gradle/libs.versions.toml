@@ -1,0 +1,48 @@
+[versions]
+paper = "1.18.2-R0.1-SNAPSHOT"
+velocity = "3.4.0-SNAPSHOT"
+papi = "2.12.3"
+gson = "2.11.0"
+
+okaeri = "5.0.13"
+bstats = "3.2.1"
+folialib = "0.5.2"
+commons = "0.2.0"
+lamp = "4.0.0-rc.18"
+inventoryframework = "0.10.19"
+
+junit = "6.0.1"
+
+shadow = "9.6.1"
+lombok = "9.5.0"
+pluginyml = "0.9.0"
+
+[libraries]
+paper = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
+velocity = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
+papi = { module = "me.clip:placeholderapi", version.ref = "papi" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+
+okaeri-yaml-bukkit = { module = "eu.okaeri:okaeri-configs-yaml-bukkit", version.ref = "okaeri" }
+okaeri-yaml-snakeyaml = { module = "eu.okaeri:okaeri-configs-yaml-snakeyaml", version.ref = "okaeri" }
+okaeri-serdes-bukkit = { module = "eu.okaeri:okaeri-configs-serdes-bukkit", version.ref = "okaeri" }
+
+bstats-bukkit = { module = "org.bstats:bstats-bukkit", version.ref = "bstats" }
+bstats-velocity = { module = "org.bstats:bstats-velocity", version.ref = "bstats" }
+
+folialib = { module = "com.tcoded:FoliaLib", version.ref = "folialib" }
+commons = { module = "top.vulpine:commons", version.ref = "commons" }
+
+lamp-common = { module = "io.github.revxrsal:lamp.common", version.ref = "lamp" }
+lamp-bukkit = { module = "io.github.revxrsal:lamp.bukkit", version.ref = "lamp" }
+lamp-velocity = { module = "io.github.revxrsal:lamp.velocity", version.ref = "lamp" }
+
+inventoryframework = { module = "com.github.stefvanschie.inventoryframework:IF", version.ref = "inventoryframework" }
+
+junit = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+lombok = { id = "io.freefair.lombok", version.ref = "lombok" }
+pluginyml = { id = "de.eldoria.plugin-yml.bukkit", version.ref = "pluginyml" }

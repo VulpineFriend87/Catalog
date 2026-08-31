@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "not a dependency to keep current",
+      "matchPackageNames": ["io.papermc.paper:paper-api"],
+      "enabled": false
+    }
+  ]
+}

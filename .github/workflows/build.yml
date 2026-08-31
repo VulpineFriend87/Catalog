@@ -1,0 +1,142 @@
+name: CI & Release
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      type: ${{ steps.type.outputs.TYPE }}
+      changelog: ${{ steps.changelog.outputs.CHANGELOG }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(git tag --points-at HEAD | grep -E '^v' | head -n 1 | sed 's/^v//' || true)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build changelog
+        id: changelog
+        run: |
+          CURRENT_TAG=$(git tag --points-at HEAD | grep -E '^v' | head -n 1 || true)
+
+          if [ -z "$CURRENT_TAG" ]; then
+            exit 0
+          fi
+
+          NOTES=$(git tag -l "$CURRENT_TAG" --format='%(contents)')
+
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)
+
+          {
+            echo "CHANGELOG<<CHANGELOG_EOF"
+
+            if [ -n "$NOTES" ]; then
+              printf '%s\n' "$NOTES"
+            fi
+
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${CURRENT_TAG}"
+            fi
+
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect release type
+        id: type
+        run: |
+          if [[ "${{ steps.version.outputs.VERSION }}" == *"alpha"* ]]; then
+            echo "TYPE=alpha" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.version.outputs.VERSION }}" == *"beta"* ]]; then
+            echo "TYPE=beta" >> $GITHUB_OUTPUT
+          else
+            echo "TYPE=release" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-jars
+          path: |
+            paper/build/libs/*.jar
+            velocity/build/libs/*.jar
+          retention-days: 1
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && needs.build.outputs.version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin-jars
+          path: build/libs
+
+      - name: Upload to Modrinth
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          # TODO: replace with the real Modrinth project id before the first release.
+          modrinth-id: PLACEHOLDER
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: build/libs/**/*.jar
+          version: ${{ needs.build.outputs.version }}
+          name: ${{ needs.build.outputs.version }}
+          version-type: ${{ needs.build.outputs.type }}
+          changelog: ${{ needs.build.outputs.changelog }}
+          loaders: |
+            paper
+            purpur
+            folia
+            velocity
+          game-versions: |
+            1.18.2
+            1.19
+            1.19.1
+            1.19.2
+            1.19.3
+            1.19.4
+            1.20
+            1.20.1
+            1.20.2
+            1.20.3
+            1.20.4
+            1.20.5
+            1.20.6
+            1.21
+            1.21.1
+            1.21.2
+            1.21.3
+            1.21.4
+            1.21.5
+            1.21.6
+            1.21.7
+            1.21.8
+            1.21.9
+            1.21.10
+            1.21.11
+            26.1
+            26.1.1
+            26.1.2
+            26.2
