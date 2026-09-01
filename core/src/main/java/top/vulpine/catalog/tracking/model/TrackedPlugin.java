@@ -1,4 +1,4 @@
-package top.vulpine.catalog.tracking;
+package top.vulpine.catalog.tracking.model;
 
 import lombok.Getter;
 import lombok.Setter;

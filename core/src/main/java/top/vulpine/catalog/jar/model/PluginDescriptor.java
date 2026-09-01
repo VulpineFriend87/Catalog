@@ -1,5 +1,6 @@
-package top.vulpine.catalog.jar;
+package top.vulpine.catalog.jar.model;
 
+import lombok.Builder;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
@@ -10,10 +11,11 @@ import lombok.experimental.Accessors;
  * API. It answers the questions a hash cannot: which plugin a file belongs to, whether two jars
  * claim the same plugin, and whether a jar was compiled for a newer Java than the server runs.</p>
  *
- * <p>Every field may be null or zero. A jar with no readable descriptor is not an error; it is just
- * a jar Catalog knows less about.</p>
+ * <p>Every field may be absent. A jar with no readable descriptor is not an error; it is just a jar
+ * Catalog knows less about.</p>
  */
 @Getter
+@Builder
 @Accessors(fluent = true)
 public final class PluginDescriptor {
 
@@ -21,18 +23,11 @@ public final class PluginDescriptor {
     private final String pluginVersion;
     private final String mainClass;
     private final String apiVersion;
-    private final Kind kind;
-    private final int bytecodeMajor;
 
-    PluginDescriptor(String pluginName, String pluginVersion, String mainClass, String apiVersion,
-                     Kind kind, int bytecodeMajor) {
-        this.pluginName = pluginName;
-        this.pluginVersion = pluginVersion;
-        this.mainClass = mainClass;
-        this.apiVersion = apiVersion;
-        this.kind = kind;
-        this.bytecodeMajor = bytecodeMajor;
-    }
+    @Builder.Default
+    private final Kind kind = Kind.NONE;
+
+    private final int bytecodeMajor;
 
     /**
      * An empty descriptor, for a jar that could not be read.
@@ -40,7 +35,7 @@ public final class PluginDescriptor {
      * @return a descriptor with everything absent
      */
     public static PluginDescriptor unknown() {
-        return new PluginDescriptor(null, null, null, null, Kind.NONE, 0);
+        return PluginDescriptor.builder().build();
     }
 
     /**

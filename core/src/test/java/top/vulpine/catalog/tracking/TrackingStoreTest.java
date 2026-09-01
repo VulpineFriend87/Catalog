@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import top.vulpine.catalog.json.Json;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
+import top.vulpine.catalog.tracking.model.TrackedPlugin;
 
 import java.io.IOException;
 import java.nio.file.Files;

@@ -2,6 +2,7 @@ package top.vulpine.catalog.jar;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import top.vulpine.catalog.jar.model.PluginDescriptor;
 
 import java.io.BufferedReader;
 import java.io.DataInputStream;
@@ -55,8 +56,14 @@ public final class JarInspector {
             Declared declared = readDescriptor(zip);
             int major = readBytecodeMajor(zip, declared.mainClass);
 
-            return new PluginDescriptor(declared.name, declared.version, declared.mainClass,
-                    declared.apiVersion, declared.kind, major);
+            return PluginDescriptor.builder()
+                    .pluginName(declared.name)
+                    .pluginVersion(declared.version)
+                    .mainClass(declared.mainClass)
+                    .apiVersion(declared.apiVersion)
+                    .kind(declared.kind)
+                    .bytecodeMajor(major)
+                    .build();
 
         } catch (IOException | RuntimeException e) {
             return PluginDescriptor.unknown();

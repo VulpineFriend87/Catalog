@@ -1,4 +1,4 @@
-package top.vulpine.catalog.jar;
+package top.vulpine.catalog.jar.model;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;

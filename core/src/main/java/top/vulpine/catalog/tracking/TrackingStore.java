@@ -4,6 +4,8 @@ import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import top.vulpine.catalog.json.Json;
 
+import top.vulpine.catalog.tracking.model.TrackedPlugin;
+
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;

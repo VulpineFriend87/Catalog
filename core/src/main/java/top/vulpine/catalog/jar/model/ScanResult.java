@@ -1,4 +1,4 @@
-package top.vulpine.catalog.jar;
+package top.vulpine.catalog.jar.model;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;
@@ -20,7 +20,7 @@ public final class ScanResult {
     private final List<InstalledJar> unreadable;
     private final List<Duplicate> duplicates;
 
-    ScanResult(List<InstalledJar> jars, List<InstalledJar> unreadable) {
+    public ScanResult(List<InstalledJar> jars, List<InstalledJar> unreadable) {
         this.jars = Collections.unmodifiableList(jars);
         this.unreadable = Collections.unmodifiableList(unreadable);
         this.duplicates = findDuplicates(jars);

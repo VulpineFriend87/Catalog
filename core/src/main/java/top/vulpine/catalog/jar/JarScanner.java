@@ -1,5 +1,9 @@
 package top.vulpine.catalog.jar;
 
+import top.vulpine.catalog.jar.model.InstalledJar;
+import top.vulpine.catalog.jar.model.PluginDescriptor;
+import top.vulpine.catalog.jar.model.ScanResult;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
