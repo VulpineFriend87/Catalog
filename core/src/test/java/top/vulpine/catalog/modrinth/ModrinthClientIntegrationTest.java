@@ -43,7 +43,7 @@ class ModrinthClientIntegrationTest {
 
     @BeforeAll
     static void setUp() {
-        client = ModrinthClient.builder("VulpineFriend87/Catalog/test (integration test)").build();
+        client = ModrinthClient.builder().userAgent("VulpineFriend87/Catalog/test (integration test)").build();
     }
 
     @AfterAll

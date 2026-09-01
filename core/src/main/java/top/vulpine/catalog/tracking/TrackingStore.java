@@ -13,7 +13,6 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +33,7 @@ public final class TrackingStore {
     }.getType();
 
     private final Path file;
-    private final Map<String, TrackedPlugin> byProjectId = new LinkedHashMap<>();
+    private final Map<String, TrackedPlugin> plugins = new LinkedHashMap<>();
 
     public TrackingStore(Path file) {
         this.file = file;
@@ -52,7 +51,7 @@ public final class TrackingStore {
      */
     public void load() {
 
-        byProjectId.clear();
+        plugins.clear();
 
         if (!Files.isRegularFile(file)) {
             return;
@@ -89,7 +88,7 @@ public final class TrackingStore {
 
             // A record with no project id cannot be looked up or updated, so it is not usable state.
             if (entry != null && entry.projectId() != null) {
-                byProjectId.put(entry.projectId(), entry);
+                plugins.put(entry.projectId(), entry);
             }
         }
     }
@@ -122,22 +121,17 @@ public final class TrackingStore {
      * @return the tracked plugins
      */
     public List<TrackedPlugin> all() {
-        return new ArrayList<>(byProjectId.values());
+        return new ArrayList<>(plugins.values());
     }
 
     /**
-     * @return the tracked plugins keyed by project id, unmodifiable
-     */
-    public Map<String, TrackedPlugin> byProjectId() {
-        return Collections.unmodifiableMap(byProjectId);
-    }
-
-    /**
+     * Finds a tracked plugin by its Modrinth project id.
+     *
      * @param projectId the Modrinth project id
      * @return the tracked plugin, or null if that project is not tracked
      */
-    public TrackedPlugin get(String projectId) {
-        return byProjectId.get(projectId);
+    public TrackedPlugin byProjectId(String projectId) {
+        return plugins.get(projectId);
     }
 
     /**
@@ -148,7 +142,7 @@ public final class TrackingStore {
      */
     public TrackedPlugin byFileName(String fileName) {
 
-        for (TrackedPlugin tracked : byProjectId.values()) {
+        for (TrackedPlugin tracked : plugins.values()) {
             if (fileName.equals(tracked.fileName())) {
                 return tracked;
             }
@@ -165,7 +159,7 @@ public final class TrackingStore {
      */
     public TrackedPlugin byHash(String sha512) {
 
-        for (TrackedPlugin tracked : byProjectId.values()) {
+        for (TrackedPlugin tracked : plugins.values()) {
             if (sha512.equals(tracked.sha512())) {
                 return tracked;
             }
@@ -180,7 +174,7 @@ public final class TrackingStore {
      * @param tracked the record to store
      */
     public void put(TrackedPlugin tracked) {
-        byProjectId.put(tracked.projectId(), tracked);
+        plugins.put(tracked.projectId(), tracked);
     }
 
     /**
@@ -190,14 +184,14 @@ public final class TrackingStore {
      * @return the record that was removed, or null if it was not tracked
      */
     public TrackedPlugin remove(String projectId) {
-        return byProjectId.remove(projectId);
+        return plugins.remove(projectId);
     }
 
     /**
      * @return how many plugins are tracked
      */
     public int size() {
-        return byProjectId.size();
+        return plugins.size();
     }
 
     /**
@@ -207,7 +201,7 @@ public final class TrackingStore {
 
         List<TrackedPlugin> pending = new ArrayList<>();
 
-        for (TrackedPlugin tracked : byProjectId.values()) {
+        for (TrackedPlugin tracked : plugins.values()) {
             if (tracked.pendingRestart()) {
                 pending.add(tracked);
             }

@@ -80,7 +80,7 @@ class TrackingStoreTest {
         TrackingStore reloaded = new TrackingStore(file());
         reloaded.load();
 
-        TrackedPlugin back = reloaded.get("AABBCCDD");
+        TrackedPlugin back = reloaded.byProjectId("AABBCCDD");
 
         assertAll(
                 () -> assertNotNull(back),
@@ -107,7 +107,7 @@ class TrackingStoreTest {
         TrackingStore store = new TrackingStore(file());
         store.load();
 
-        TrackedPlugin tracked = store.get("AABBCCDD");
+        TrackedPlugin tracked = store.byProjectId("AABBCCDD");
 
         assertAll(
                 () -> assertFalse(tracked.autoUpdate(), "auto-update is off unless asked for"),
@@ -173,7 +173,7 @@ class TrackingStoreTest {
         store.load();
 
         assertEquals(1, store.size());
-        assertNotNull(store.get("AABBCCDD"));
+        assertNotNull(store.byProjectId("AABBCCDD"));
     }
 
     @Test

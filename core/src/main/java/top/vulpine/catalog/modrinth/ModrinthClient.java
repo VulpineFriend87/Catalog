@@ -3,6 +3,8 @@ package top.vulpine.catalog.modrinth;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
+import lombok.Builder;
+import lombok.NonNull;
 import top.vulpine.catalog.modrinth.http.ApiTransport;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
@@ -55,13 +57,33 @@ public final class ModrinthClient implements AutoCloseable {
 
     private final ApiTransport transport;
 
-    private ModrinthClient(Builder builder) {
-        this.transport = new ApiTransport(API, builder.userAgent, builder.token,
-                builder.cacheDirectory, builder.permitsPerMinute, builder.threads);
+    /**
+     * @param userAgent        required by Modrinth; requests without one are refused
+     * @param token            a personal access token, or null for anonymous access
+     * @param cacheDirectory   where to keep conditional-request responses, or null to disable
+     * @param permitsPerMinute the request budget
+     * @param threads          how many requests may be in flight at once
+     */
+    @Builder
+    private ModrinthClient(@NonNull String userAgent, String token, Path cacheDirectory,
+                           int permitsPerMinute, int threads) {
+
+        this.transport = new ApiTransport(API, userAgent, token, cacheDirectory,
+                permitsPerMinute, threads);
     }
 
-    public static Builder builder(String userAgent) {
-        return new Builder(userAgent);
+    /**
+     * Declared so the defaults live somewhere readable; Lombok fills in the rest of the builder
+     * around it.
+     *
+     * <p>250 requests a minute leaves headroom under Modrinth's 300, so a busy GUI session cannot
+     * get the server throttled in the middle of an install.</p>
+     */
+    public static class ModrinthClientBuilder {
+
+        private int permitsPerMinute = 250;
+        private int threads = 3;
+
     }
 
     /**
@@ -272,69 +294,6 @@ public final class ModrinthClient implements AutoCloseable {
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
-    public static final class Builder {
-
-        private final String userAgent;
-        private String token;
-        private Path cacheDirectory;
-        private int permitsPerMinute = 250;
-        private int threads = 3;
-
-        private Builder(String userAgent) {
-            this.userAgent = userAgent;
-        }
-
-        /**
-         * A Modrinth personal access token, which raises the rate limit and allows private projects
-         * to be read.
-         *
-         * @param token the token, or null for anonymous access
-         * @return this builder
-         */
-        public Builder token(String token) {
-            this.token = token == null || token.isBlank() ? null : token;
-            return this;
-        }
-
-        /**
-         * Where to keep conditional-request responses. Caching is disabled when this is not set.
-         *
-         * @param directory the cache directory
-         * @return this builder
-         */
-        public Builder cacheDirectory(Path directory) {
-            this.cacheDirectory = directory;
-            return this;
-        }
-
-        /**
-         * Requests allowed per minute. Defaults to 250, leaving headroom under Modrinth's 300.
-         *
-         * @param permits the budget
-         * @return this builder
-         */
-        public Builder permitsPerMinute(int permits) {
-            this.permitsPerMinute = permits;
-            return this;
-        }
-
-        /**
-         * How many requests may be in flight at once.
-         *
-         * @param threads the executor size
-         * @return this builder
-         */
-        public Builder threads(int threads) {
-            this.threads = threads;
-            return this;
-        }
-
-        public ModrinthClient build() {
-            return new ModrinthClient(this);
-        }
-
     }
 
 }
