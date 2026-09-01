@@ -21,6 +21,10 @@ import top.vulpine.catalog.tracking.TrackingStore;
 import top.vulpine.catalog.tracking.model.ReconcileReport;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
+import top.vulpine.catalog.update.UpdateChecker;
+import top.vulpine.catalog.update.model.ServerPlatform;
+import top.vulpine.catalog.update.model.ServerTarget;
+import top.vulpine.catalog.update.model.UpdateCandidate;
 import top.vulpine.commons.log.LogAction;
 import top.vulpine.commons.log.Logger;
 import top.vulpine.commons.text.Colorize;
@@ -51,7 +55,7 @@ public final class CatalogPaper extends JavaPlugin {
     private IgnoreList ignored;
 
     private enum Action implements LogAction {
-        CONFIG, SETUP, SCAN, TRACK
+        CONFIG, SETUP, SCAN, TRACK, UPDATE
     }
 
     @Override
@@ -213,6 +217,91 @@ public final class CatalogPaper extends JavaPlugin {
         }
 
         describe(report, scan);
+        checkForUpdates();
+    }
+
+    /**
+     * Asks Modrinth what is out of date, and says so.
+     *
+     * <p>Nothing is downloaded here. This only reports.</p>
+     */
+    private void checkForUpdates() {
+
+        if (tracking.size() == 0) {
+            return;
+        }
+
+        ServerTarget target = target();
+        Logger.debug(Action.UPDATE, "Checking against " + target + ", asking for loaders "
+                + String.join(", ", target.loaders()) + ".");
+
+        List<UpdateCandidate> candidates;
+
+        try {
+            candidates = new UpdateChecker(modrinth, tracking).check(target);
+        } catch (Exception e) {
+            Logger.warn(Action.UPDATE, "Could not check for updates: " + rootMessage(e));
+            return;
+        }
+
+        if (candidates.isEmpty()) {
+            Logger.info(Action.UPDATE, "Everything is up to date.");
+            return;
+        }
+
+        Logger.info(Action.UPDATE, candidates.size() + " update"
+                + (candidates.size() == 1 ? "" : "s") + " available:");
+
+        for (UpdateCandidate candidate : candidates) {
+
+            // Only worth saying on Folia, which refuses plugins that do not declare support. A
+            // Spigot-tagged plugin running on Paper is entirely normal and needs no remark.
+            String note = target.platform() == ServerPlatform.FOLIA && !candidate.declaresPlatform()
+                    ? " — does not declare Folia support"
+                    : "";
+
+            Logger.info(Action.UPDATE, "  " + candidate.plugin().displayName()
+                    + " " + candidate.from() + " -> " + candidate.to() + note);
+        }
+    }
+
+    /**
+     * Describes this server the way Modrinth needs to be asked.
+     *
+     * <p>The Minecraft version has to be the exact one: a project can publish a single release as a
+     * dozen Modrinth versions, each pinned to a few game versions, and asking loosely is how you end
+     * up being offered a build that will not load.</p>
+     */
+    private ServerTarget target() {
+
+        return ServerTarget.builder()
+                .platform(detectPlatform())
+                .gameVersion(getServer().getMinecraftVersion())
+                .javaVersion(Runtime.version().feature())
+                .build();
+    }
+
+    private static ServerPlatform detectPlatform() {
+
+        if (isPresent("io.papermc.paper.threadedregions.RegionizedServer")) {
+            return ServerPlatform.FOLIA;
+        }
+
+        if (isPresent("org.purpurmc.purpur.PurpurConfig")) {
+            return ServerPlatform.PURPUR;
+        }
+
+        return ServerPlatform.PAPER;
+    }
+
+    private static boolean isPresent(String className) {
+
+        try {
+            Class.forName(className);
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 
     /**
