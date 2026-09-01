@@ -1,4 +1,4 @@
-package top.vulpine.catalog.modrinth.http;
+package top.vulpine.catalog.json;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -12,11 +12,15 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 
 /**
- * The Gson configuration used to read Modrinth responses.
+ * The single JSON policy for the whole core: one naming convention, one date format, everywhere.
+ *
+ * <p>Used both to read Modrinth responses and to write Catalog's own state files. Sharing it means
+ * a timestamp round-trips identically whether it came from the API or from disk, which matters
+ * because publish dates are how Catalog decides what is newer.</p>
  *
  * <p>Deliberately limited to Gson 2.8 features. The runtime Gson is whichever one the platform
  * bundles — Paper 1.18.2 ships 2.8.9 — so records and any newer binding support are unavailable,
- * and the models are plain classes bound by field name.</p>
+ * and every bound class is a plain class bound by field name.</p>
  */
 public final class Json {
 

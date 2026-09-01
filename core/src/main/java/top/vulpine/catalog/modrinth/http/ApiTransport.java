@@ -1,6 +1,7 @@
 package top.vulpine.catalog.modrinth.http;
 
 import com.google.gson.JsonObject;
+import top.vulpine.catalog.json.Json;
 import top.vulpine.catalog.modrinth.ModrinthException;
 
 import java.io.IOException;
