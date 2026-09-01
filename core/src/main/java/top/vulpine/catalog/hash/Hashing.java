@@ -1,4 +1,4 @@
-package top.vulpine.catalog.jar;
+package top.vulpine.catalog.hash;
 
 import java.io.IOException;
 import java.io.InputStream;

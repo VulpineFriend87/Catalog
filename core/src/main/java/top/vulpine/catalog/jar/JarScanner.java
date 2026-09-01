@@ -4,6 +4,8 @@ import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.jar.model.PluginDescriptor;
 import top.vulpine.catalog.jar.model.ScanResult;
 
+import top.vulpine.catalog.hash.Hashing;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
