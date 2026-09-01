@@ -9,6 +9,7 @@ import top.vulpine.catalog.update.model.ServerTarget;
 import top.vulpine.catalog.update.model.UpdateCandidate;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -103,19 +104,12 @@ public final class UpdateChecker {
                                              ServerTarget target) {
 
         Map<String, TrackedPlugin> byHash = new HashMap<>();
-        List<String> hashes = new ArrayList<>();
 
         for (TrackedPlugin plugin : plugins) {
             byHash.put(plugin.sha512(), plugin);
-            hashes.add(plugin.sha512());
         }
 
-        Map<String, ModrinthVersion> latest = lookup.latest(
-                hashes,
-                target.loaders(),
-                List.of(target.gameVersion()),
-                List.of(channel.included())
-        );
+        Map<String, ModrinthVersion> latest = askByTier(byHash.keySet(), channel, target);
 
         List<UpdateCandidate> candidates = new ArrayList<>();
 
@@ -136,6 +130,39 @@ public final class UpdateChecker {
         }
 
         return candidates;
+    }
+
+    /**
+     * Asks for each loader group in turn, narrowing to the plugins still unanswered.
+     *
+     * <p>Once a group answers for a plugin, that plugin is done: a wider group could only offer a
+     * build for a platform less specific than the one already found, which would be a sideways move
+     * dressed up as an update.</p>
+     */
+    private Map<String, ModrinthVersion> askByTier(Collection<String> hashes, ReleaseChannel channel,
+                                                   ServerTarget target) {
+
+        Map<String, ModrinthVersion> answers = new HashMap<>();
+        List<String> pending = new ArrayList<>(hashes);
+
+        for (List<String> tier : target.platform().loaderTiers()) {
+
+            if (pending.isEmpty()) {
+                break;
+            }
+
+            Map<String, ModrinthVersion> found = lookup.latest(
+                    pending,
+                    tier,
+                    List.of(target.gameVersion()),
+                    List.of(channel.included())
+            );
+
+            answers.putAll(found);
+            pending.removeAll(found.keySet());
+        }
+
+        return answers;
     }
 
     /**

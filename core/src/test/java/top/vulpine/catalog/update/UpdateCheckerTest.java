@@ -15,6 +15,7 @@ import top.vulpine.catalog.update.model.UpdateCandidate;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,9 +31,14 @@ class UpdateCheckerTest {
     Path data;
 
     private TrackingStore store;
-    private final Map<String, ModrinthVersion> offered = new HashMap<>();
-    private final List<List<String>> asked = new ArrayList<>();
-    private final List<List<ReleaseChannel>> askedChannels = new ArrayList<>();
+
+    /** What Modrinth holds, per installed hash. */
+    private final Map<String, List<ModrinthVersion>> catalogue = new HashMap<>();
+
+    private final List<Ask> asked = new ArrayList<>();
+
+    private record Ask(List<String> hashes, List<String> loaders, List<ReleaseChannel> channels) {
+    }
 
     private static final ServerTarget PAPER = ServerTarget.builder()
             .platform(ServerPlatform.PAPER)
@@ -45,16 +51,24 @@ class UpdateCheckerTest {
         store = new TrackingStore(data.resolve("tracked.json"));
     }
 
+    /**
+     * Behaves like the update endpoint: filters by loader, then returns the newest match.
+     */
     private UpdateChecker checker() {
+
         return new UpdateChecker((hashes, loaders, gameVersions, channels) -> {
-            asked.add(hashes);
-            askedChannels.add(channels);
+
+            asked.add(new Ask(List.copyOf(hashes), List.copyOf(loaders), List.copyOf(channels)));
+
             Map<String, ModrinthVersion> answer = new HashMap<>();
-            hashes.forEach(hash -> {
-                if (offered.containsKey(hash)) {
-                    answer.put(hash, offered.get(hash));
-                }
-            });
+
+            for (String hash : hashes) {
+                catalogue.getOrDefault(hash, List.of()).stream()
+                        .filter(version -> version.loaders().stream().anyMatch(loaders::contains))
+                        .max(Comparator.comparing(ModrinthVersion::datePublished))
+                        .ifPresent(version -> answer.put(hash, version));
+            }
+
             return answer;
         }, store);
     }
@@ -82,9 +96,9 @@ class UpdateCheckerTest {
                 """.formatted(id, number, published, tags), ModrinthVersion.class);
     }
 
-    /** Tracks a plugin at the given version, and says what Modrinth would offer for it. */
+    /** Tracks a plugin at the given version, and says what Modrinth holds for that project. */
     private TrackedPlugin tracked(String projectId, String hash, ModrinthVersion installed,
-                                  ModrinthVersion available) {
+                                  ModrinthVersion... available) {
 
         TrackedPlugin plugin = TrackedPlugin.of(installed, projectId + ".jar", hash,
                 ReleaseChannel.RELEASE, "test");
@@ -92,10 +106,7 @@ class UpdateCheckerTest {
         plugin.name(projectId);
 
         store.put(plugin);
-
-        if (available != null) {
-            offered.put(hash, available);
-        }
+        catalogue.put(hash, List.of(available));
 
         return plugin;
     }
@@ -104,9 +115,8 @@ class UpdateCheckerTest {
     @DisplayName("a newer version is reported as an update")
     void findsAnUpdate() {
 
-        tracked("A", "hash-a",
-                version("v1", "1.0", "2026-01-01T00:00:00Z"),
-                version("v2", "2.0", "2026-06-01T00:00:00Z"));
+        ModrinthVersion newer = version("v2", "2.0", "2026-06-01T00:00:00Z");
+        tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"), newer);
 
         List<UpdateCandidate> candidates = checker().check(PAPER);
 
@@ -139,6 +149,37 @@ class UpdateCheckerTest {
     }
 
     @Test
+    @DisplayName("the build for this platform wins over a newer one for a lesser platform")
+    void prefersTheBuildForThisPlatform() {
+
+        // FastAsyncWorldEdit publishes -Paper and -Bukkit as two versions seconds apart. Asking for
+        // every loader at once and taking the newest would swap the Paper build for the Bukkit one
+        // and call it an update.
+        ModrinthVersion paperBuild = version("paper-2154", "2.15.4", "2026-08-16T16:32:23Z", "paper");
+        ModrinthVersion bukkitBuild = version("bukkit-2154", "2.15.4", "2026-08-16T16:32:26Z", "spigot");
+
+        tracked("FAWE", "hash-fawe", paperBuild, paperBuild, bukkitBuild);
+
+        assertTrue(checker().check(PAPER).isEmpty(), "the Paper build is already installed");
+        assertEquals(1, asked.size(), "and the wider group is never asked");
+        assertEquals(List.of("paper"), asked.get(0).loaders());
+    }
+
+    @Test
+    @DisplayName("a plugin published only for an older platform is still found")
+    void widensForPluginsNotAnswered() {
+
+        ModrinthVersion newer = version("v2", "2.0", "2026-06-01T00:00:00Z", "spigot");
+        tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z", "spigot"), newer);
+
+        List<UpdateCandidate> candidates = checker().check(PAPER);
+
+        assertEquals(1, candidates.size(), "the closure exists exactly for this case");
+        assertEquals(2, asked.size());
+        assertEquals(List.of("spigot", "bukkit"), asked.get(1).loaders());
+    }
+
+    @Test
     @DisplayName("a pinned plugin is not even asked about")
     void skipsPinnedPlugins() {
 
@@ -153,34 +194,34 @@ class UpdateCheckerTest {
     }
 
     @Test
-    @DisplayName("plugins are grouped so each channel costs one request")
+    @DisplayName("each channel is asked for separately, cumulatively")
     void groupsByChannel() {
 
-        tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"), null);
-        tracked("B", "hash-b", version("v1", "1.0", "2026-01-01T00:00:00Z"), null);
+        tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"));
+        tracked("B", "hash-b", version("v1", "1.0", "2026-01-01T00:00:00Z"));
 
         store.byProjectId("B").channel(ReleaseChannel.BETA);
 
         checker().check(PAPER);
 
-        assertEquals(2, asked.size(), "one request per channel, not one per plugin");
-        assertTrue(askedChannels.contains(List.of(ReleaseChannel.RELEASE)));
-        assertTrue(askedChannels.contains(List.of(ReleaseChannel.RELEASE, ReleaseChannel.BETA)),
+        List<List<ReleaseChannel>> channels = asked.stream().map(Ask::channels).distinct().toList();
+
+        assertTrue(channels.contains(List.of(ReleaseChannel.RELEASE)));
+        assertTrue(channels.contains(List.of(ReleaseChannel.RELEASE, ReleaseChannel.BETA)),
                 "a server on beta also accepts releases");
     }
 
     @Test
-    @DisplayName("everything on one channel costs a single request")
-    void oneRequestForOneChannel() {
+    @DisplayName("every plugin on a channel goes in one request")
+    void batchesEachChannel() {
 
-        tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"), null);
-        tracked("B", "hash-b", version("v1", "1.0", "2026-01-01T00:00:00Z"), null);
-        tracked("C", "hash-c", version("v1", "1.0", "2026-01-01T00:00:00Z"), null);
+        tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"));
+        tracked("B", "hash-b", version("v1", "1.0", "2026-01-01T00:00:00Z"));
+        tracked("C", "hash-c", version("v1", "1.0", "2026-01-01T00:00:00Z"));
 
         checker().check(PAPER);
 
-        assertEquals(1, asked.size());
-        assertEquals(3, asked.get(0).size(), "all three hashes in the one request");
+        assertEquals(3, asked.get(0).hashes().size(), "all three hashes in the one request");
     }
 
     @Test
@@ -188,7 +229,7 @@ class UpdateCheckerTest {
     void labelsThePlatform() {
 
         tracked("A", "hash-a",
-                version("v1", "1.0", "2026-01-01T00:00:00Z"),
+                version("v1", "1.0", "2026-01-01T00:00:00Z", "spigot"),
                 version("v2", "2.0", "2026-06-01T00:00:00Z", "spigot"));
 
         assertFalse(checker().check(PAPER).get(0).declaresPlatform(),

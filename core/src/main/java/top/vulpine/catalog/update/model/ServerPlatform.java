@@ -1,5 +1,6 @@
 package top.vulpine.catalog.update.model;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -13,9 +14,9 @@ import java.util.List;
  */
 public enum ServerPlatform {
 
-    PAPER("paper", "spigot", "bukkit"),
+    PAPER(List.of("paper"), List.of("spigot", "bukkit")),
 
-    PURPUR("purpur", "paper", "spigot", "bukkit"),
+    PURPUR(List.of("purpur", "paper"), List.of("spigot", "bukkit")),
 
     /**
      * Folia is not simply a superset of Paper: it refuses to load any plugin whose descriptor does
@@ -24,20 +25,49 @@ public enum ServerPlatform {
      * missing tag must never silently hide an update that would in fact run. Whether a build really
      * works is settled by reading the downloaded jar, which is the same field Folia itself checks.
      */
-    FOLIA("folia", "paper", "spigot", "bukkit"),
+    FOLIA(List.of("folia", "paper"), List.of("spigot", "bukkit")),
 
-    VELOCITY("velocity");
+    VELOCITY(List.of("velocity"), List.of());
 
+    private final List<List<String>> tiers;
     private final List<String> loaders;
 
-    ServerPlatform(String... loaders) {
-        this.loaders = Collections.unmodifiableList(List.of(loaders));
+    ServerPlatform(List<String> preferred, List<String> fallback) {
+
+        List<List<String>> ladder = new ArrayList<>();
+        ladder.add(List.copyOf(preferred));
+
+        if (!fallback.isEmpty()) {
+            ladder.add(List.copyOf(fallback));
+        }
+
+        this.tiers = Collections.unmodifiableList(ladder);
+
+        List<String> all = new ArrayList<>(preferred);
+        all.addAll(fallback);
+        this.loaders = Collections.unmodifiableList(all);
     }
 
     /**
-     * Every loader this server can run, itself first.
+     * The loaders to ask about, most specific group first.
      *
-     * @return the loaders to ask Modrinth for
+     * <p>Asking for everything at once is wrong when a project publishes a separate build per
+     * platform. FastAsyncWorldEdit ships {@code -Paper} and {@code -Bukkit} jars as two versions
+     * seconds apart; taking whichever is newest by date would swap a Paper build for a Bukkit one
+     * and call it an update. Asking the specific group first, and widening only for plugins it did
+     * not answer for, keeps the right variant while still finding plugins published solely for an
+     * older platform.</p>
+     *
+     * @return the groups to try in order
+     */
+    public List<List<String>> loaderTiers() {
+        return tiers;
+    }
+
+    /**
+     * Every loader this server can run, most specific first.
+     *
+     * @return the flattened ladder
      */
     public List<String> loaders() {
         return loaders;
