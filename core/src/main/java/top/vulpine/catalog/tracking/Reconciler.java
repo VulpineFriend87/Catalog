@@ -121,7 +121,6 @@ public final class Reconciler {
                 .ignored(ignored)
                 .conflicting(conflicting)
                 .notAdopted(notAdopted)
-                .duplicates(scan.duplicates())
                 .build();
     }
 

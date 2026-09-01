@@ -4,7 +4,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 import top.vulpine.catalog.jar.model.InstalledJar;
-import top.vulpine.catalog.jar.model.ScanResult;
 
 import java.util.Collections;
 import java.util.List;
@@ -54,9 +53,9 @@ public final class ReconcileReport {
     /**
      * A second jar for a project that is already tracked.
      *
-     * <p>Caught by project id, which finds pairs that {@link ScanResult#duplicates()} cannot: that
-     * check compares the plugin name a jar declares, and a jar with no readable descriptor declares
-     * nothing.</p>
+     * <p>Caught by project id, which comes from the hash and so cannot be wrong. Comparing the
+     * plugin name a jar declares would be easier and is a trap: a jar that shades a library
+     * shipping its own descriptor can declare a name that has nothing to do with what it is.</p>
      */
     @Builder.Default
     private final List<InstalledJar> conflicting = Collections.emptyList();
@@ -69,10 +68,6 @@ public final class ReconcileReport {
      */
     @Builder.Default
     private final List<InstalledJar> notAdopted = Collections.emptyList();
-
-    /** Jars declaring the same plugin name, carried through from the scan. */
-    @Builder.Default
-    private final List<ScanResult.Duplicate> duplicates = Collections.emptyList();
 
     /**
      * Whether anything at all changed, so a quiet startup can stay quiet.
@@ -90,7 +85,7 @@ public final class ReconcileReport {
      * @return true if there is something worth a warning
      */
     public boolean needsAttention() {
-        return !orphaned.isEmpty() || !conflicting.isEmpty() || !duplicates.isEmpty();
+        return !orphaned.isEmpty() || !conflicting.isEmpty();
     }
 
 }

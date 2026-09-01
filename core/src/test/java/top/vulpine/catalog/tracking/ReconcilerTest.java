@@ -229,7 +229,6 @@ class ReconcilerTest {
 
         assertEquals(1, report.adopted().size());
         assertEquals(1, report.conflicting().size());
-        assertEquals(1, report.duplicates().size(), "and the scan catches it by plugin name too");
         assertTrue(report.needsAttention());
     }
 

@@ -11,6 +11,7 @@ import top.vulpine.catalog.jar.JarScanner;
 import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.jar.model.ScanResult;
 import top.vulpine.catalog.modrinth.ModrinthClient;
+import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.paper.config.Config;
 import top.vulpine.catalog.tracking.IgnoreList;
@@ -74,8 +75,6 @@ public final class CatalogPaper extends JavaPlugin {
         this.foliaLib = new FoliaLib(this);
         Logger.debug(Action.SETUP, "Scheduling through FoliaLib, detected platform: "
                 + foliaLib.getImplType() + ".");
-
-        banner();
 
         this.modrinth = ModrinthClient.builder()
                 .userAgent("VulpineFriend87/Catalog/" + getDescription().getVersion() + " (vulpine.top)")
@@ -203,8 +202,9 @@ public final class CatalogPaper extends JavaPlugin {
                 configuration.tracking.autoTrack);
 
         ReconcileReport report = reconciler.reconcile(scan, identified);
+        boolean named = nameTrackedPlugins();
 
-        if (report.hasChanges()) {
+        if (report.hasChanges() || named) {
             try {
                 tracking.save();
             } catch (TrackingException e) {
@@ -213,6 +213,50 @@ public final class CatalogPaper extends JavaPlugin {
         }
 
         describe(report, scan);
+    }
+
+    /**
+     * Fills in the human names of tracked plugins that only have a project id.
+     *
+     * <p>Identification answers with versions, which carry a project id but no title, so a freshly
+     * adopted plugin has nothing readable to call itself. One bulk request fixes every one of them,
+     * and the names are then kept in the state file so this only happens once.</p>
+     *
+     * @return true if anything was named, so the caller knows to save
+     */
+    private boolean nameTrackedPlugins() {
+
+        List<String> missing = new ArrayList<>();
+
+        for (TrackedPlugin plugin : tracking.all()) {
+            if (plugin.name() == null && plugin.projectId() != null) {
+                missing.add(plugin.projectId());
+            }
+        }
+
+        if (missing.isEmpty()) {
+            return false;
+        }
+
+        try {
+
+            for (ModrinthProject project : modrinth.projects(missing).join()) {
+
+                TrackedPlugin plugin = tracking.byProjectId(project.id());
+
+                if (plugin != null) {
+                    plugin.name(project.title());
+                    plugin.slug(project.slug());
+                }
+            }
+
+            return true;
+
+        } catch (Exception e) {
+            // Names are cosmetic; project ids still identify everything correctly without them.
+            Logger.debug(Action.TRACK, "Could not fetch project names: " + rootMessage(e));
+            return false;
+        }
     }
 
     /**
@@ -260,11 +304,6 @@ public final class CatalogPaper extends JavaPlugin {
             Logger.warn(Action.TRACK, jar.fileName()
                     + " is a second jar for a project that is already tracked.");
         }
-
-        for (ScanResult.Duplicate duplicate : report.duplicates()) {
-            Logger.warn(Action.SCAN, "Two jars both declare the plugin " + duplicate.pluginName()
-                    + ": " + fileNames(duplicate.jars()) + ". The server will not load both correctly.");
-        }
     }
 
     private TrackingDefaults defaults() {
@@ -276,26 +315,6 @@ public final class CatalogPaper extends JavaPlugin {
                 .autoUpdate(configured.autoUpdate)
                 .soakMinutes(configured.soakMinutes)
                 .build();
-    }
-
-    private void banner() {
-
-        String[] message = {
-                "",
-                "<white>   ___      _        _",
-                "<white>  / __|__ _<green>| |_ __ _| |___  __ _",
-                "<white> | (__/ _` <green>|  _/ _` | / _ \\/ _` |",
-                "<white>  \\___\\__,_<green>|\\__\\__,_|_\\___/\\__, |",
-                "<white>                              <green>|___/",
-                "",
-                "<white>    By <green>" + String.join(", ", getDescription().getAuthors()),
-                "<white>    Version: <green>" + getDescription().getVersion(),
-                ""
-        };
-
-        for (String line : message) {
-            Logger.system(line);
-        }
     }
 
     /**
@@ -317,17 +336,6 @@ public final class CatalogPaper extends JavaPlugin {
 
         for (TrackedPlugin plugin : plugins) {
             names.add(plugin.displayName());
-        }
-
-        return String.join(", ", names);
-    }
-
-    private static String fileNames(List<InstalledJar> jars) {
-
-        List<String> names = new ArrayList<>();
-
-        for (InstalledJar jar : jars) {
-            names.add(jar.fileName());
         }
 
         return String.join(", ", names);

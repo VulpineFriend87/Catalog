@@ -145,8 +145,11 @@ public final class JarInspector {
                 String key = line.substring(0, colon).trim();
                 String value = unquote(stripComment(line.substring(colon + 1).trim()));
 
+                // First occurrence wins. A jar that shades a library which ships its own
+                // plugin.yml can end up with both concatenated, and the host plugin is the one
+                // whose descriptor comes first.
                 if (!value.isEmpty()) {
-                    values.put(key, value);
+                    values.putIfAbsent(key, value);
                 }
             }
 

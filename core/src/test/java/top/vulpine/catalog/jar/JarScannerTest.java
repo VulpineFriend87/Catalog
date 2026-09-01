@@ -94,42 +94,6 @@ class JarScannerTest {
     }
 
     @Test
-    @DisplayName("reports two jars declaring the same plugin")
-    void reportsDuplicates() throws IOException {
-
-        TestJars.builder(plugins, "LuckPerms-5.4.jar")
-                .descriptor("plugin.yml", "name: LuckPerms\nversion: 5.4\n")
-                .build();
-
-        TestJars.builder(plugins, "LuckPerms-5.6.jar")
-                .descriptor("plugin.yml", "name: LuckPerms\nversion: 5.6\n")
-                .build();
-
-        TestJars.builder(plugins, "Vault.jar")
-                .descriptor("plugin.yml", "name: Vault\nversion: 1.7\n")
-                .build();
-
-        ScanResult result = new JarScanner(plugins).scan();
-
-        assertEquals(1, result.duplicates().size());
-        assertEquals("LuckPerms", result.duplicates().get(0).pluginName());
-        assertEquals(2, result.duplicates().get(0).jars().size());
-    }
-
-    @Test
-    @DisplayName("jars without a descriptor never count as duplicates of each other")
-    void librariesAreNotDuplicates() throws IOException {
-
-        TestJars.builder(plugins, "lib-a.jar").classFile("a/A.class", 61).build();
-        TestJars.builder(plugins, "lib-b.jar").classFile("b/B.class", 61).build();
-
-        ScanResult result = new JarScanner(plugins).scan();
-
-        assertEquals(2, result.jars().size());
-        assertTrue(result.duplicates().isEmpty());
-    }
-
-    @Test
     @DisplayName("a missing folder scans to nothing rather than failing")
     void toleratesMissingFolder() {
 
