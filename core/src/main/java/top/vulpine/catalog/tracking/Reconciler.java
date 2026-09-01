@@ -31,11 +31,24 @@ public final class Reconciler {
     private final TrackingStore store;
     private final IgnoreList ignoreList;
     private final TrackingDefaults defaults;
+    private final boolean adoptNewPlugins;
 
     public Reconciler(TrackingStore store, IgnoreList ignoreList, TrackingDefaults defaults) {
+        this(store, ignoreList, defaults, true);
+    }
+
+    /**
+     * @param adoptNewPlugins false to leave recognised but untracked jars alone, which is what an
+     *                        operator asks for by turning auto-tracking off. Plugins already
+     *                        tracked are still reconciled, since a jar deleted by hand has to be
+     *                        noticed either way.
+     */
+    public Reconciler(TrackingStore store, IgnoreList ignoreList, TrackingDefaults defaults,
+                      boolean adoptNewPlugins) {
         this.store = store;
         this.ignoreList = ignoreList;
         this.defaults = defaults;
+        this.adoptNewPlugins = adoptNewPlugins;
     }
 
     /**
@@ -58,6 +71,7 @@ public final class Reconciler {
         List<InstalledJar> unknown = new ArrayList<>();
         List<InstalledJar> ignored = new ArrayList<>();
         List<InstalledJar> conflicting = new ArrayList<>();
+        List<InstalledJar> notAdopted = new ArrayList<>();
 
         Set<String> claimed = new HashSet<>();
 
@@ -89,6 +103,11 @@ public final class Reconciler {
                 continue;
             }
 
+            if (!adoptNewPlugins) {
+                notAdopted.add(jar);
+                continue;
+            }
+
             adopted.add(adopt(version, jar));
         }
 
@@ -101,6 +120,7 @@ public final class Reconciler {
                 .unknown(unknown)
                 .ignored(ignored)
                 .conflicting(conflicting)
+                .notAdopted(notAdopted)
                 .duplicates(scan.duplicates())
                 .build();
     }

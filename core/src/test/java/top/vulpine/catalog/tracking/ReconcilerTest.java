@@ -270,4 +270,36 @@ class ReconcilerTest {
         assertEquals(30, tracked.soakMinutes());
     }
 
+    @Test
+    @DisplayName("with auto-tracking off, recognised jars are reported but not adopted")
+    void doesNotAdoptWhenTurnedOff() {
+
+        reconciler = new Reconciler(store, ignoreList, TrackingDefaults.standard(), false);
+
+        onDisk("LuckPerms.jar", "hash-a", "LuckPerms", version("v1", "PROJ-A"));
+
+        ReconcileReport report = run();
+
+        assertEquals(0, report.adopted().size());
+        assertEquals(1, report.notAdopted().size(), "known, but deliberately left alone");
+        assertEquals(0, report.unknown().size(), "not the same thing as unrecognised");
+        assertEquals(0, store.size());
+    }
+
+    @Test
+    @DisplayName("with auto-tracking off, plugins already tracked are still reconciled")
+    void stillReconcilesExistingWhenTurnedOff() {
+
+        reconciler = new Reconciler(store, ignoreList, TrackingDefaults.standard(), false);
+
+        store.put(TrackedPlugin.of(version("v1", "PROJ-A"), "LuckPerms.jar", "hash-a",
+                ReleaseChannel.RELEASE, "test"));
+
+        ReconcileReport report = run();
+
+        assertEquals(1, report.removed().size(),
+                "a jar deleted by hand has to be noticed whatever the setting says");
+        assertEquals(0, store.size());
+    }
+
 }

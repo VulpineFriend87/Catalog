@@ -61,6 +61,15 @@ public final class ReconcileReport {
     @Builder.Default
     private final List<InstalledJar> conflicting = Collections.emptyList();
 
+    /**
+     * Recognised on Modrinth but left untracked because auto-tracking is off.
+     *
+     * <p>Distinct from {@link #unknown()}: Catalog knows perfectly well what these are, and is
+     * standing back because it was told to.</p>
+     */
+    @Builder.Default
+    private final List<InstalledJar> notAdopted = Collections.emptyList();
+
     /** Jars declaring the same plugin name, carried through from the scan. */
     @Builder.Default
     private final List<ScanResult.Duplicate> duplicates = Collections.emptyList();
