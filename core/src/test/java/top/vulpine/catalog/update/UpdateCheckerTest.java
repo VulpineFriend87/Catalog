@@ -174,9 +174,35 @@ class UpdateCheckerTest {
 
         List<UpdateCandidate> candidates = checker().check(PAPER);
 
-        assertEquals(1, candidates.size(), "the closure exists exactly for this case");
-        assertEquals(2, asked.size());
-        assertEquals(List.of("spigot", "bukkit"), asked.get(1).loaders());
+        assertEquals(1, candidates.size(), "the ladder exists exactly for this case");
+        assertEquals(List.of("paper"), asked.get(0).loaders());
+        assertEquals(List.of("spigot"), asked.get(1).loaders(), "one rung at a time");
+    }
+
+    @Test
+    @DisplayName("a build for the exact server software beats a newer one for its parent")
+    void prefersTheForkOverItsParent() {
+
+        // A plugin written against the Purpur API and also published for Paper must resolve to the
+        // Purpur build on a Purpur server, no matter which was uploaded last.
+        ModrinthVersion purpurBuild = version("purpur-20", "2.0", "2026-06-01T00:00:00Z", "purpur");
+        ModrinthVersion paperBuild = version("paper-20", "2.0", "2026-06-02T00:00:00Z", "paper");
+
+        tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z", "purpur"),
+                purpurBuild, paperBuild);
+
+        ServerTarget purpur = ServerTarget.builder()
+                .platform(ServerPlatform.PURPUR)
+                .gameVersion("1.21.4")
+                .javaVersion(21)
+                .build();
+
+        List<UpdateCandidate> candidates = checker().check(purpur);
+
+        assertEquals(1, candidates.size());
+        assertEquals("purpur-20", candidates.get(0).version().id(),
+                "the Paper build is newer by a day and still must not win");
+        assertEquals(1, asked.size(), "the paper rung is never reached");
     }
 
     @Test

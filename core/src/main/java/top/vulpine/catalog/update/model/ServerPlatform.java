@@ -14,9 +14,9 @@ import java.util.List;
  */
 public enum ServerPlatform {
 
-    PAPER(List.of("paper"), List.of("spigot", "bukkit")),
+    PAPER("paper", "spigot", "bukkit"),
 
-    PURPUR(List.of("purpur", "paper"), List.of("spigot", "bukkit")),
+    PURPUR("purpur", "paper", "spigot", "bukkit"),
 
     /**
      * Folia is not simply a superset of Paper: it refuses to load any plugin whose descriptor does
@@ -25,40 +25,41 @@ public enum ServerPlatform {
      * missing tag must never silently hide an update that would in fact run. Whether a build really
      * works is settled by reading the downloaded jar, which is the same field Folia itself checks.
      */
-    FOLIA(List.of("folia", "paper"), List.of("spigot", "bukkit")),
+    FOLIA("folia", "paper", "spigot", "bukkit"),
 
-    VELOCITY(List.of("velocity"), List.of());
+    VELOCITY("velocity");
 
-    private final List<List<String>> tiers;
     private final List<String> loaders;
+    private final List<List<String>> tiers;
 
-    ServerPlatform(List<String> preferred, List<String> fallback) {
+    ServerPlatform(String... loaders) {
+
+        this.loaders = List.of(loaders);
 
         List<List<String>> ladder = new ArrayList<>();
-        ladder.add(List.copyOf(preferred));
 
-        if (!fallback.isEmpty()) {
-            ladder.add(List.copyOf(fallback));
+        for (String loader : loaders) {
+            ladder.add(List.of(loader));
         }
 
         this.tiers = Collections.unmodifiableList(ladder);
-
-        List<String> all = new ArrayList<>(preferred);
-        all.addAll(fallback);
-        this.loaders = Collections.unmodifiableList(all);
     }
 
     /**
-     * The loaders to ask about, most specific group first.
+     * The loaders to ask about, one rung at a time, most specific first.
      *
-     * <p>Asking for everything at once is wrong when a project publishes a separate build per
-     * platform. FastAsyncWorldEdit ships {@code -Paper} and {@code -Bukkit} jars as two versions
-     * seconds apart; taking whichever is newest by date would swap a Paper build for a Bukkit one
-     * and call it an update. Asking the specific group first, and widening only for plugins it did
-     * not answer for, keeps the right variant while still finding plugins published solely for an
-     * older platform.</p>
+     * <p>Asking for several at once is wrong when a project publishes a separate build per platform.
+     * FastAsyncWorldEdit ships {@code -Paper} and {@code -Bukkit} jars as two versions seconds
+     * apart; taking whichever is newest by date would swap a Paper build for a Bukkit one and call
+     * it an update. The same applies one rung higher: a plugin built against the Purpur API and
+     * also published for Paper must resolve to the Purpur build on a Purpur server, whichever was
+     * uploaded last.</p>
      *
-     * @return the groups to try in order
+     * <p>So each platform gets its own rung, and a wider one is only asked about the plugins the
+     * narrower ones did not answer for. That costs a few more requests, all of them small, and is
+     * the difference between the right build and a compatible one.</p>
+     *
+     * @return the loaders to try, in order of preference
      */
     public List<List<String>> loaderTiers() {
         return tiers;
