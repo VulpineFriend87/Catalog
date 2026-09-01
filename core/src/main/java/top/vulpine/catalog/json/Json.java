@@ -26,6 +26,7 @@ public final class Json {
 
     private static final Gson GSON = new GsonBuilder()
             .setFieldNamingPolicy(com.google.gson.FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .setPrettyPrinting()
             .registerTypeAdapter(Instant.class, new InstantAdapter())
             .create();
 

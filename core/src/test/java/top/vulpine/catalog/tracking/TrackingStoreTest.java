@@ -165,6 +165,20 @@ class TrackingStoreTest {
     }
 
     @Test
+    @DisplayName("the state file is written to be read by a person")
+    void writesReadableJson() throws IOException {
+
+        TrackingStore store = new TrackingStore(file());
+        store.put(TrackedPlugin.of(version("v1", "1.0"), "a.jar", "hash", ReleaseChannel.RELEASE, "test"));
+        store.save();
+
+        String written = Files.readString(file());
+
+        assertTrue(written.contains("\n"), "one line per field, not everything on one line");
+        assertTrue(written.contains("  \"project_id\""), "and indented");
+    }
+
+    @Test
     @DisplayName("records with no project id are dropped, since nothing could address them")
     void dropsUnusableRecords() throws IOException {
 
