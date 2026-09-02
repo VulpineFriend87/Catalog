@@ -98,6 +98,7 @@ public final class Messages {
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
         out.add(entry("channel", "<plugin> <channel>", "Which builds to follow"));
         out.add(entry("hold", "<plugin>", "Freeze a plugin at its version"));
+        out.add(entry("reload", "", "Reload the configuration"));
 
         return out;
     }
@@ -849,6 +850,10 @@ public final class Messages {
                 .append(Component.text(name, TEXT))
                 .append(Component.text(held ? " held at this version" : " no longer held", MUTED))
                 .build();
+    }
+
+    public static Component reloaded() {
+        return Component.text("Configuration reloaded", MUTED);
     }
 
     public static Component upToDate() {

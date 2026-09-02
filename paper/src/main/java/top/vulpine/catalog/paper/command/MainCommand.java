@@ -274,6 +274,24 @@ public final class MainCommand {
         return null;
     }
 
+    /**
+     * Rereads config.yml.
+     *
+     * <p>Only the settings are reloaded, never the tracking state: that is the record of what
+     * Catalog is responsible for, and rebuilding it from disk while the server runs would risk
+     * acting on a version of the truth nobody asked for.</p>
+     */
+    @Subcommand("reload")
+    @Description("Reload the configuration")
+    @RequiresPermission("command.reload")
+    public void reload(CommandSender sender) {
+
+        send(sender, plugin.loadConfiguration()
+                ? Messages.reloaded()
+                : Messages.failed("Could not read config.yml, see the console. "
+                        + "The settings already loaded are still in use."));
+    }
+
     @Subcommand("channel")
     @Description("Which builds a plugin should follow")
     @RequiresPermission("command.channel")
