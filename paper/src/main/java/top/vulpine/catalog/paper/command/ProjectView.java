@@ -30,6 +30,9 @@ public final class ProjectView {
     /** The newest build this server could run, or null if the project publishes none. */
     private final ModrinthVersion latest;
 
+    /** This server's exact Minecraft version, to say whether {@link #latest} actually names it. */
+    private final String gameVersion;
+
     /** Null when the project is not installed here. */
     private final TrackedPlugin installed;
 

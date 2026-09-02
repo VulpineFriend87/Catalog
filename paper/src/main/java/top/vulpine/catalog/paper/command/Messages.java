@@ -8,6 +8,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
+import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import top.vulpine.catalog.modrinth.model.SearchHit;
 import top.vulpine.catalog.modrinth.model.SearchResults;
@@ -257,6 +258,12 @@ public final class Messages {
             out.add(field("Needs", requirements(view)));
         }
 
+        Component built = builtFor(view);
+
+        if (built != null) {
+            out.add(built);
+        }
+
         out.add(Component.empty());
         out.add(actions(view, installed));
 
@@ -337,6 +344,28 @@ public final class Messages {
         }
 
         return hover.build();
+    }
+
+    /**
+     * Said only when the newest build does not name this server's exact version.
+     *
+     * <p>Almost always an author who did not tick the newest patch, and occasionally a build from
+     * before something broke. Silence would be a promise Catalog cannot make.</p>
+     */
+    private static Component builtFor(ProjectView view) {
+
+        ModrinthVersion latest = view.latest();
+
+        if (latest == null || latest.gameVersions() == null || view.gameVersion() == null
+                || latest.gameVersions().contains(view.gameVersion())) {
+            return null;
+        }
+
+        return line()
+                .append(Component.text(INDENT + "Built for:  ", MUTED))
+                .append(Component.text(String.join(", ", latest.gameVersions()), PENDING))
+                .append(Component.text("  not " + view.gameVersion(), MUTED))
+                .build();
     }
 
     private static Component author(ProjectView view) {

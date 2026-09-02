@@ -365,7 +365,7 @@ public final class CatalogPaper extends JavaPlugin {
             List<ModrinthVersion> versions;
 
             try {
-                versions = modrinth.versions(idOrSlug, tier, List.of(target.gameVersion())).join();
+                versions = modrinth.versions(idOrSlug, tier, target.gameVersions()).join();
             } catch (Exception e) {
                 throw new InstallException("Could not reach Modrinth: " + rootMessage(e), e);
             }
@@ -560,6 +560,13 @@ public final class CatalogPaper extends JavaPlugin {
      */
     public List<String> platformLoaders() {
         return target().loaders();
+    }
+
+    /**
+     * @return the exact Minecraft version this server runs
+     */
+    public String gameVersion() {
+        return getServer().getMinecraftVersion();
     }
 
     private void saveTracking() {

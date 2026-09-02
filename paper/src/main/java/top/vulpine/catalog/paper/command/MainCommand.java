@@ -436,6 +436,7 @@ public final class MainCommand {
                     .project(project)
                     .author(author(project.id()))
                     .latest(latest)
+                    .gameVersion(plugin.gameVersion())
                     .installed(tracked)
                     .updateAvailable(isNewer(latest, tracked))
                     .platformLoaders(plugin.platformLoaders());
