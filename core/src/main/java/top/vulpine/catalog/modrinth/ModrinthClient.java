@@ -10,6 +10,7 @@ import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import top.vulpine.catalog.modrinth.model.SearchResults;
+import top.vulpine.catalog.modrinth.model.TeamMember;
 
 import java.lang.reflect.Type;
 import java.net.URLEncoder;
@@ -53,6 +54,9 @@ public final class ModrinthClient implements AutoCloseable {
     }.getType();
 
     private static final Type PROJECT_LIST = new TypeToken<List<ModrinthProject>>() {
+    }.getType();
+
+    private static final Type MEMBER_LIST = new TypeToken<List<TeamMember>>() {
     }.getType();
 
     private final ApiTransport transport;
@@ -164,6 +168,19 @@ public final class ModrinthClient implements AutoCloseable {
         }
 
         return transport.get("/projects?ids=" + encode(array(ids).toString()), PROJECT_LIST);
+    }
+
+    /**
+     * Fetches the team behind a project.
+     *
+     * <p>Authorship lives on the team, not on the project, so this is the only way to say who made
+     * something.</p>
+     *
+     * @param idOrSlug the project id or slug
+     * @return a future of the team members
+     */
+    public CompletableFuture<List<TeamMember>> members(String idOrSlug) {
+        return transport.get("/project/" + encode(idOrSlug) + "/members", MEMBER_LIST);
     }
 
     /**
