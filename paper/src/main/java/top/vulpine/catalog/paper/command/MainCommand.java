@@ -3,12 +3,16 @@ package top.vulpine.catalog.paper.command;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import revxrsal.commands.annotation.Command;
+import revxrsal.commands.annotation.Default;
 import revxrsal.commands.annotation.Description;
+import revxrsal.commands.annotation.Flag;
 import revxrsal.commands.annotation.Named;
 import revxrsal.commands.annotation.Optional;
 import revxrsal.commands.annotation.Single;
+import revxrsal.commands.annotation.Sized;
 import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
+import revxrsal.commands.annotation.Switch;
 import top.vulpine.catalog.modrinth.model.Dependency;
 import top.vulpine.catalog.modrinth.model.DependencyType;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
@@ -47,16 +51,15 @@ public final class MainCommand {
     private static final Duration CONFIRM_WINDOW = Duration.ofSeconds(30);
 
     /**
-     * Trailing markers the buttons add to a command, read here rather than declared as Lamp flags.
+     * How many words an argument that carries a flag may be.
      *
-     * <p>Lamp requires a flag to be the last parameter, and requires a greedy parameter to be the
-     * last parameter, so an argument that may contain spaces and a flag cannot coexist. Reading
-     * them off the end of the text keeps search phrases and plugin names free-form, and keeps a
-     * second subcommand out of tab completion.</p>
+     * <p>Lamp wants a flag to be the last parameter and a greedy parameter to be the last
+     * parameter, so free-form text and a flag cannot both be greedy. A bounded list is the way out:
+     * a size cap makes it non-greedy at registration, while parsing still consumes every remaining
+     * word — and the flag is lifted out of the input before that happens, so it is never mistaken
+     * for one. The cap is only there to be far past anything anyone would type.</p>
      */
-    private static final String PAGE_MARKER = " --page ";
-
-    private static final String INFO_MARKER = " --info";
+    private static final int MAX_WORDS = 12;
 
     private final CatalogPaper plugin;
 
@@ -95,23 +98,9 @@ public final class MainCommand {
     @Subcommand("search")
     @Description("Find plugins on Modrinth")
     @RequiresPermission("command.search")
-    public void search(CommandSender sender, @Named("query") String query) {
-
-        int page = 1;
-        String text = query;
-        int marker = query.lastIndexOf(PAGE_MARKER);
-
-        if (marker >= 0) {
-
-            try {
-                page = Math.max(Integer.parseInt(query.substring(marker + PAGE_MARKER.length()).trim()), 1);
-                text = query.substring(0, marker).trim();
-            } catch (NumberFormatException ignored) {
-                // Not a page after all, so it is part of what someone wanted to search for.
-            }
-        }
-
-        runSearch(sender, text, page);
+    public void search(CommandSender sender, @Named("query") @Sized(max = MAX_WORDS) List<String> query,
+                       @Flag("page") @Default("1") int page) {
+        runSearch(sender, String.join(" ", query), Math.max(page, 1));
     }
 
     @Subcommand("install")
@@ -175,18 +164,19 @@ public final class MainCommand {
         redraw(sender, tracked, Messages.channelSet(tracked.displayName(), channel));
     }
 
+    /**
+     * @param fromInfo set by the button on the project page, so the answer comes back as that page
+     *                 rather than as the list
+     */
     @Subcommand("update")
     @Description("Download an update and stage it for the next restart")
     @RequiresPermission("command.update")
     public void update(CommandSender sender,
-                       @Named("plugin") @SuggestWith(Suggestions.TrackedOrAll.class) String query) {
+                       @Named("plugin") @SuggestWith(Suggestions.TrackedOrAll.class)
+                       @Sized(max = MAX_WORDS) List<String> query,
+                       @Switch("info") boolean fromInfo) {
 
-        // Set by the button on the project page, so the answer comes back as that page rather than
-        // as the list.
-        boolean fromInfo = query.endsWith(INFO_MARKER);
-        String wanted = fromInfo
-                ? query.substring(0, query.length() - INFO_MARKER.length()).trim()
-                : query;
+        String wanted = String.join(" ", query);
 
         if (wanted.equalsIgnoreCase("all")) {
             updateAll(sender);
