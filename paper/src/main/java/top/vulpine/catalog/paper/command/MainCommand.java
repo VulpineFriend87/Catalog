@@ -141,7 +141,10 @@ public final class MainCommand {
 
                 plugin.install(project, version, wanted, sender.getName());
 
-                redraw(sender, data);
+                // Install cannot carry a payload — its slug argument is followed by the channel, so
+                // it is not greedy and the client refuses to parse anything trailing. It is only
+                // ever offered from a project page, which is also the only screen it can stale.
+                redraw(sender, data != null ? data : ClickContext.INFO + project.slug());
                 send(sender, Messages.installed(project.title(), version.versionNumber()));
 
             } catch (Exception e) {
@@ -165,10 +168,14 @@ public final class MainCommand {
         }
 
         plugin.setChannel(tracked, channel);
+
+        // Same as install: the channel argument follows the name, so nothing may trail it.
         String data = context.take(sender);
+        String screen = data != null ? data
+                : tracked.slug() == null ? null : ClickContext.INFO + tracked.slug();
 
         plugin.getScheduler().runAsync(task -> {
-            redraw(sender, data);
+            redraw(sender, screen);
             send(sender, Messages.channelSet(tracked.displayName(), channel));
         });
     }
@@ -177,10 +184,9 @@ public final class MainCommand {
     @Description("Download an update and stage it for the next restart")
     @RequiresPermission("command.update")
     public void update(CommandSender sender,
-                       @Named("plugin") @SuggestWith(Suggestions.Updatable.class)
-                       @Sized(max = MAX_WORDS) List<String> query) {
+                       @Named("plugin") @SuggestWith(Suggestions.Updatable.class) String query) {
 
-        String wanted = String.join(" ", query);
+        String wanted = ClickContext.strip(query);
         String data = context.take(sender);
 
         if (wanted.equalsIgnoreCase("all")) {

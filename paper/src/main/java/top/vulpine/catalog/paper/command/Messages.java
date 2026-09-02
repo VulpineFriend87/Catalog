@@ -438,7 +438,7 @@ public final class Messages {
 
             return view.latest() == null
                     ? out.append(Component.text("No build for this server", MUTED)).build()
-                    : out.append(button("Install", from("/catalog install " + key, here), BRAND,
+                    : out.append(button("Install", "/catalog install " + key, BRAND,
                             "Install " + view.latest().versionNumber())).build();
         }
 

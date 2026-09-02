@@ -22,6 +22,13 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>The payload is free text, read one time by whoever asks for it next. A command typed by hand
  * carries none, which is exactly right — there is no screen open to put back.</p>
+ *
+ * <p><strong>Only a command whose last argument is greedy may be given a payload.</strong> The
+ * client parses a clickable command against its own copy of the command tree before running it, and
+ * Lamp maps a non-greedy parameter to {@code StringArgumentType.string()}, which stops at the first
+ * space. Anything trailing then fails to parse and the player is asked to confirm running an
+ * "unrecognized or invalid command" instead. A greedy last argument swallows the payload harmlessly,
+ * and this listener has already removed it by the time the command actually runs.</p>
  */
 public final class ClickContext implements Listener {
 
