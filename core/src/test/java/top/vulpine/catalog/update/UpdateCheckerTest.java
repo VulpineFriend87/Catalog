@@ -84,45 +84,17 @@ class UpdateCheckerTest {
     }
 
     @Test
-    @DisplayName("a build for an earlier patch of the same line is still offered")
-    void acceptsTheSameVersionLine() {
+    @DisplayName("only this exact game version is ever asked for")
+    void asksForTheExactVersionOnly() {
 
-        // Axiom 6.0.0+26.1 lists 26.1 and 26.1.1 while the 5.0.4 it replaced lists 26.1.2 as well.
-        // Asking only for the exact version hides the newer build behind the author's oversight.
-        ModrinthVersion newer = versionFor("v6", "6.0.0", "2026-09-01T05:40:48Z", "26.1", "26.1.1");
+        // A build published for 26.1 does not run here as far as anyone has declared, and Catalog
+        // does not decide otherwise on the author's behalf.
         tracked("A", "hash-a",
-                versionFor("v5", "5.0.4", "2026-04-09T05:43:04Z", "26.1", "26.1.1", "26.1.4"),
-                newer);
-
-        List<UpdateCandidate> candidates = checker().check(ON_26_1_4);
-
-        assertEquals(1, candidates.size());
-        assertEquals("6.0.0", candidates.get(0).to());
-        assertFalse(candidates.get(0).declaresGameVersion(), "and it is not pretending otherwise");
-    }
-
-    @Test
-    @DisplayName("a build for a later patch is never offered")
-    void refusesLaterPatches() {
-
-        // The widening only ever looks backwards. A build made for a version this server has not
-        // reached yet is a different thing entirely from one made for a version it has passed.
-        tracked("A", "hash-a",
-                versionFor("v1", "1.0", "2026-01-01T00:00:00Z", "26.1"),
-                versionFor("v2", "2.0", "2026-06-01T00:00:00Z", "26.1.9"));
+                versionFor("v1", "1.0", "2026-01-01T00:00:00Z", "26.1.4"),
+                versionFor("v2", "2.0", "2026-06-01T00:00:00Z", "26.1", "26.1.1"));
 
         assertTrue(checker().check(ON_26_1_4).isEmpty());
-    }
-
-    @Test
-    @DisplayName("the version line is asked for oldest patches and never newer ones")
-    void asksForTheWholeLine() {
-
-        tracked("A", "hash-a", versionFor("v1", "1.0", "2026-01-01T00:00:00Z", "26.1.4"));
-        checker().check(ON_26_1_4);
-
-        assertEquals(List.of("26.1.4", "26.1", "26.1.1", "26.1.2", "26.1.3"),
-                asked.get(0).gameVersions());
+        assertEquals(List.of("26.1.4"), asked.get(0).gameVersions());
     }
 
     private static ModrinthVersion versionFor(String id, String number, String published,

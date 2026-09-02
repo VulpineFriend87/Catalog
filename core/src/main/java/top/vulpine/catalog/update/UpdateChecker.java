@@ -126,8 +126,6 @@ public final class UpdateChecker {
                     .plugin(plugin)
                     .version(version)
                     .declaresPlatform(target.platform().declaredBy(version.loaders()))
-                    .declaresGameVersion(version.gameVersions() != null
-                            && version.gameVersions().contains(target.gameVersion()))
                     .build());
         }
 

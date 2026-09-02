@@ -32,15 +32,6 @@ public final class UpdateCandidate {
     private final boolean declaresPlatform;
 
     /**
-     * Whether the candidate names this server's exact Minecraft version.
-     *
-     * <p>False means it was accepted as a build for an earlier patch of the same line, which is
-     * usually an author who did not tick the newest box and occasionally a build that genuinely
-     * predates a breaking change. Worth saying out loud either way.</p>
-     */
-    private final boolean declaresGameVersion;
-
-    /**
      * @return the version currently installed
      */
     public String from() {
