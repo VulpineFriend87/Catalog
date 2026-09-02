@@ -7,13 +7,23 @@ import eu.okaeri.configs.yaml.bukkit.YamlBukkitConfigurer;
 import eu.okaeri.configs.yaml.bukkit.serdes.SerdesBukkit;
 import lombok.Getter;
 import org.bukkit.plugin.java.JavaPlugin;
+import revxrsal.commands.Lamp;
+import revxrsal.commands.bukkit.BukkitLamp;
+import revxrsal.commands.bukkit.actor.BukkitCommandActor;
+import top.vulpine.catalog.install.Downloader;
+import top.vulpine.catalog.install.InstallException;
 import top.vulpine.catalog.jar.JarScanner;
 import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.jar.model.ScanResult;
 import top.vulpine.catalog.modrinth.ModrinthClient;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
+import top.vulpine.catalog.modrinth.model.ReleaseChannel;
+import top.vulpine.catalog.modrinth.model.SearchResults;
+import top.vulpine.catalog.paper.command.MainCommand;
+import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.paper.config.Config;
+import top.vulpine.catalog.paper.util.PermissionChecker;
 import top.vulpine.catalog.tracking.IgnoreList;
 import top.vulpine.catalog.tracking.Reconciler;
 import top.vulpine.catalog.tracking.TrackingException;
@@ -21,6 +31,7 @@ import top.vulpine.catalog.tracking.TrackingStore;
 import top.vulpine.catalog.tracking.model.ReconcileReport;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
+import top.vulpine.catalog.trash.TrashBin;
 import top.vulpine.catalog.update.UpdateChecker;
 import top.vulpine.catalog.update.model.ServerPlatform;
 import top.vulpine.catalog.update.model.ServerTarget;
@@ -31,8 +42,13 @@ import top.vulpine.commons.text.Colorize;
 import top.vulpine.commons.text.Dialect;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +69,12 @@ public final class CatalogPaper extends JavaPlugin {
     private ModrinthClient modrinth;
     private TrackingStore tracking;
     private IgnoreList ignored;
+    private Downloader downloader;
+    private TrashBin trash;
+
+    private volatile List<UpdateCandidate> lastCheck = List.of();
+    private volatile Instant checkedAt;
+    private volatile int unmanaged;
 
     private enum Action implements LogAction {
         CONFIG, SETUP, SCAN, TRACK, UPDATE
@@ -90,6 +112,17 @@ public final class CatalogPaper extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+
+        Path data = getDataFolder().toPath();
+        this.downloader = new Downloader(modrinth, data.resolve("staging"));
+        this.trash = new TrashBin(data.resolve("trash"));
+
+        Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
+                .permissionForAnnotation(RequiresPermission.class, annotation ->
+                        actor -> PermissionChecker.hasPermission(actor.sender(), annotation.value()))
+                .build();
+
+        lamp.register(new MainCommand(this));
 
         getScheduler().runAsync(task -> index());
     }
@@ -171,6 +204,8 @@ public final class CatalogPaper extends JavaPlugin {
      */
     private void index() {
 
+        downloader.clean();
+
         long started = System.currentTimeMillis();
         ScanResult scan = new JarScanner(pluginsFolder()).scan();
 
@@ -216,6 +251,8 @@ public final class CatalogPaper extends JavaPlugin {
             }
         }
 
+        unmanaged = report.unknown().size();
+
         describe(report, scan);
         checkForUpdates();
     }
@@ -231,14 +268,10 @@ public final class CatalogPaper extends JavaPlugin {
             return;
         }
 
-        ServerTarget target = target();
-        Logger.debug(Action.UPDATE, "Checking against " + target + ", asking for loaders "
-                + String.join(", ", target.loaders()) + ".");
-
         List<UpdateCandidate> candidates;
 
         try {
-            candidates = new UpdateChecker(modrinth, tracking).check(target);
+            candidates = refreshUpdates();
         } catch (Exception e) {
             Logger.warn(Action.UPDATE, "Could not check for updates: " + rootMessage(e));
             return;
@@ -252,16 +285,350 @@ public final class CatalogPaper extends JavaPlugin {
         Logger.info(Action.UPDATE, candidates.size() + " update"
                 + (candidates.size() == 1 ? "" : "s") + " available:");
 
+        boolean folia = detectPlatform() == ServerPlatform.FOLIA;
+
         for (UpdateCandidate candidate : candidates) {
 
             // Only worth saying on Folia, which refuses plugins that do not declare support. A
             // Spigot-tagged plugin running on Paper is entirely normal and needs no remark.
-            String note = target.platform() == ServerPlatform.FOLIA && !candidate.declaresPlatform()
+            String note = folia && !candidate.declaresPlatform()
                     ? " — does not declare Folia support"
                     : "";
 
             Logger.info(Action.UPDATE, "  " + candidate.plugin().displayName()
                     + " " + candidate.from() + " -> " + candidate.to() + note);
+        }
+    }
+
+    /**
+     * Asks Modrinth what is out of date and remembers the answer.
+     *
+     * <p>Kept here rather than in the command so the startup check and {@code /catalog check} share
+     * one path, and so the list command can annotate without going near the network.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @return the available updates
+     */
+    public List<UpdateCandidate> refreshUpdates() {
+
+        ServerTarget target = target();
+        Logger.debug(Action.UPDATE, "Checking against " + target + ", asking for loaders "
+                + String.join(", ", target.loaders()) + ".");
+
+        lastCheck = new UpdateChecker(modrinth, tracking).check(target);
+        checkedAt = Instant.now();
+
+        return lastCheck;
+    }
+
+    /**
+     * The updates still worth offering: what the last check found, minus anything already staged.
+     *
+     * @return the open update candidates
+     */
+    public List<UpdateCandidate> updates() {
+
+        List<UpdateCandidate> open = new ArrayList<>();
+
+        for (UpdateCandidate candidate : lastCheck) {
+            if (!candidate.plugin().pendingRestart()) {
+                open.add(candidate);
+            }
+        }
+
+        return open;
+    }
+
+    /**
+     * The open updates keyed by project id, which is how the list annotates its rows.
+     *
+     * @return project id to candidate
+     */
+    public Map<String, UpdateCandidate> updatesByProject() {
+
+        Map<String, UpdateCandidate> byProject = new HashMap<>();
+
+        for (UpdateCandidate candidate : updates()) {
+            byProject.put(candidate.plugin().projectId(), candidate);
+        }
+
+        return byProject;
+    }
+
+    /**
+     * The newest build of a project this server could actually run.
+     *
+     * <p>Walks the same loader ladder the update check uses, so a plugin published only for an
+     * older platform is still found, and a build for this exact server software always wins over a
+     * newer one meant for its parent.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param idOrSlug the project to look at
+     * @param channel  the least stable channel to accept
+     * @return the version, or null if the project publishes nothing for this server
+     */
+    public ModrinthVersion newestCompatible(String idOrSlug, ReleaseChannel channel) {
+
+        ServerTarget target = target();
+
+        for (List<String> tier : target.platform().loaderTiers()) {
+
+            List<ModrinthVersion> versions;
+
+            try {
+                versions = modrinth.versions(idOrSlug, tier, List.of(target.gameVersion())).join();
+            } catch (Exception e) {
+                throw new InstallException("Could not reach Modrinth: " + rootMessage(e), e);
+            }
+
+            ModrinthVersion best = null;
+
+            for (ModrinthVersion version : versions) {
+
+                if (version.versionType() != null && !channel.accepts(version.versionType())) {
+                    continue;
+                }
+
+                if (best == null || version.datePublished().isAfter(best.datePublished())) {
+                    best = version;
+                }
+            }
+
+            if (best != null) {
+                return best;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Downloads an update and puts it in the update folder.
+     *
+     * <p>Staged under the name the plugin already has on disk, because that is what Bukkit matches
+     * on: modern Paper replaces a jar only when the update file has the identical file name. The
+     * cost is that a versioned file name goes stale, which is what the canonical naming step will
+     * fix once it lands.</p>
+     *
+     * <p>Nothing is loaded or unloaded here. The swap happens during the next startup, before any
+     * plugin is enabled, which is the only moment it is safe.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param candidate the update to stage
+     */
+    public void stage(UpdateCandidate candidate) {
+
+        Path staged = downloader.fetch(candidate.version(), Runtime.version().feature());
+        Path folder = getServer().getUpdateFolderFile().toPath();
+
+        try {
+            Files.createDirectories(folder);
+            Files.move(staged, folder.resolve(candidate.plugin().fileName()),
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new InstallException("Could not stage the update: " + e.getMessage(), e);
+        }
+
+        candidate.plugin().pendingRestart(true);
+        saveTracking();
+    }
+
+    /**
+     * Downloads a plugin that is not installed and puts it in the plugins folder.
+     *
+     * <p>Written straight into place rather than through the update folder: there is nothing to
+     * replace, so there is no file to be locked and no match to satisfy. It still only loads at the
+     * next startup, because Catalog never enables a plugin on a running server.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param project the project being installed
+     * @param version the build to install
+     * @param channel the channel this plugin should follow from now on
+     * @param by      who asked, for the audit trail
+     * @return the new tracking record
+     */
+    public TrackedPlugin install(ModrinthProject project, ModrinthVersion version,
+                                 ReleaseChannel channel, String by) {
+
+        Path staged = downloader.fetch(version, Runtime.version().feature());
+        String fileName = staged.getFileName().toString();
+        Path target = pluginsFolder().resolve(fileName);
+
+        if (Files.exists(target)) {
+            throw new InstallException(fileName + " already exists in the plugins folder.");
+        }
+
+        try {
+            Files.move(staged, target);
+        } catch (IOException e) {
+            throw new InstallException("Could not write " + fileName + ": " + e.getMessage(), e);
+        }
+
+        TrackingDefaults defaults = defaults();
+
+        TrackedPlugin tracked = TrackedPlugin.of(version, fileName,
+                version.primaryFile().sha512(), channel, by);
+
+        tracked.name(project.title());
+        tracked.slug(project.slug());
+        tracked.autoUpdate(defaults.autoUpdate());
+
+        tracking.put(tracked);
+        saveTracking();
+
+        return tracked;
+    }
+
+    /**
+     * Moves a plugin's jar to the trash and stops tracking it.
+     *
+     * <p>The jar is copied before it is deleted, so a delete this JVM is not allowed to perform
+     * costs nothing: on Windows the server holds every loaded jar open, and the removal is finished
+     * on shutdown instead.</p>
+     *
+     * @param plugin the plugin to remove
+     * @param by     who asked
+     * @return true if the file is already gone, false if it goes at shutdown
+     */
+    public boolean uninstall(TrackedPlugin plugin, String by) {
+
+        Path jar = pluginsFolder().resolve(plugin.fileName());
+        boolean deleted = true;
+
+        if (Files.isRegularFile(jar)) {
+
+            TrashBin.Result result = trash.bin(jar, plugin, by);
+            deleted = result.deleted();
+
+            if (!deleted) {
+                jar.toFile().deleteOnExit();
+            }
+        }
+
+        discardStagedUpdate(plugin);
+
+        tracking.remove(plugin.projectId());
+        saveTracking();
+
+        return deleted;
+    }
+
+    /**
+     * Drops an update waiting in the update folder for a plugin that is being removed, so the
+     * restart does not put the jar back.
+     */
+    private void discardStagedUpdate(TrackedPlugin plugin) {
+
+        try {
+            Files.deleteIfExists(getServer().getUpdateFolderFile().toPath()
+                    .resolve(plugin.fileName()));
+        } catch (IOException e) {
+            Logger.warn(Action.UPDATE, "A staged update for " + plugin.displayName()
+                    + " is still in the update folder and should be deleted by hand.");
+        }
+    }
+
+    /**
+     * Changes which builds a plugin will accept from now on.
+     *
+     * <p>Per plugin rather than global, because the reason for running a beta is always about one
+     * specific plugin and never about the server.</p>
+     *
+     * @param plugin  the plugin to change
+     * @param channel the least stable channel it should accept
+     */
+    public void setChannel(TrackedPlugin plugin, ReleaseChannel channel) {
+        plugin.channel(channel);
+        saveTracking();
+    }
+
+    /**
+     * Freezes a plugin at the version it has now, or lets it move again.
+     *
+     * <p>Resolved to the concrete version rather than stored as "current", so the hold cannot
+     * quietly drift if the jar is swapped by hand.</p>
+     *
+     * @param plugin the plugin to hold
+     * @param held   true to freeze it
+     */
+    public void setHeld(TrackedPlugin plugin, boolean held) {
+
+        if (held) {
+            plugin.pinToCurrent();
+        } else {
+            plugin.pinnedVersionId(null);
+        }
+
+        saveTracking();
+    }
+
+    /**
+     * The loaders this server can use, for showing which of a project's loaders apply here.
+     *
+     * @return the loader names, most specific first
+     */
+    public List<String> platformLoaders() {
+        return target().loaders();
+    }
+
+    private void saveTracking() {
+
+        try {
+            tracking.save();
+        } catch (TrackingException e) {
+            Logger.error(Action.TRACK, e.getMessage());
+        }
+    }
+
+    /**
+     * Searches Modrinth, narrowed to what this server could actually run.
+     *
+     * <p>Filtering by loader and game version at the source is what stops the results being a list
+     * of things that would not load here.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param query the search text
+     * @param limit how many results to return
+     * @return one page of results
+     */
+    public SearchResults search(String query, int limit, int offset) {
+
+        ServerTarget target = target();
+        List<List<String>> facets = new ArrayList<>();
+
+        facets.add(List.of("project_type:plugin"));
+
+        List<String> loaders = new ArrayList<>();
+
+        for (String loader : target.loaders()) {
+            loaders.add("categories:" + loader);
+        }
+
+        facets.add(loaders);
+        facets.add(List.of("versions:" + target.gameVersion()));
+
+        return modrinth.search(query, facets, limit, offset).join();
+    }
+
+    /**
+     * Looks a project up by its id or slug.
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param idOrSlug what to look for
+     * @return the project, or null if there is no such thing
+     */
+    public ModrinthProject project(String idOrSlug) {
+
+        try {
+            return modrinth.project(idOrSlug).join();
+        } catch (Exception e) {
+            return null;
         }
     }
 
