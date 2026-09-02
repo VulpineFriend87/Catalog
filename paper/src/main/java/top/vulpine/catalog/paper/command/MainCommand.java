@@ -132,8 +132,18 @@ public final class MainCommand {
                     return;
                 }
 
-                if (plugin.getTracking().byProjectId(project.id()) != null) {
-                    send(sender, Messages.failed(project.title() + " is already installed"));
+                TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
+
+                // Naming a build of something already installed is a request to switch to it,
+                // which is the only way back from a release that broke the server.
+                if (tracked != null && named == null) {
+                    send(sender, Messages.alreadyInstalled(tracked));
+                    return;
+                }
+
+                if (tracked != null && tracked.isPinned()) {
+                    send(sender, Messages.failed(tracked.displayName()
+                            + " is held at its current version. Unhold it first."));
                     return;
                 }
 
@@ -154,10 +164,20 @@ public final class MainCommand {
                     return;
                 }
 
-                // The channel to follow from now on is the one that was just installed. Anything
-                // stricter would leave a plugin installed on beta never seeing another update.
+                // The channel to follow from now on is the one just chosen. Anything stricter would
+                // leave a plugin installed on beta never seeing another update.
                 ReleaseChannel follow = version.versionType() == null
                         ? defaultChannel() : version.versionType();
+
+                if (tracked != null) {
+
+                    plugin.setChannel(tracked, follow);
+                    plugin.stage(tracked, version);
+
+                    redraw(sender, data);
+                    send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
+                    return;
+                }
 
                 plugin.install(project, version, follow, sender.getName());
 

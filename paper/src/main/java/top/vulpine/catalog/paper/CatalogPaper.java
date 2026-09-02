@@ -424,19 +424,34 @@ public final class CatalogPaper extends JavaPlugin {
      * @param candidate the update to stage
      */
     public void stage(UpdateCandidate candidate) {
+        stage(candidate.plugin(), candidate.version());
+    }
 
-        Path staged = downloader.fetch(candidate.version(), Runtime.version().feature());
+    /**
+     * Downloads any build of an already-installed plugin and puts it in the update folder.
+     *
+     * <p>Not only newer ones. Choosing a specific build is how someone walks back from a release
+     * that broke their server, and refusing to go backwards would leave them doing it by hand —
+     * which is the manual jar-swapping this plugin exists to replace.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param plugin  the tracked plugin to replace
+     * @param version the build to put in its place
+     */
+    public void stage(TrackedPlugin plugin, ModrinthVersion version) {
+
+        Path staged = downloader.fetch(version, Runtime.version().feature());
         Path folder = getServer().getUpdateFolderFile().toPath();
 
         try {
             Files.createDirectories(folder);
-            Files.move(staged, folder.resolve(candidate.plugin().fileName()),
-                    StandardCopyOption.REPLACE_EXISTING);
+            Files.move(staged, folder.resolve(plugin.fileName()), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new InstallException("Could not stage the update: " + e.getMessage(), e);
+            throw new InstallException("Could not stage the build: " + e.getMessage(), e);
         }
 
-        candidate.plugin().pendingRestart(true);
+        plugin.pendingRestart(true);
         saveTracking();
     }
 

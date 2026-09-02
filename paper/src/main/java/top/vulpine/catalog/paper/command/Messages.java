@@ -606,8 +606,8 @@ public final class Messages {
                 .append(Component.newline())
                 .append(Component.newline())
                 .append(Component.text(current ? "Already installed"
-                        : runs ? "Install this build"
-                        : "Install anyway — this build does not declare " + gameVersion, TEXT));
+                        : runs ? (installed == null ? "Install this build" : "Switch to this build")
+                        : "Use it anyway — this build does not declare " + gameVersion, TEXT));
 
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
@@ -646,9 +646,9 @@ public final class Messages {
                         : String.join(", ", version.gameVersions()), TEXT))
                 .append(Component.newline())
                 .append(Component.newline())
-                .append(Component.text(current
-                        ? "Already installed"
-                        : "Install this build and follow the " + channel.apiName() + " channel", TEXT));
+                .append(Component.text(current ? "Already installed"
+                        : (installed == null ? "Install this build" : "Switch to this build")
+                                + " and follow the " + channel.apiName() + " channel", TEXT));
 
         row.append(Component.text(version.versionNumber(), current ? MUTED : TEXT));
 
@@ -805,6 +805,19 @@ public final class Messages {
                 .append(Component.text(count, DONE))
                 .append(Component.text(count == 1 ? " update staged, applies on restart"
                         : " updates staged, apply on restart", MUTED))
+                .build();
+    }
+
+    /**
+     * Said when someone asks to install something they already have, which is nearly always a
+     * request to change build rather than a mistake.
+     */
+    public static Component alreadyInstalled(TrackedPlugin plugin) {
+        return line()
+                .append(Component.text(plugin.displayName(), TEXT))
+                .append(Component.text(" is already installed  ", MUTED))
+                .append(button("Versions", "/catalog versions " + key(plugin), BRAND,
+                        "Pick a different build to switch to"))
                 .build();
     }
 
