@@ -21,6 +21,10 @@ dependencies {
     compileOnly(libs.paper)
     compileOnly(libs.papi)
     compileOnly(libs.gson)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.paper)
+    testRuntimeOnly(libs.junit.launcher)
 }
 
 tasks {
