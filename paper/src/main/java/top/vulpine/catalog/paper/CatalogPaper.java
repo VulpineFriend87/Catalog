@@ -49,6 +49,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -358,6 +359,33 @@ public final class CatalogPaper extends JavaPlugin {
      */
     public ModrinthVersion newestCompatible(String idOrSlug, ReleaseChannel channel) {
 
+        for (ModrinthVersion version : compatibleVersions(idOrSlug)) {
+            if (version.versionType() == null || channel.accepts(version.versionType())) {
+                return version;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Every build of a project this server could run, newest first, on any channel.
+     *
+     * <p>Deliberately unfiltered by channel. Which builds an operator is willing to run is their
+     * decision to make in front of the list, not one to make silently on their behalf — a project
+     * whose only build for this server is a beta is not the same thing as a project with no build
+     * at all, and saying so was the bug this replaced.</p>
+     *
+     * <p>The loader ladder still applies: the first rung that answers wins, so a build for this
+     * exact server software is never passed over for one meant for its parent.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param idOrSlug the project to list
+     * @return the compatible versions, newest published first
+     */
+    public List<ModrinthVersion> compatibleVersions(String idOrSlug) {
+
         ServerTarget target = target();
 
         for (List<String> tier : target.platform().loaderTiers()) {
@@ -370,25 +398,14 @@ public final class CatalogPaper extends JavaPlugin {
                 throw new InstallException("Could not reach Modrinth: " + rootMessage(e), e);
             }
 
-            ModrinthVersion best = null;
-
-            for (ModrinthVersion version : versions) {
-
-                if (version.versionType() != null && !channel.accepts(version.versionType())) {
-                    continue;
-                }
-
-                if (best == null || version.datePublished().isAfter(best.datePublished())) {
-                    best = version;
-                }
-            }
-
-            if (best != null) {
-                return best;
+            if (!versions.isEmpty()) {
+                List<ModrinthVersion> sorted = new ArrayList<>(versions);
+                sorted.sort(Comparator.comparing(ModrinthVersion::datePublished).reversed());
+                return sorted;
             }
         }
 
-        return null;
+        return List.of();
     }
 
     /**
