@@ -46,7 +46,7 @@ class MainCommandTest {
                 .build();
 
         // Never dereferenced: registration reflects over the class, it does not call anything.
-        assertDoesNotThrow(() -> lamp.register(new MainCommand(null)));
+        assertDoesNotThrow(() -> lamp.register(new MainCommand(null, null)));
     }
 
 }

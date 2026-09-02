@@ -28,8 +28,6 @@ import top.vulpine.catalog.update.model.UpdateCandidate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -67,22 +65,12 @@ public final class MainCommand {
     /** Pending removals, by sender name. Console counts as one sender, which is correct. */
     private final Map<String, Pending> confirmations = new ConcurrentHashMap<>();
 
-    /**
-     * The last screen Catalog drew for each sender.
-     *
-     * <p>An action can be taken from the list, from a project page or from a search result, and the
-     * one it came from is left offering to do what has already been done. This is what lets any
-     * command put the right screen back — and, just as importantly, leave it alone when it is still
-     * accurate: see {@link #redraw(CommandSender, String...)}.</p>
-     *
-     * <p>Not a command argument, because it cannot be hidden if it is: Lamp always suggests a
-     * flag's name, and the Bukkit integration publishes every command node to Brigadier without
-     * checking whether it is secret.</p>
-     */
-    private final Map<String, View> views = new ConcurrentHashMap<>();
+    /** Which screen the button that ran this command was on, if it was a button at all. */
+    private final ClickContext context;
 
-    public MainCommand(CatalogPaper plugin) {
+    public MainCommand(CatalogPaper plugin, ClickContext context) {
         this.plugin = plugin;
+        this.context = context;
     }
 
     @Description("What Catalog is")
@@ -125,6 +113,7 @@ public final class MainCommand {
                         @Optional @Named("channel") ReleaseChannel channel) {
 
         ReleaseChannel wanted = channel == null ? defaultChannel() : channel;
+        String data = context.take(sender);
 
         plugin.getScheduler().runAsync(task -> {
 
@@ -152,7 +141,7 @@ public final class MainCommand {
 
                 plugin.install(project, version, wanted, sender.getName());
 
-                redraw(sender, project.id());
+                redraw(sender, data);
                 send(sender, Messages.installed(project.title(), version.versionNumber()));
 
             } catch (Exception e) {
@@ -176,9 +165,10 @@ public final class MainCommand {
         }
 
         plugin.setChannel(tracked, channel);
+        String data = context.take(sender);
 
         plugin.getScheduler().runAsync(task -> {
-            redraw(sender, tracked.projectId());
+            redraw(sender, data);
             send(sender, Messages.channelSet(tracked.displayName(), channel));
         });
     }
@@ -191,9 +181,10 @@ public final class MainCommand {
                        @Sized(max = MAX_WORDS) List<String> query) {
 
         String wanted = String.join(" ", query);
+        String data = context.take(sender);
 
         if (wanted.equalsIgnoreCase("all")) {
-            updateAll(sender);
+            updateAll(sender, data);
             return;
         }
 
@@ -217,7 +208,7 @@ public final class MainCommand {
 
                 plugin.stage(candidate);
 
-                redraw(sender, tracked.projectId());
+                redraw(sender, data);
                 send(sender, Messages.staged(tracked.displayName(), candidate.to()));
 
             } catch (Exception e) {
@@ -226,7 +217,7 @@ public final class MainCommand {
         });
     }
 
-    private void updateAll(CommandSender sender) {
+    private void updateAll(CommandSender sender, String data) {
 
         plugin.getScheduler().runAsync(task -> {
 
@@ -241,14 +232,12 @@ public final class MainCommand {
                 }
 
                 int staged = 0;
-                List<String> changed = new ArrayList<>();
                 List<Component> failures = new ArrayList<>();
 
                 for (UpdateCandidate candidate : candidates) {
 
                     try {
                         plugin.stage(candidate);
-                        changed.add(candidate.plugin().projectId());
                         staged++;
                     } catch (Exception e) {
                         // One plugin failing is not a reason to abandon the rest of the queue, and
@@ -258,7 +247,7 @@ public final class MainCommand {
                     }
                 }
 
-                redraw(sender, changed.toArray(new String[0]));
+                redraw(sender, data);
 
                 if (staged > 0) {
                     send(sender, Messages.stagedAll(staged));
@@ -295,10 +284,14 @@ public final class MainCommand {
         }
 
         Pending pending = confirmations.get(sender.getName());
+        String data = context.take(sender);
 
         if (pending == null || pending.expired() || !pending.projectId.equals(tracked.projectId())) {
             confirmations.put(sender.getName(), new Pending(tracked.projectId(), Instant.now()));
-            send(sender, Messages.confirmRemove(tracked));
+
+            // The button carries the payload back, so confirming lands on the screen this started
+            // from rather than on whatever the confirmation itself replaced.
+            send(sender, Messages.confirmRemove(tracked, data));
             return;
         }
 
@@ -310,7 +303,7 @@ public final class MainCommand {
 
                 boolean deleted = plugin.uninstall(tracked, sender.getName());
 
-                redraw(sender, tracked.projectId());
+                redraw(sender, data);
                 send(sender, Messages.removed(tracked.displayName(), deleted));
 
             } catch (Exception e) {
@@ -345,9 +338,10 @@ public final class MainCommand {
         }
 
         plugin.setHeld(tracked, held);
+        String data = context.take(sender);
 
         plugin.getScheduler().runAsync(task -> {
-            redraw(sender, tracked.projectId());
+            redraw(sender, data);
             send(sender, Messages.held(tracked.displayName(), held));
         });
     }
@@ -355,35 +349,30 @@ public final class MainCommand {
     // --- shared work ------------------------------------------------------------------------
 
     /**
-     * Draws the last screen again when what just changed is on it, and only then says what happened.
+     * Draws the screen the button was on again, and only then says what happened.
      *
      * <p>A confirmation on its own leaves the screen above it lying: the button that was just
      * pressed is still offering to do the thing it already did. Redrawing puts the truth at the
      * bottom of the chat, where the eye already is, and the outcome lands under it.</p>
      *
-     * <p>The test is whether the screen is <em>wrong</em>, not whether the action came from it.
-     * Reading someone's page for one plugin and then removing a different one leaves that page
-     * perfectly accurate, and redrawing it would only be a page they did not ask for.</p>
+     * <p>A typed command carries no payload and gets only the outcome, which is right — there is no
+     * screen to put back, and nobody who types a one-line command wants a page in return.</p>
      *
      * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param data what the button said it was on, or null
      */
-    private void redraw(CommandSender sender, String... projectIds) {
+    private void redraw(CommandSender sender, String data) {
 
-        View view = views.get(sender.getName());
-
-        if (view == null || !view.staledBy(Arrays.asList(projectIds))) {
+        if (data == null) {
             return;
         }
 
-        switch (view.kind()) {
-            case LIST -> showList(sender, false);
-            case INFO -> showProject(sender, view.key());
-            case SEARCH -> showSearch(sender, view.key(), view.page());
+        if (data.equals(ClickContext.LIST)) {
+            showList(sender, false);
+        } else if (data.startsWith(ClickContext.INFO)) {
+            showProject(sender, data.substring(ClickContext.INFO.length()));
         }
-    }
-
-    private void remember(CommandSender sender, View view) {
-        views.put(sender.getName(), view);
     }
 
     /**
@@ -408,7 +397,6 @@ public final class MainCommand {
             }
         }
 
-        remember(sender, View.list());
         send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject()));
     }
 
@@ -456,7 +444,6 @@ public final class MainCommand {
                 view.requirement(requirement);
             }
 
-            remember(sender, View.info(project.slug(), project.id()));
             send(sender, Messages.project(view.build()));
 
         } catch (Exception e) {
@@ -485,13 +472,6 @@ public final class MainCommand {
                 return;
             }
 
-            Set<String> shown = new HashSet<>();
-
-            for (SearchHit hit : results.hits()) {
-                shown.add(hit.projectId());
-            }
-
-            remember(sender, View.search(query, page, shown));
             send(sender, Messages.search(query, results, page, trackedProjectIds()));
 
         } catch (Exception e) {
@@ -634,7 +614,7 @@ public final class MainCommand {
      */
     private TrackedPlugin resolve(String query) {
 
-        String wanted = query.toLowerCase(Locale.ROOT);
+        String wanted = ClickContext.strip(query).toLowerCase(Locale.ROOT);
         List<TrackedPlugin> all = plugin.getTracking().all();
 
         for (TrackedPlugin tracked : all) {
@@ -696,51 +676,5 @@ public final class MainCommand {
 
     }
 
-    /**
-     * A screen Catalog can draw again, and the projects it has something to say about.
-     *
-     * @param key      the project slug for a page, the query for a search, unused for the list
-     * @param subjects the projects this screen shows, empty for the list, which shows them all
-     */
-    private record View(Kind kind, String key, int page, Set<String> subjects) {
-
-        private enum Kind {
-            LIST, INFO, SEARCH
-        }
-
-        private static View list() {
-            return new View(Kind.LIST, null, 0, Set.of());
-        }
-
-        private static View info(String slug, String projectId) {
-            return new View(Kind.INFO, slug, 0, Set.of(projectId));
-        }
-
-        private static View search(String query, int page, Set<String> shown) {
-            return new View(Kind.SEARCH, query, page, shown);
-        }
-
-        /**
-         * Whether a change to any of these projects makes this screen wrong.
-         *
-         * <p>The list carries every managed plugin, so anything at all can stale it. A page or a
-         * set of results only goes wrong when it is about the thing that changed.</p>
-         */
-        private boolean staledBy(Collection<String> projectIds) {
-
-            if (kind == Kind.LIST) {
-                return true;
-            }
-
-            for (String projectId : projectIds) {
-                if (subjects.contains(projectId)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-    }
 
 }

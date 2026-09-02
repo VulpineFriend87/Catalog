@@ -20,6 +20,7 @@ import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import top.vulpine.catalog.modrinth.model.SearchResults;
+import top.vulpine.catalog.paper.command.ClickContext;
 import top.vulpine.catalog.paper.command.MainCommand;
 import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.paper.config.Config;
@@ -122,7 +123,10 @@ public final class CatalogPaper extends JavaPlugin {
                         actor -> PermissionChecker.hasPermission(actor.sender(), annotation.value()))
                 .build();
 
-        lamp.register(new MainCommand(this));
+        ClickContext clicks = new ClickContext();
+        getServer().getPluginManager().registerEvents(clicks, this);
+
+        lamp.register(new MainCommand(this, clicks));
 
         getScheduler().runAsync(task -> index());
     }

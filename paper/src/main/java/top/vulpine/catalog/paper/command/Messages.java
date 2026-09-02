@@ -156,8 +156,8 @@ public final class Messages {
         TextComponent.Builder footer = line().append(Component.text(INDENT));
 
         if (!updates.isEmpty()) {
-            footer.append(button("Update all", "/catalog update all", BRAND, "Stage every update"))
-                    .append(Component.space());
+            footer.append(button("Update all", from("/catalog update all", ClickContext.LIST),
+                    BRAND, "Stage every update")).append(Component.space());
         }
 
         footer.append(button("Search", "/catalog search ", MUTED, "Search Modrinth"));
@@ -175,12 +175,12 @@ public final class Messages {
 
         if (update != null && !plugin.pendingRestart()) {
             row.append(Component.space()).append(icon("↑", BRAND,
-                    "/catalog update " + key(plugin),
+                    from("/catalog update " + key(plugin), ClickContext.LIST),
                     "Stage " + update.to() + " for the next restart"));
         }
 
         row.append(Component.space()).append(icon("×", DANGER,
-                "/catalog uninstall " + key(plugin),
+                from("/catalog uninstall " + key(plugin), ClickContext.LIST),
                 "Move " + plugin.displayName() + " to the trash"));
 
         if (plugin.pendingRestart()) {
@@ -403,28 +403,31 @@ public final class Messages {
 
         TextComponent.Builder out = line().append(Component.text(INDENT));
         String key = view.project().slug();
+        String here = ClickContext.INFO + key;
 
         if (installed == null) {
 
             return view.latest() == null
                     ? out.append(Component.text("No build for this server", MUTED)).build()
-                    : out.append(button("Install", "/catalog install " + key, BRAND,
+                    : out.append(button("Install", from("/catalog install " + key, here), BRAND,
                             "Install " + view.latest().versionNumber())).build();
         }
 
         if (view.updateAvailable() && !installed.pendingRestart()) {
-            out.append(button("Update", "/catalog update " + key, BRAND,
+            out.append(button("Update", from("/catalog update " + key, here), BRAND,
                     "Stage " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
                             + " for the next restart"))
                     .append(Component.space());
         }
 
         out.append(installed.isPinned()
-                        ? button("Unhold", "/catalog unhold " + key, MUTED, "Allow updates again")
-                        : button("Hold", "/catalog hold " + key, MUTED,
+                        ? button("Unhold", from("/catalog unhold " + key, here), MUTED,
+                        "Allow updates again")
+                        : button("Hold", from("/catalog hold " + key, here), MUTED,
                         "Freeze at the installed version"))
                 .append(Component.space())
-                .append(button("Remove", "/catalog uninstall " + key, DANGER, "Move to the trash"));
+                .append(button("Remove", from("/catalog uninstall " + key, here), DANGER,
+                        "Move to the trash"));
 
         return out.build();
     }
@@ -515,7 +518,7 @@ public final class Messages {
 
     // --- confirmations and outcomes ---------------------------------------------------------
 
-    public static List<Component> confirmRemove(TrackedPlugin plugin) {
+    public static List<Component> confirmRemove(TrackedPlugin plugin, String from) {
 
         List<Component> out = new ArrayList<>();
 
@@ -529,7 +532,10 @@ public final class Messages {
 
         out.add(line()
                 .append(Component.text(INDENT))
-                .append(button("Confirm", "/catalog uninstall " + key(plugin), DANGER, "Remove it now"))
+                .append(button("Confirm", from == null
+                                ? "/catalog uninstall " + key(plugin)
+                                : from("/catalog uninstall " + key(plugin), from),
+                        DANGER, "Remove it now"))
                 .append(Component.space())
                 .append(button("Cancel", "/catalog list", MUTED, "Leave it installed"))
                 .build());
@@ -637,12 +643,22 @@ public final class Messages {
 
     /**
      * What a click will do, and only then how it does it.
+     *
+     * <p>The payload that tells Catalog which screen the button was on is left out: it is not part
+     * of the command anyone would type, and showing it would only invite someone to.</p>
      */
     private static Component explain(String description, String command) {
 
         return Component.text(description, TEXT)
                 .append(Component.newline())
-                .append(Component.text(command.trim(), MUTED));
+                .append(Component.text(ClickContext.strip(command).trim(), MUTED));
+    }
+
+    /**
+     * Tags a command with the screen it is being offered from.
+     */
+    private static String from(String command, String screen) {
+        return command + " " + ClickContext.MARKER + screen;
     }
 
     /**
