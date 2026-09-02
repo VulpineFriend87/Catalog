@@ -11,6 +11,7 @@ import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -36,14 +37,19 @@ public final class Suggestions {
 
     }
 
-    /** Every managed plugin, plus the word that means all of them. */
-    public static final class TrackedOrAll implements SuggestionProvider<BukkitCommandActor> {
+    /** Only the plugins with an update waiting, plus the word that means all of them. */
+    public static final class Updatable implements SuggestionProvider<BukkitCommandActor> {
 
         @Override
         public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
 
-            List<String> names = names(plugin -> true);
-            names.add(0, "all");
+            Set<String> waiting = JavaPlugin.getPlugin(CatalogPaper.class).updatesByProject().keySet();
+            List<String> names = names(plugin -> waiting.contains(plugin.projectId()));
+
+            if (!names.isEmpty()) {
+                names.add(0, "all");
+            }
+
             return names;
         }
 

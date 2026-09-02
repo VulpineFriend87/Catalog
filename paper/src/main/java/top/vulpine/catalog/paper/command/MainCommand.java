@@ -12,7 +12,6 @@ import revxrsal.commands.annotation.Single;
 import revxrsal.commands.annotation.Sized;
 import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
-import revxrsal.commands.annotation.Switch;
 import top.vulpine.catalog.modrinth.model.Dependency;
 import top.vulpine.catalog.modrinth.model.DependencyType;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
@@ -65,6 +64,20 @@ public final class MainCommand {
 
     /** Pending removals, by sender name. Console counts as one sender, which is correct. */
     private final Map<String, Pending> confirmations = new ConcurrentHashMap<>();
+
+    /**
+     * The last screen Catalog drew for each sender.
+     *
+     * <p>An action can be taken from the list, from a project page or from a search result, and
+     * whichever one it came from is the one now telling a lie — its buttons still offer to do what
+     * has already been done. Remembering the screen is what lets any command put the right one
+     * back, rather than guessing at one and dragging someone somewhere they were not.</p>
+     *
+     * <p>Not a command argument, because it cannot be hidden if it is: Lamp always suggests a
+     * flag's name, and the Bukkit integration publishes every command node to Brigadier without
+     * checking whether it is secret.</p>
+     */
+    private final Map<String, View> views = new ConcurrentHashMap<>();
 
     public MainCommand(CatalogPaper plugin) {
         this.plugin = plugin;
@@ -137,7 +150,7 @@ public final class MainCommand {
 
                 plugin.install(project, version, wanted, sender.getName());
 
-                showProject(sender, project.slug());
+                redraw(sender);
                 send(sender, Messages.installed(project.title(), version.versionNumber()));
 
             } catch (Exception e) {
@@ -161,20 +174,19 @@ public final class MainCommand {
         }
 
         plugin.setChannel(tracked, channel);
-        redraw(sender, tracked, Messages.channelSet(tracked.displayName(), channel));
+
+        plugin.getScheduler().runAsync(task -> {
+            redraw(sender);
+            send(sender, Messages.channelSet(tracked.displayName(), channel));
+        });
     }
 
-    /**
-     * @param fromInfo set by the button on the project page, so the answer comes back as that page
-     *                 rather than as the list
-     */
     @Subcommand("update")
     @Description("Download an update and stage it for the next restart")
     @RequiresPermission("command.update")
     public void update(CommandSender sender,
-                       @Named("plugin") @SuggestWith(Suggestions.TrackedOrAll.class)
-                       @Sized(max = MAX_WORDS) List<String> query,
-                       @Switch("info") boolean fromInfo) {
+                       @Named("plugin") @SuggestWith(Suggestions.Updatable.class)
+                       @Sized(max = MAX_WORDS) List<String> query) {
 
         String wanted = String.join(" ", query);
 
@@ -203,12 +215,7 @@ public final class MainCommand {
 
                 plugin.stage(candidate);
 
-                if (fromInfo) {
-                    showProject(sender, key(tracked));
-                } else {
-                    showList(sender, false);
-                }
-
+                redraw(sender);
                 send(sender, Messages.staged(tracked.displayName(), candidate.to()));
 
             } catch (Exception e) {
@@ -247,7 +254,7 @@ public final class MainCommand {
                     }
                 }
 
-                showList(sender, false);
+                redraw(sender);
 
                 if (staged > 0) {
                     send(sender, Messages.stagedAll(staged));
@@ -299,7 +306,7 @@ public final class MainCommand {
 
                 boolean deleted = plugin.uninstall(tracked, sender.getName());
 
-                showList(sender, true);
+                redraw(sender);
                 send(sender, Messages.removed(tracked.displayName(), deleted));
 
             } catch (Exception e) {
@@ -334,25 +341,44 @@ public final class MainCommand {
         }
 
         plugin.setHeld(tracked, held);
-        redraw(sender, tracked, Messages.held(tracked.displayName(), held));
+
+        plugin.getScheduler().runAsync(task -> {
+            redraw(sender);
+            send(sender, Messages.held(tracked.displayName(), held));
+        });
     }
 
     // --- shared work ------------------------------------------------------------------------
 
     /**
-     * Redraws the page an action was taken from, and only then says what happened.
+     * Draws the screen this sender was last looking at again, and only then says what happened.
      *
      * <p>A confirmation on its own leaves the message above it lying: the button that was just
-     * pressed is still offering to do the thing it already did. Sending the page again puts the
-     * truth at the bottom of the chat, where the eye already is, and the outcome line lands under
-     * it so nothing is missed.</p>
+     * pressed is still offering to do the thing it already did. Redrawing puts the truth at the
+     * bottom of the chat, where the eye already is, and the outcome lands under it.</p>
+     *
+     * <p>A sender Catalog has shown nothing to gets only the outcome. Someone typing a command with
+     * no screen open did not ask for one.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
      */
-    private void redraw(CommandSender sender, TrackedPlugin tracked, Component feedback) {
+    private void redraw(CommandSender sender) {
 
-        plugin.getScheduler().runAsync(task -> {
-            showProject(sender, key(tracked));
-            send(sender, feedback);
-        });
+        View view = views.get(sender.getName());
+
+        if (view == null) {
+            return;
+        }
+
+        switch (view.kind()) {
+            case LIST -> showList(sender, false);
+            case INFO -> showProject(sender, view.key());
+            case SEARCH -> showSearch(sender, view.key(), view.page());
+        }
+    }
+
+    private void remember(CommandSender sender, View view) {
+        views.put(sender.getName(), view);
     }
 
     /**
@@ -377,6 +403,7 @@ public final class MainCommand {
             }
         }
 
+        remember(sender, View.list());
         send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject()));
     }
 
@@ -424,6 +451,7 @@ public final class MainCommand {
                 view.requirement(requirement);
             }
 
+            remember(sender, View.info(project.slug()));
             send(sender, Messages.project(view.build()));
 
         } catch (Exception e) {
@@ -432,27 +460,32 @@ public final class MainCommand {
     }
 
     private void runSearch(CommandSender sender, String query, int page) {
+        plugin.getScheduler().runAsync(task -> showSearch(sender, query, page));
+    }
 
-        plugin.getScheduler().runAsync(task -> {
+    /**
+     * Renders a page of search results. Blocks, so it must be called off the main thread.
+     */
+    private void showSearch(CommandSender sender, String query, int page) {
 
-            try {
+        try {
 
-                SearchResults results = plugin.search(query, Messages.PAGE,
-                        (page - 1) * Messages.PAGE);
+            SearchResults results = plugin.search(query, Messages.PAGE,
+                    (page - 1) * Messages.PAGE);
 
-                // Text search does not match project ids, so a query that found nothing and could
-                // be one is worth one direct lookup before giving up.
-                if (results.hits().isEmpty() && !query.contains(" ")) {
-                    showProject(sender, query);
-                    return;
-                }
-
-                send(sender, Messages.search(query, results, page, trackedProjectIds()));
-
-            } catch (Exception e) {
-                send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
+            // Text search does not match project ids, so a query that found nothing and could
+            // be one is worth one direct lookup before giving up.
+            if (results.hits().isEmpty() && !query.contains(" ")) {
+                showProject(sender, query);
+                return;
             }
-        });
+
+            remember(sender, View.search(query, page));
+            send(sender, Messages.search(query, results, page, trackedProjectIds()));
+
+        } catch (Exception e) {
+            send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
+        }
     }
 
     /**
@@ -611,10 +644,6 @@ public final class MainCommand {
         return null;
     }
 
-    private static String key(TrackedPlugin plugin) {
-        return plugin.slug() != null ? plugin.slug() : plugin.displayName();
-    }
-
     private static boolean matches(String value, String wanted) {
         return value != null && value.toLowerCase(Locale.ROOT).equals(wanted);
     }
@@ -652,6 +681,31 @@ public final class MainCommand {
 
         private boolean expired() {
             return Duration.between(asked, Instant.now()).compareTo(CONFIRM_WINDOW) > 0;
+        }
+
+    }
+
+    /**
+     * A screen Catalog can draw again.
+     *
+     * @param key the project slug for a page, the query for a search, unused for the list
+     */
+    private record View(Kind kind, String key, int page) {
+
+        private enum Kind {
+            LIST, INFO, SEARCH
+        }
+
+        private static View list() {
+            return new View(Kind.LIST, null, 0);
+        }
+
+        private static View info(String slug) {
+            return new View(Kind.INFO, slug, 0);
+        }
+
+        private static View search(String query, int page) {
+            return new View(Kind.SEARCH, query, page);
         }
 
     }

@@ -413,7 +413,7 @@ public final class Messages {
         }
 
         if (view.updateAvailable() && !installed.pendingRestart()) {
-            out.append(button("Update", "/catalog update " + key + " --info", BRAND,
+            out.append(button("Update", "/catalog update " + key, BRAND,
                     "Stage " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
                             + " for the next restart"))
                     .append(Component.space());
