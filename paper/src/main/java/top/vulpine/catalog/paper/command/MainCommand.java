@@ -175,7 +175,8 @@ public final class MainCommand {
     @RequiresPermission("command.info")
     public void versions(CommandSender sender,
                          @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
-                         @Switch("all") boolean everything) {
+                         @Switch("all") boolean everything,
+                         @Flag("page") @Default("1") int page) {
 
         plugin.getScheduler().runAsync(task -> {
 
@@ -195,7 +196,7 @@ public final class MainCommand {
 
                 if (everything && allowed) {
                     send(sender, Messages.everyVersion(project, plugin.allVersions(project.id()),
-                            installed, plugin.gameVersion()));
+                            installed, plugin.gameVersion(), page));
                     return;
                 }
 

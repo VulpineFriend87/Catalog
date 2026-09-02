@@ -529,38 +529,60 @@ public final class Messages {
      * not — that a build works despite what it declares — and it does not pretend otherwise.</p>
      */
     public static List<Component> everyVersion(ModrinthProject project, List<ModrinthVersion> versions,
-                                               TrackedPlugin installed, String gameVersion) {
+                                               TrackedPlugin installed, String gameVersion, int page) {
+
+        int pages = Math.max((versions.size() + EVERY - 1) / EVERY, 1);
+        int shown = Math.min(Math.max(page, 1), pages);
+        int first = (shown - 1) * EVERY;
 
         List<Component> out = new ArrayList<>();
 
         out.add(line()
                 .append(Component.text(project.title(), BRAND).decorate(TextDecoration.BOLD))
-                .append(Component.text("  every build", MUTED))
+                .append(Component.text("  " + versions.size() + " builds", MUTED))
                 .build());
 
         out.add(Component.text(INDENT + "Not filtered for this server. Most will not load.", PENDING));
         out.add(Component.empty());
 
-        for (ModrinthVersion version : versions.subList(0, Math.min(versions.size(), EVERY))) {
-            out.add(everyVersionRow(project, version, installed, gameVersion));
+        if (versions.isEmpty()) {
+            out.add(Component.text(INDENT + "This project has published nothing", MUTED));
         }
 
-        if (versions.size() > EVERY) {
-            out.add(Component.text(INDENT + (versions.size() - EVERY) + " older builds not shown", MUTED));
+        for (ModrinthVersion version : versions.subList(first, Math.min(first + EVERY, versions.size()))) {
+            out.add(everyVersionRow(project, version, installed, gameVersion));
         }
 
         out.add(Component.empty());
 
-        out.add(line()
-                .append(Component.text(INDENT))
-                .append(button("Back", "/catalog versions " + project.slug(), MUTED,
-                        "Back to the compatible builds"))
-                .build());
+        TextComponent.Builder footer = line()
+                .append(Component.text(INDENT + "page ", MUTED))
+                .append(Component.text(shown, TEXT))
+                .append(Component.text(" of " + pages + "  ", MUTED));
+
+        if (shown > 1) {
+            footer.append(button("Newer", everyPage(project, shown - 1), MUTED,
+                    "Page " + (shown - 1))).append(Component.space());
+        }
+
+        if (shown < pages) {
+            footer.append(button("Older", everyPage(project, shown + 1), MUTED,
+                    "Page " + (shown + 1))).append(Component.space());
+        }
+
+        footer.append(button("Back", "/catalog versions " + project.slug(), MUTED,
+                "Back to the builds that run here"));
+
+        out.add(footer.build());
 
         return out;
     }
 
-    /** How many builds the unfiltered list shows before it stops. */
+    private static String everyPage(ModrinthProject project, int page) {
+        return "/catalog versions " + project.slug() + " --all --page " + page;
+    }
+
+    /** How many builds one page of the unfiltered list shows. */
     private static final int EVERY = 12;
 
     private static Component everyVersionRow(ModrinthProject project, ModrinthVersion version,
