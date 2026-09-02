@@ -126,6 +126,8 @@ public final class UpdateChecker {
                     .plugin(plugin)
                     .version(version)
                     .declaresPlatform(target.platform().declaredBy(version.loaders()))
+                    .declaresGameVersion(version.gameVersions() != null
+                            && version.gameVersions().contains(target.gameVersion()))
                     .build());
         }
 
@@ -154,7 +156,7 @@ public final class UpdateChecker {
             Map<String, ModrinthVersion> found = lookup.latest(
                     pending,
                     tier,
-                    List.of(target.gameVersion()),
+                    target.gameVersions(),
                     List.of(channel.included())
             );
 

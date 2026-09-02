@@ -37,12 +37,19 @@ class UpdateCheckerTest {
 
     private final List<Ask> asked = new ArrayList<>();
 
-    private record Ask(List<String> hashes, List<String> loaders, List<ReleaseChannel> channels) {
+    private record Ask(List<String> hashes, List<String> loaders, List<String> gameVersions,
+                       List<ReleaseChannel> channels) {
     }
 
     private static final ServerTarget PAPER = ServerTarget.builder()
             .platform(ServerPlatform.PAPER)
             .gameVersion("1.21.4")
+            .javaVersion(21)
+            .build();
+
+    private static final ServerTarget ON_26_1_4 = ServerTarget.builder()
+            .platform(ServerPlatform.PAPER)
+            .gameVersion("26.1.4")
             .javaVersion(21)
             .build();
 
@@ -52,25 +59,94 @@ class UpdateCheckerTest {
     }
 
     /**
-     * Behaves like the update endpoint: filters by loader, then returns the newest match.
+     * Behaves like the update endpoint: filters by loader and game version, then returns the
+     * newest of what is left.
      */
     private UpdateChecker checker() {
 
         return new UpdateChecker((hashes, loaders, gameVersions, channels) -> {
 
-            asked.add(new Ask(List.copyOf(hashes), List.copyOf(loaders), List.copyOf(channels)));
+            asked.add(new Ask(List.copyOf(hashes), List.copyOf(loaders), List.copyOf(gameVersions),
+                    List.copyOf(channels)));
 
             Map<String, ModrinthVersion> answer = new HashMap<>();
 
             for (String hash : hashes) {
                 catalogue.getOrDefault(hash, List.of()).stream()
                         .filter(version -> version.loaders().stream().anyMatch(loaders::contains))
+                        .filter(version -> version.gameVersions().stream().anyMatch(gameVersions::contains))
                         .max(Comparator.comparing(ModrinthVersion::datePublished))
                         .ifPresent(version -> answer.put(hash, version));
             }
 
             return answer;
         }, store);
+    }
+
+    @Test
+    @DisplayName("a build for an earlier patch of the same line is still offered")
+    void acceptsTheSameVersionLine() {
+
+        // Axiom 6.0.0+26.1 lists 26.1 and 26.1.1 while the 5.0.4 it replaced lists 26.1.2 as well.
+        // Asking only for the exact version hides the newer build behind the author's oversight.
+        ModrinthVersion newer = versionFor("v6", "6.0.0", "2026-09-01T05:40:48Z", "26.1", "26.1.1");
+        tracked("A", "hash-a",
+                versionFor("v5", "5.0.4", "2026-04-09T05:43:04Z", "26.1", "26.1.1", "26.1.4"),
+                newer);
+
+        List<UpdateCandidate> candidates = checker().check(ON_26_1_4);
+
+        assertEquals(1, candidates.size());
+        assertEquals("6.0.0", candidates.get(0).to());
+        assertFalse(candidates.get(0).declaresGameVersion(), "and it is not pretending otherwise");
+    }
+
+    @Test
+    @DisplayName("a build for a later patch is never offered")
+    void refusesLaterPatches() {
+
+        // The widening only ever looks backwards. A build made for a version this server has not
+        // reached yet is a different thing entirely from one made for a version it has passed.
+        tracked("A", "hash-a",
+                versionFor("v1", "1.0", "2026-01-01T00:00:00Z", "26.1"),
+                versionFor("v2", "2.0", "2026-06-01T00:00:00Z", "26.1.9"));
+
+        assertTrue(checker().check(ON_26_1_4).isEmpty());
+    }
+
+    @Test
+    @DisplayName("the version line is asked for oldest patches and never newer ones")
+    void asksForTheWholeLine() {
+
+        tracked("A", "hash-a", versionFor("v1", "1.0", "2026-01-01T00:00:00Z", "26.1.4"));
+        checker().check(ON_26_1_4);
+
+        assertEquals(List.of("26.1.4", "26.1", "26.1.1", "26.1.2", "26.1.3"),
+                asked.get(0).gameVersions());
+    }
+
+    private static ModrinthVersion versionFor(String id, String number, String published,
+                                              String... gameVersions) {
+
+        StringBuilder versions = new StringBuilder();
+
+        for (String gameVersion : gameVersions) {
+            versions.append(versions.length() == 0 ? "" : ",").append('"').append(gameVersion).append('"');
+        }
+
+        return Json.gson().fromJson("""
+                {
+                  "id": "%s",
+                  "project_id": "PROJ",
+                  "version_number": "%s",
+                  "version_type": "release",
+                  "date_published": "%s",
+                  "loaders": ["paper"],
+                  "game_versions": [%s],
+                  "files": [],
+                  "dependencies": []
+                }
+                """.formatted(id, number, published, versions), ModrinthVersion.class);
     }
 
     private static ModrinthVersion version(String id, String number, String published, String... loaders) {
