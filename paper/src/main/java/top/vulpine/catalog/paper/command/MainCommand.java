@@ -28,6 +28,7 @@ import top.vulpine.catalog.update.model.UpdateCandidate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -147,7 +148,7 @@ public final class MainCommand {
 
                 plugin.install(project, version, follow, sender.getName());
 
-                // Install cannot carry a payload — its slug argument is followed by the channel, so
+                // Install cannot carry a payload — its slug argument is followed by the version, so
                 // it is not greedy and the client refuses to parse anything trailing. It is only
                 // ever offered from a project page, which is also the only screen it can stale.
                 redraw(sender, data != null ? data : ClickContext.INFO + project.slug());
@@ -160,7 +161,7 @@ public final class MainCommand {
     }
 
     @Subcommand("versions")
-    @Description("Every build of a plugin this server can run")
+    @Description("The newest release, beta and alpha for this server")
     @RequiresPermission("command.info")
     public void versions(CommandSender sender,
                          @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
@@ -178,13 +179,38 @@ public final class MainCommand {
                     return;
                 }
 
-                send(sender, Messages.versions(project, plugin.compatibleVersions(project.id()),
+                send(sender, Messages.versions(project, plugin.gameVersion(),
+                        newestOfEachChannel(plugin.compatibleVersions(project.id())),
                         plugin.getTracking().byProjectId(project.id())));
 
             } catch (Exception e) {
                 send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
             }
         });
+    }
+
+    /**
+     * The newest build of each channel exactly, which is the choice the picker offers.
+     *
+     * <p>Matched on the channel a build was published as, not on which channels would accept it.
+     * A subscriber to beta also accepts releases, but "the newest beta" and "the newest build a
+     * beta subscriber would take" are different things, and only the first is a choice.</p>
+     *
+     * @param compatible the compatible builds, newest first
+     * @return the newest of each channel, channels with none absent
+     */
+    private static Map<ReleaseChannel, ModrinthVersion> newestOfEachChannel(
+            List<ModrinthVersion> compatible) {
+
+        Map<ReleaseChannel, ModrinthVersion> newest = new EnumMap<>(ReleaseChannel.class);
+
+        for (ModrinthVersion version : compatible) {
+            if (version.versionType() != null) {
+                newest.putIfAbsent(version.versionType(), version);
+            }
+        }
+
+        return newest;
     }
 
     /**
@@ -516,7 +542,6 @@ public final class MainCommand {
                     .author(author(project.id()))
                     .latest(latest)
                     .installTarget(installTarget(compatible))
-                    .compatibleCount(compatible.size())
                     .gameVersion(plugin.gameVersion())
                     .installed(tracked)
                     .updateAvailable(isNewer(latest, tracked))

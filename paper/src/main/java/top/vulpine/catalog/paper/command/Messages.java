@@ -93,7 +93,7 @@ public final class Messages {
         out.add(entry("info", "<plugin>", "Full details, installed or not"));
         out.add(entry("search", "<query>", "Find plugins on Modrinth"));
         out.add(entry("install", "<slug> [version]", "Add a plugin"));
-        out.add(entry("versions", "<plugin>", "Every build this server can run"));
+        out.add(entry("versions", "<plugin>", "Newest build of each channel"));
         out.add(entry("update", "<plugin|all>", "Download and stage updates"));
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
         out.add(entry("channel", "<plugin> <channel>", "Which builds to follow"));
@@ -459,11 +459,9 @@ public final class Messages {
                             : "Install " + target.versionNumber() + ", the newest build there is — "
                                     + "this project has no stable release for this server"));
 
-            if (view.compatibleCount() > 1) {
-                out.append(Component.space())
-                        .append(button("Versions", "/catalog versions " + key, MUTED,
-                                "Choose from all " + view.compatibleCount() + " builds this server can run"));
-            }
+            out.append(Component.space())
+                    .append(button("Versions", "/catalog versions " + key, MUTED,
+                            "Choose a build: the newest release, beta and alpha for this server"));
 
             return out.build();
         }
@@ -501,39 +499,29 @@ public final class Messages {
 
     // --- /catalog versions ------------------------------------------------------------------
 
-    /** How many builds the picker lists before it stops. */
-    private static final int VERSIONS = 10;
-
     /**
-     * Every build of a project this server can run, to pick one from.
+     * The newest build of each channel, to pick one from.
      *
-     * <p>Channels are shown rather than filtered. Somebody looking at this list has already decided
-     * they want to choose, and hiding the betas would only send them back to the website.</p>
+     * <p>One row per channel and never a history: the choice being made is how stable a build you
+     * are willing to run, and older builds of a channel you have already rejected are not part of
+     * it. A channel with nothing for this server says so rather than going missing, because "there
+     * is no beta" and "I did not look" are different answers.</p>
      */
-    public static List<Component> versions(ModrinthProject project, List<ModrinthVersion> versions,
+    public static List<Component> versions(ModrinthProject project, String gameVersion,
+                                           Map<ReleaseChannel, ModrinthVersion> newest,
                                            TrackedPlugin installed) {
 
         List<Component> out = new ArrayList<>();
 
         out.add(line()
                 .append(Component.text(project.title(), BRAND).decorate(TextDecoration.BOLD))
-                .append(Component.text("  " + versions.size() + " builds for this server", MUTED))
+                .append(Component.text("  newest for " + gameVersion, MUTED))
                 .build());
 
         out.add(Component.empty());
 
-        if (versions.isEmpty()) {
-            out.add(Component.text(INDENT + "No build for this server", MUTED));
-            return out;
-        }
-
-        for (ModrinthVersion version : versions.subList(0, Math.min(versions.size(), VERSIONS))) {
-            out.add(versionRow(project, version, installed));
-        }
-
-        if (versions.size() > VERSIONS) {
-            out.add(Component.text(INDENT + (versions.size() - VERSIONS) + " older builds not shown",
-                    MUTED));
+        for (ReleaseChannel channel : ReleaseChannel.values()) {
+            out.add(versionRow(project, channel, newest.get(channel), installed));
         }
 
         out.add(Component.empty());
@@ -547,13 +535,21 @@ public final class Messages {
         return out;
     }
 
-    private static Component versionRow(ModrinthProject project, ModrinthVersion version,
-                                        TrackedPlugin installed) {
+    private static Component versionRow(ModrinthProject project, ReleaseChannel channel,
+                                        ModrinthVersion version, TrackedPlugin installed) {
+
+        TextComponent.Builder row = line()
+                .append(Component.text(INDENT))
+                .append(channel(channel))
+                .append(Component.text("  "));
+
+        if (version == null) {
+            return row.append(Component.text("none", MUTED)).build();
+        }
 
         boolean current = installed != null && version.id().equals(installed.versionId());
 
-        Component hover = Component.text(version.name() == null
-                        ? version.versionNumber() : version.name(), TEXT)
+        Component hover = Component.text(version.versionNumber(), TEXT)
                 .append(Component.newline())
                 .append(Component.text("published  ", MUTED))
                 .append(Component.text(ago(version.datePublished()), TEXT))
@@ -563,13 +559,11 @@ public final class Messages {
                         : String.join(", ", version.gameVersions()), TEXT))
                 .append(Component.newline())
                 .append(Component.newline())
-                .append(Component.text(current ? "Already installed" : "Install this build", TEXT));
+                .append(Component.text(current
+                        ? "Already installed"
+                        : "Install this build and follow the " + channel.apiName() + " channel", TEXT));
 
-        TextComponent.Builder row = line()
-                .append(Component.text(INDENT))
-                .append(Component.text(version.versionNumber(), current ? MUTED : TEXT))
-                .append(Component.text("  ", MUTED))
-                .append(channel(version.versionType()));
+        row.append(Component.text(version.versionNumber(), current ? MUTED : TEXT));
 
         if (current) {
             row.append(Component.text("  installed", DONE));

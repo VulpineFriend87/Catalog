@@ -36,9 +36,6 @@ public final class ProjectView {
      */
     private final ModrinthVersion installTarget;
 
-    /** How many builds this server could run, which is what the version picker will list. */
-    private final int compatibleCount;
-
     /** This server's exact Minecraft version, to say whether {@link #latest} actually names it. */
     private final String gameVersion;
 
