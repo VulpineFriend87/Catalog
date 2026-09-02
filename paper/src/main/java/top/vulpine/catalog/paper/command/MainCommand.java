@@ -382,12 +382,25 @@ public final class MainCommand {
     }
 
     /**
+     * Forgets a removal that was waiting to be confirmed.
+     *
+     * <p>Called whenever a screen is drawn, which is what makes Cancel actually cancel: the button
+     * navigates away, and without this the confirmation would still be armed, so pressing the same
+     * remove button again inside the window would go straight through without asking.</p>
+     */
+    private void abandonConfirmation(CommandSender sender) {
+        confirmations.remove(sender.getName());
+    }
+
+    /**
      * Renders the plugin list. Blocks, so it must be called off the main thread.
      *
      * @param refresh whether to ask Modrinth again first, which is wasted after an action that
      *                already knows what changed
      */
     private void showList(CommandSender sender, boolean refresh) {
+
+        abandonConfirmation(sender);
 
         if (plugin.getTracking().size() == 0) {
             send(sender, Messages.nothingTracked());
@@ -414,6 +427,8 @@ public final class MainCommand {
      * anything is drawn, so a half-answered page is never shown.</p>
      */
     private void showProject(CommandSender sender, String query) {
+
+        abandonConfirmation(sender);
 
         try {
 
@@ -466,6 +481,8 @@ public final class MainCommand {
      * Renders a page of search results. Blocks, so it must be called off the main thread.
      */
     private void showSearch(CommandSender sender, String query, int page) {
+
+        abandonConfirmation(sender);
 
         try {
 

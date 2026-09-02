@@ -566,10 +566,25 @@ public final class Messages {
                                 : from("/catalog uninstall " + key(plugin), from),
                         DANGER, "Remove it now"))
                 .append(Component.space())
-                .append(button("Cancel", "/catalog list", MUTED, "Leave it installed"))
+                .append(button("Cancel", back(from), MUTED, "Leave it installed"))
                 .build());
 
         return out;
+    }
+
+    /**
+     * Where Cancel goes: back to whatever the removal was started from.
+     *
+     * <p>Redrawing that screen is also what abandons the pending confirmation, so cancelling and
+     * then clicking the same button again asks a second time rather than going straight through.</p>
+     */
+    private static String back(String from) {
+
+        if (from != null && from.startsWith(ClickContext.INFO)) {
+            return "/catalog info " + from.substring(ClickContext.INFO.length());
+        }
+
+        return "/catalog list";
     }
 
     public static Component staged(String name, String version) {
