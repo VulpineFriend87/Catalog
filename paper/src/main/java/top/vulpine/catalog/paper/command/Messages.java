@@ -502,10 +502,8 @@ public final class Messages {
     /**
      * The newest build of each channel, to pick one from.
      *
-     * <p>One row per channel and never a history: the choice being made is how stable a build you
-     * are willing to run, and older builds of a channel you have already rejected are not part of
-     * it. A channel with nothing for this server says so rather than going missing, because "there
-     * is no beta" and "I did not look" are different answers.</p>
+     * <p>One row per channel that has something, and never a history: the choice being made is how
+     * stable a build you are willing to run, and older builds of a channel are not part of it.</p>
      */
     public static List<Component> versions(ModrinthProject project, String gameVersion,
                                            Map<ReleaseChannel, ModrinthVersion> newest,
@@ -520,8 +518,18 @@ public final class Messages {
 
         out.add(Component.empty());
 
+        if (newest.isEmpty()) {
+            out.add(Component.text(INDENT + "No build for this server", MUTED));
+            return out;
+        }
+
         for (ReleaseChannel channel : ReleaseChannel.values()) {
-            out.add(versionRow(project, channel, newest.get(channel), installed));
+
+            ModrinthVersion version = newest.get(channel);
+
+            if (version != null) {
+                out.add(versionRow(project, channel, version, installed));
+            }
         }
 
         out.add(Component.empty());
@@ -542,10 +550,6 @@ public final class Messages {
                 .append(Component.text(INDENT))
                 .append(channel(channel))
                 .append(Component.text("  "));
-
-        if (version == null) {
-            return row.append(Component.text("none", MUTED)).build();
-        }
 
         boolean current = installed != null && version.id().equals(installed.versionId());
 
