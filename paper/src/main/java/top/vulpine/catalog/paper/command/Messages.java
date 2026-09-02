@@ -259,12 +259,6 @@ public final class Messages {
             out.add(field("Needs", requirements(view)));
         }
 
-        Component built = builtFor(view);
-
-        if (built != null) {
-            out.add(built);
-        }
-
         out.add(Component.empty());
         out.add(actions(view, installed));
 
@@ -350,28 +344,6 @@ public final class Messages {
     }
 
     /**
-     * Said only when the newest build does not name this server's exact version.
-     *
-     * <p>Almost always an author who did not tick the newest patch, and occasionally a build from
-     * before something broke. Silence would be a promise Catalog cannot make.</p>
-     */
-    private static Component builtFor(ProjectView view) {
-
-        ModrinthVersion latest = offered(view);
-
-        if (latest == null || latest.gameVersions() == null || view.gameVersion() == null
-                || latest.gameVersions().contains(view.gameVersion())) {
-            return null;
-        }
-
-        return line()
-                .append(Component.text(INDENT + "Built for:  ", MUTED))
-                .append(Component.text(String.join(", ", latest.gameVersions()), PENDING))
-                .append(Component.text("  not " + view.gameVersion(), MUTED))
-                .build();
-    }
-
-    /**
      * The build this page is talking about: what the followed channel offers, or failing that what
      * installing would fetch. They differ only for a project with no stable build for this server.
      */
@@ -453,7 +425,7 @@ public final class Messages {
                 return out.append(Component.text("No build for this server", MUTED)).build();
             }
 
-            out.append(button("Install", "/catalog install " + key, BRAND,
+            out.append(button("Install", from("/catalog install " + key, here), BRAND,
                     target.versionType() == ReleaseChannel.RELEASE
                             ? "Install " + target.versionNumber()
                             : "Install " + target.versionNumber() + ", the newest build there is — "
@@ -507,7 +479,7 @@ public final class Messages {
      */
     public static List<Component> versions(ModrinthProject project, String gameVersion,
                                            Map<ReleaseChannel, ModrinthVersion> newest,
-                                           TrackedPlugin installed) {
+                                           TrackedPlugin installed, boolean offerEverything) {
 
         List<Component> out = new ArrayList<>();
 
@@ -520,7 +492,6 @@ public final class Messages {
 
         if (newest.isEmpty()) {
             out.add(Component.text(INDENT + "No build for this server", MUTED));
-            return out;
         }
 
         for (ReleaseChannel channel : ReleaseChannel.values()) {
@@ -534,13 +505,103 @@ public final class Messages {
 
         out.add(Component.empty());
 
-        out.add(line()
+        TextComponent.Builder footer = line()
                 .append(Component.text(INDENT))
                 .append(button("Back", "/catalog info " + project.slug(), MUTED,
-                        "Back to " + project.title()))
+                        "Back to " + project.title()));
+
+        if (offerEverything) {
+            footer.append(Component.space())
+                    .append(button("All versions", "/catalog versions " + project.slug() + " --all",
+                            PENDING, "Every build ever published, compatible or not"));
+        }
+
+        out.add(footer.build());
+
+        return out;
+    }
+
+    /**
+     * Every build a project has published, offered without any compatibility filter.
+     *
+     * <p>Behind a config switch and coloured like a warning, because almost everything on this
+     * screen will not load. It exists for the operator who knows something Modrinth's metadata does
+     * not — that a build works despite what it declares — and it does not pretend otherwise.</p>
+     */
+    public static List<Component> everyVersion(ModrinthProject project, List<ModrinthVersion> versions,
+                                               TrackedPlugin installed, String gameVersion) {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text(project.title(), BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  every build", MUTED))
+                .build());
+
+        out.add(Component.text(INDENT + "Not filtered for this server. Most will not load.", PENDING));
+        out.add(Component.empty());
+
+        for (ModrinthVersion version : versions.subList(0, Math.min(versions.size(), EVERY))) {
+            out.add(everyVersionRow(project, version, installed, gameVersion));
+        }
+
+        if (versions.size() > EVERY) {
+            out.add(Component.text(INDENT + (versions.size() - EVERY) + " older builds not shown", MUTED));
+        }
+
+        out.add(Component.empty());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(button("Back", "/catalog versions " + project.slug(), MUTED,
+                        "Back to the compatible builds"))
                 .build());
 
         return out;
+    }
+
+    /** How many builds the unfiltered list shows before it stops. */
+    private static final int EVERY = 12;
+
+    private static Component everyVersionRow(ModrinthProject project, ModrinthVersion version,
+                                             TrackedPlugin installed, String gameVersion) {
+
+        boolean current = installed != null && version.id().equals(installed.versionId());
+        boolean runs = version.gameVersions() != null && version.gameVersions().contains(gameVersion);
+
+        Component hover = Component.text(version.versionNumber(), TEXT)
+                .append(Component.newline())
+                .append(Component.text("published  ", MUTED))
+                .append(Component.text(ago(version.datePublished()), TEXT))
+                .append(Component.newline())
+                .append(Component.text("for  ", MUTED))
+                .append(Component.text(version.gameVersions() == null ? "unknown"
+                        : String.join(", ", version.gameVersions()), TEXT))
+                .append(Component.newline())
+                .append(Component.text("loaders  ", MUTED))
+                .append(Component.text(version.loaders() == null ? "unknown"
+                        : String.join(", ", version.loaders()), TEXT))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text(current ? "Already installed"
+                        : runs ? "Install this build"
+                        : "Install anyway — this build does not declare " + gameVersion, TEXT));
+
+        TextComponent.Builder row = line()
+                .append(Component.text(INDENT))
+                .append(Component.text(version.versionNumber(), current ? MUTED : runs ? TEXT : PENDING))
+                .append(Component.text("  "))
+                .append(channel(version.versionType()));
+
+        if (current) {
+            row.append(Component.text("  installed", DONE));
+        }
+
+        return row.hoverEvent(HoverEvent.showText(hover))
+                .clickEvent(current ? ClickEvent.suggestCommand("/catalog info " + project.slug())
+                        : ClickEvent.runCommand(from("/catalog install " + project.slug()
+                                + " " + version.id(), ClickContext.INFO + project.slug())))
+                .build();
     }
 
     private static Component versionRow(ModrinthProject project, ReleaseChannel channel,
@@ -575,7 +636,8 @@ public final class Messages {
 
         return row.hoverEvent(HoverEvent.showText(hover))
                 .clickEvent(current ? ClickEvent.suggestCommand("/catalog info " + project.slug())
-                        : ClickEvent.runCommand("/catalog install " + project.slug() + " " + version.id()))
+                        : ClickEvent.runCommand(from("/catalog install " + project.slug()
+                                + " " + version.id(), ClickContext.INFO + project.slug())))
                 .build();
     }
 
@@ -589,7 +651,7 @@ public final class Messages {
         }
 
         return Component.text(channel.apiName(), switch (channel) {
-            case RELEASE -> MUTED;
+            case RELEASE -> DONE;
             case BETA -> PENDING;
             case ALPHA -> DANGER;
         });

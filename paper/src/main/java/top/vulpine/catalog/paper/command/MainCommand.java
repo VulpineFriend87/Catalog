@@ -12,6 +12,7 @@ import revxrsal.commands.annotation.Single;
 import revxrsal.commands.annotation.Sized;
 import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
+import revxrsal.commands.annotation.Switch;
 import top.vulpine.catalog.modrinth.model.Dependency;
 import top.vulpine.catalog.modrinth.model.DependencyType;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
@@ -115,6 +116,11 @@ public final class MainCommand {
 
         String data = context.take(sender);
 
+        // The version argument is last and not single, so it is greedy: a payload can ride on the
+        // end of it, and this is the fallback for the rare command the listener never saw.
+        String named = wanted == null || ClickContext.strip(wanted).isEmpty()
+                ? null : ClickContext.strip(wanted);
+
         plugin.getScheduler().runAsync(task -> {
 
             try {
@@ -132,12 +138,19 @@ public final class MainCommand {
                 }
 
                 List<ModrinthVersion> compatible = plugin.compatibleVersions(project.id());
-                ModrinthVersion version = choose(compatible, wanted);
+                ModrinthVersion version = choose(compatible, named);
+
+                // A build named outright, that this server is not declared compatible with. Only
+                // reachable from the unfiltered list, which only exists when it is switched on.
+                if (version == null && named != null
+                        && plugin.getConfiguration().allowIncompatibleInstalls) {
+                    version = choose(plugin.allVersions(project.id()), named);
+                }
 
                 if (version == null) {
-                    send(sender, Messages.failed(wanted == null
+                    send(sender, Messages.failed(named == null
                             ? project.title() + " has no build for this server"
-                            : "No build of " + project.title() + " called " + wanted));
+                            : "No build of " + project.title() + " called " + named));
                     return;
                 }
 
@@ -148,10 +161,7 @@ public final class MainCommand {
 
                 plugin.install(project, version, follow, sender.getName());
 
-                // Install cannot carry a payload — its slug argument is followed by the version, so
-                // it is not greedy and the client refuses to parse anything trailing. It is only
-                // ever offered from a project page, which is also the only screen it can stale.
-                redraw(sender, data != null ? data : ClickContext.INFO + project.slug());
+                redraw(sender, data);
                 send(sender, Messages.installed(project.title(), version.versionNumber()));
 
             } catch (Exception e) {
@@ -164,7 +174,8 @@ public final class MainCommand {
     @Description("The newest release, beta and alpha for this server")
     @RequiresPermission("command.info")
     public void versions(CommandSender sender,
-                         @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
+                         @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
+                         @Switch("all") boolean everything) {
 
         plugin.getScheduler().runAsync(task -> {
 
@@ -172,16 +183,25 @@ public final class MainCommand {
 
                 TrackedPlugin tracked = resolve(query);
                 ModrinthProject project = plugin.project(tracked != null
-                        ? tracked.projectId() : ClickContext.strip(query));
+                        ? tracked.projectId() : query);
 
                 if (project == null) {
                     send(sender, Messages.unknownPlugin(query));
                     return;
                 }
 
+                TrackedPlugin installed = plugin.getTracking().byProjectId(project.id());
+                boolean allowed = plugin.getConfiguration().allowIncompatibleInstalls;
+
+                if (everything && allowed) {
+                    send(sender, Messages.everyVersion(project, plugin.allVersions(project.id()),
+                            installed, plugin.gameVersion()));
+                    return;
+                }
+
                 send(sender, Messages.versions(project, plugin.gameVersion(),
                         newestOfEachChannel(plugin.compatibleVersions(project.id())),
-                        plugin.getTracking().byProjectId(project.id())));
+                        installed, allowed));
 
             } catch (Exception e) {
                 send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
@@ -248,14 +268,10 @@ public final class MainCommand {
         }
 
         plugin.setChannel(tracked, channel);
-
-        // Same as install: the channel argument follows the name, so nothing may trail it.
         String data = context.take(sender);
-        String screen = data != null ? data
-                : tracked.slug() == null ? null : ClickContext.INFO + tracked.slug();
 
         plugin.getScheduler().runAsync(task -> {
-            redraw(sender, screen);
+            redraw(sender, data);
             send(sender, Messages.channelSet(tracked.displayName(), channel));
         });
     }
@@ -542,7 +558,6 @@ public final class MainCommand {
                     .author(author(project.id()))
                     .latest(latest)
                     .installTarget(installTarget(compatible))
-                    .gameVersion(plugin.gameVersion())
                     .installed(tracked)
                     .updateAvailable(isNewer(latest, tracked))
                     .platformLoaders(plugin.platformLoaders());

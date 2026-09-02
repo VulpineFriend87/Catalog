@@ -586,6 +586,31 @@ public final class CatalogPaper extends JavaPlugin {
         return getServer().getMinecraftVersion();
     }
 
+    /**
+     * Every build a project has ever published, newest first, filtered by nothing at all.
+     *
+     * <p>Only reachable when the operator has turned incompatible installs on. Most of what comes
+     * back will not load here, which is the entire point of the switch being off by default.</p>
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param idOrSlug the project to list
+     * @return every version, newest published first
+     */
+    public List<ModrinthVersion> allVersions(String idOrSlug) {
+
+        List<ModrinthVersion> versions;
+
+        try {
+            versions = new ArrayList<>(modrinth.versions(idOrSlug, null, null).join());
+        } catch (Exception e) {
+            throw new InstallException("Could not reach Modrinth: " + rootMessage(e), e);
+        }
+
+        versions.sort(Comparator.comparing(ModrinthVersion::datePublished).reversed());
+        return versions;
+    }
+
     private void saveTracking() {
 
         try {

@@ -36,9 +36,6 @@ public final class ProjectView {
      */
     private final ModrinthVersion installTarget;
 
-    /** This server's exact Minecraft version, to say whether {@link #latest} actually names it. */
-    private final String gameVersion;
-
     /** Null when the project is not installed here. */
     private final TrackedPlugin installed;
 
