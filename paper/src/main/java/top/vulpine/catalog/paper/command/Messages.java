@@ -1,0 +1,693 @@
+package top.vulpine.catalog.paper.command;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import top.vulpine.catalog.modrinth.model.ModrinthProject;
+import top.vulpine.catalog.modrinth.model.ReleaseChannel;
+import top.vulpine.catalog.modrinth.model.SearchHit;
+import top.vulpine.catalog.modrinth.model.SearchResults;
+import top.vulpine.catalog.tracking.model.TrackedPlugin;
+import top.vulpine.catalog.update.model.UpdateCandidate;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Every line Catalog says.
+ *
+ * <p>Built as components, never as MiniMessage strings. Titles and descriptions come from strangers
+ * on the internet, and a description containing an apostrophe is enough to close a tag argument
+ * early and spill the markup onto the screen. With components there is no string for anyone's text
+ * to escape from.</p>
+ *
+ * <p>Flat by design: no rails, no rules, no boxes. Chat is narrow and the background is whatever the
+ * player happens to be looking at, so structure comes from colour and indentation instead of from
+ * characters that eat width. Grey is the darkest colour used; dark grey is unreadable against half
+ * the game.</p>
+ *
+ * <p>Everything clickable says what it will do and then shows the command it runs, so nothing is a
+ * mystery button. Anything true but rarely wanted — ids, versions, dates, the licence — lives in a
+ * hover rather than on the page.</p>
+ */
+public final class Messages {
+
+    /** How many search results one page shows. */
+    public static final int PAGE = 9;
+
+    /** Catalog's colour. Everything the plugin itself owns is this violet. */
+    private static final TextColor BRAND = TextColor.color(0xC08CFF);
+
+    /** Something is waiting to be applied. Warm, so it reads apart from the brand. */
+    private static final TextColor PENDING = TextColor.color(0xF2C46B);
+
+    /** Destructive. */
+    private static final TextColor DANGER = TextColor.color(0xFF7B72);
+
+    /** Done. */
+    private static final TextColor DONE = TextColor.color(0x7BE38B);
+
+    private static final NamedTextColor TEXT = NamedTextColor.WHITE;
+    private static final NamedTextColor MUTED = NamedTextColor.GRAY;
+
+    private static final String INDENT = "  ";
+
+    private Messages() {
+    }
+
+    // --- /catalog ---------------------------------------------------------------------------
+
+    /**
+     * The plugin's own card, and the only place the whole command surface is written down.
+     *
+     * <p>Says nothing about the server's plugins — that is what {@code /catalog list} is for.</p>
+     */
+    public static List<Component> about(String version, String author) {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text("Catalog", BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text(" " + version, MUTED))
+                .build());
+
+        out.add(line()
+                .append(Component.text(INDENT + "by ", MUTED))
+                .append(Component.text(author, TEXT))
+                .build());
+
+        out.add(Component.empty());
+
+        out.add(entry("list", "", "Managed plugins"));
+        out.add(entry("info", "<plugin>", "Full details, installed or not"));
+        out.add(entry("search", "<query>", "Find plugins on Modrinth"));
+        out.add(entry("install", "<slug>", "Add a plugin"));
+        out.add(entry("update", "<plugin|all>", "Download and stage updates"));
+        out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
+        out.add(entry("channel", "<plugin> <channel>", "Which builds to follow"));
+        out.add(entry("hold", "<plugin>", "Freeze a plugin at its version"));
+
+        return out;
+    }
+
+    private static Component entry(String name, String arguments, String description) {
+
+        String command = "/catalog " + name + (arguments.isEmpty() ? "" : " ");
+
+        TextComponent.Builder row = line()
+                .append(Component.text(INDENT))
+                .append(Component.text(name, BRAND));
+
+        if (!arguments.isEmpty()) {
+            row.append(Component.text(" " + arguments, MUTED).decorate(TextDecoration.ITALIC));
+        }
+
+        return row.append(Component.text("  " + description, MUTED))
+                .clickEvent(arguments.isEmpty()
+                        ? ClickEvent.runCommand(command)
+                        : ClickEvent.suggestCommand(command))
+                .hoverEvent(HoverEvent.showText(explain(description, command)))
+                .build();
+    }
+
+    // --- /catalog list ----------------------------------------------------------------------
+
+    public static List<Component> list(List<TrackedPlugin> plugins, Map<String, UpdateCandidate> updates) {
+
+        List<TrackedPlugin> ordered = new ArrayList<>(plugins);
+
+        // Every plugin is here; the order only stops the ones asking for a decision being buried.
+        ordered.sort(Comparator
+                .comparing((TrackedPlugin plugin) -> !updates.containsKey(plugin.projectId()))
+                .thenComparing(plugin -> plugin.displayName().toLowerCase(Locale.ROOT)));
+
+        List<Component> out = new ArrayList<>();
+
+        TextComponent.Builder header = line()
+                .append(Component.text("Catalog", BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  " + plugins.size(), TEXT))
+                .append(Component.text(" plugins", MUTED));
+
+        if (!updates.isEmpty()) {
+            header.append(Component.text(" · ", MUTED))
+                    .append(Component.text(updates.size(), BRAND))
+                    .append(Component.text(" to update", MUTED));
+        }
+
+        out.add(header.build());
+        out.add(Component.empty());
+
+        for (TrackedPlugin plugin : ordered) {
+            out.add(row(plugin, updates.get(plugin.projectId())));
+        }
+
+        out.add(Component.empty());
+
+        TextComponent.Builder footer = line().append(Component.text(INDENT));
+
+        if (!updates.isEmpty()) {
+            footer.append(button("Update all", "/catalog update all", BRAND, "Stage every update"))
+                    .append(Component.space());
+        }
+
+        footer.append(button("Search", "/catalog search ", MUTED, "Search Modrinth"));
+
+        out.add(footer.build());
+
+        return out;
+    }
+
+    private static Component row(TrackedPlugin plugin, UpdateCandidate update) {
+
+        TextComponent.Builder row = line()
+                .append(Component.text(INDENT))
+                .append(name(plugin));
+
+        if (update != null && !plugin.pendingRestart()) {
+            row.append(Component.space()).append(icon("↑", BRAND,
+                    "/catalog update " + key(plugin),
+                    "Stage " + update.to() + " for the next restart"));
+        }
+
+        row.append(Component.space()).append(icon("×", DANGER,
+                "/catalog uninstall " + key(plugin),
+                "Move " + plugin.displayName() + " to the trash"));
+
+        if (plugin.pendingRestart()) {
+            row.append(Component.text("  staged", PENDING));
+        } else if (plugin.isPinned()) {
+            row.append(Component.text("  held", MUTED));
+        }
+
+        return row.build();
+    }
+
+    private static Component name(TrackedPlugin plugin) {
+
+        Component hover = Component.text(plugin.displayName(), TEXT)
+                .append(Component.newline())
+                .append(Component.text(plugin.versionNumber() == null ? "unknown version"
+                        : plugin.versionNumber(), MUTED))
+                .append(Component.text("  " + plugin.channel().apiName(), MUTED))
+                .append(Component.newline())
+                .append(Component.text(String.valueOf(plugin.fileName()), MUTED))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text("Open the plugin page", TEXT))
+                .append(Component.newline())
+                .append(Component.text("/catalog info " + key(plugin), MUTED));
+
+        return Component.text(plugin.displayName(), TEXT)
+                .clickEvent(ClickEvent.runCommand("/catalog info " + key(plugin)))
+                .hoverEvent(HoverEvent.showText(hover));
+    }
+
+    // --- /catalog info ----------------------------------------------------------------------
+
+    /**
+     * One Modrinth project, installed or not. This is where every action on a plugin lives, and
+     * where a search result lands.
+     */
+    public static List<Component> project(ProjectView view) {
+
+        ModrinthProject project = view.project();
+        TrackedPlugin installed = view.installed();
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text(project.title(), BRAND).decorate(TextDecoration.BOLD))
+                .append(status(view))
+                .hoverEvent(HoverEvent.showText(identity(view)))
+                .build());
+
+        if (project.description() != null && !project.description().isBlank()) {
+            out.add(Component.text(INDENT + project.description(), TEXT));
+        }
+
+        out.add(Component.empty());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(author(view))
+                .append(Component.text(compact(project.downloads()), BRAND))
+                .append(Component.text(" downloads", MUTED))
+                .append(Component.text(" · ", MUTED))
+                .append(Component.text(compact(project.followers()), BRAND))
+                .append(Component.text(" followers", MUTED))
+                .build());
+
+        out.add(field("Loaders", loaders(view)));
+
+        if (project.categories() != null && !project.categories().isEmpty()) {
+            out.add(field("Tags", Component.text(String.join(", ", project.categories()), MUTED)));
+        }
+
+        if (!view.requirements().isEmpty()) {
+            out.add(field("Needs", requirements(view)));
+        }
+
+        out.add(Component.empty());
+        out.add(actions(view, installed));
+
+        return out;
+    }
+
+    private static Component status(ProjectView view) {
+
+        if (view.installed() == null) {
+            return Component.text("  not installed", MUTED);
+        }
+
+        if (view.installed().pendingRestart()) {
+            return Component.text("  staged", PENDING);
+        }
+
+        if (view.updateAvailable()) {
+            return Component.text("  update available", BRAND);
+        }
+
+        if (view.installed().isPinned()) {
+            return Component.text("  held", MUTED);
+        }
+
+        return Component.text("  installed", DONE);
+    }
+
+    /**
+     * Everything the page deliberately leaves out: ids, the licence, versions and dates.
+     */
+    private static Component identity(ProjectView view) {
+
+        ModrinthProject project = view.project();
+
+        TextComponent.Builder hover = Component.text()
+                .append(Component.text(project.title(), TEXT))
+                .append(Component.newline())
+                .append(Component.text(project.slug() + "  " + project.id(), MUTED));
+
+        if (project.license() != null && project.license().id() != null) {
+            hover.append(Component.newline())
+                    .append(Component.text("licence  ", MUTED))
+                    .append(Component.text(project.license().name() == null
+                            ? project.license().id() : project.license().name(), TEXT));
+        }
+
+        if (view.installed() != null) {
+
+            TrackedPlugin installed = view.installed();
+
+            hover.append(Component.newline())
+                    .append(Component.newline())
+                    .append(Component.text("installed  ", MUTED))
+                    .append(Component.text(String.valueOf(installed.versionNumber()), TEXT))
+                    .append(Component.newline())
+                    .append(Component.text("channel  ", MUTED))
+                    .append(Component.text(installed.channel().apiName(), TEXT))
+                    .append(Component.newline())
+                    .append(Component.text("file  ", MUTED))
+                    .append(Component.text(String.valueOf(installed.fileName()), TEXT));
+
+            if (installed.isPinned()) {
+                hover.append(Component.newline())
+                        .append(Component.text("held at this version", PENDING));
+            }
+        }
+
+        if (view.latest() != null) {
+            hover.append(Component.newline())
+                    .append(Component.newline())
+                    .append(Component.text("latest  ", MUTED))
+                    .append(Component.text(view.latest().versionNumber(), TEXT))
+                    .append(Component.text(view.latest().versionType() == null ? ""
+                            : "  " + view.latest().versionType().apiName(), MUTED))
+                    .append(Component.newline())
+                    .append(Component.text("published  ", MUTED))
+                    .append(Component.text(ago(view.latest().datePublished()), TEXT));
+        }
+
+        return hover.build();
+    }
+
+    private static Component author(ProjectView view) {
+
+        if (view.author() == null || view.author().isBlank()) {
+            return Component.empty();
+        }
+
+        return Component.text("by ", MUTED)
+                .append(Component.text(view.author(), TEXT))
+                .append(Component.text(" · ", MUTED));
+    }
+
+    /**
+     * The loaders the project publishes for, with the ones this server can actually use picked out.
+     */
+    private static Component loaders(ProjectView view) {
+
+        List<String> declared = view.project().loaders();
+
+        if (declared == null || declared.isEmpty()) {
+            return Component.text("unknown", MUTED);
+        }
+
+        TextComponent.Builder out = Component.text();
+        boolean first = true;
+
+        for (String loader : declared) {
+
+            if (!first) {
+                out.append(Component.text(", ", MUTED));
+            }
+
+            out.append(Component.text(loader, view.platformLoaders().contains(loader) ? TEXT : MUTED));
+            first = false;
+        }
+
+        return out.build();
+    }
+
+    private static Component requirements(ProjectView view) {
+
+        TextComponent.Builder out = Component.text();
+        boolean first = true;
+
+        for (ProjectView.Requirement requirement : view.requirements()) {
+
+            if (!first) {
+                out.append(Component.text(", ", MUTED));
+            }
+
+            out.append(Component.text(requirement.name(), requirement.installed() ? TEXT : PENDING)
+                    .hoverEvent(HoverEvent.showText(Component.text(
+                            requirement.installed() ? "installed" : "not installed",
+                            requirement.installed() ? MUTED : PENDING))));
+
+            first = false;
+        }
+
+        return out.build();
+    }
+
+    private static Component actions(ProjectView view, TrackedPlugin installed) {
+
+        TextComponent.Builder out = line().append(Component.text(INDENT));
+        String key = view.project().slug();
+
+        if (installed == null) {
+
+            return view.latest() == null
+                    ? out.append(Component.text("No build for this server", MUTED)).build()
+                    : out.append(button("Install", "/catalog install " + key, BRAND,
+                            "Install " + view.latest().versionNumber())).build();
+        }
+
+        if (view.updateAvailable() && !installed.pendingRestart()) {
+            out.append(button("Update", "/catalog update " + key + " --info", BRAND,
+                    "Stage " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
+                            + " for the next restart"))
+                    .append(Component.space());
+        }
+
+        out.append(installed.isPinned()
+                        ? button("Unhold", "/catalog unhold " + key, MUTED, "Allow updates again")
+                        : button("Hold", "/catalog hold " + key, MUTED,
+                        "Freeze at the installed version"))
+                .append(Component.space())
+                .append(button("Remove", "/catalog uninstall " + key, DANGER, "Move to the trash"));
+
+        return out.build();
+    }
+
+    /**
+     * A labelled line. The colon is doing real work: the values are multi-coloured, so without it
+     * the label runs straight into the first item.
+     */
+    private static Component field(String label, Component value) {
+
+        return line()
+                .append(Component.text(INDENT + label + ":  ", MUTED))
+                .append(value)
+                .build();
+    }
+
+    // --- /catalog search --------------------------------------------------------------------
+
+    public static List<Component> search(String query, SearchResults results, int page,
+                                         Set<String> installedProjects) {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text("Search", BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  " + query, TEXT))
+                .append(Component.text("  " + results.totalHits() + " results", MUTED))
+                .build());
+
+        out.add(Component.empty());
+
+        if (results.hits().isEmpty()) {
+            out.add(Component.text(INDENT + "No results", MUTED));
+            return out;
+        }
+
+        for (SearchHit hit : results.hits()) {
+            out.add(hit(hit, installedProjects.contains(hit.projectId())));
+        }
+
+        int pages = Math.max((results.totalHits() + PAGE - 1) / PAGE, 1);
+
+        out.add(Component.empty());
+
+        TextComponent.Builder footer = line()
+                .append(Component.text(INDENT + "page ", MUTED))
+                .append(Component.text(page, TEXT))
+                .append(Component.text(" of " + pages + "  ", MUTED));
+
+        if (page > 1) {
+            footer.append(button("Back", "/catalog search " + query + " --page " + (page - 1),
+                    MUTED, "Page " + (page - 1))).append(Component.space());
+        }
+
+        if (results.hasMore()) {
+            footer.append(button("Next", "/catalog search " + query + " --page " + (page + 1),
+                    BRAND, "Page " + (page + 1)));
+        }
+
+        out.add(footer.build());
+
+        return out;
+    }
+
+    private static Component hit(SearchHit result, boolean installed) {
+
+        Component hover = Component.text(result.title(), TEXT)
+                .append(Component.newline())
+                .append(Component.text(result.description() == null ? "" : result.description(), MUTED))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text(result.author() == null ? "" : "by " + result.author(), MUTED))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text("Open the plugin page", TEXT))
+                .append(Component.newline())
+                .append(Component.text("/catalog info " + result.slug(), MUTED));
+
+        return line()
+                .append(Component.text(INDENT))
+                .append(Component.text(result.title(), TEXT))
+                .append(Component.text("  " + compact(result.downloads()), MUTED))
+                .append(installed ? Component.text("  installed", DONE) : Component.empty())
+                .clickEvent(ClickEvent.runCommand("/catalog info " + result.slug()))
+                .hoverEvent(HoverEvent.showText(hover))
+                .build();
+    }
+
+    // --- confirmations and outcomes ---------------------------------------------------------
+
+    public static List<Component> confirmRemove(TrackedPlugin plugin) {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text("Remove ", DANGER).decorate(TextDecoration.BOLD))
+                .append(Component.text(plugin.displayName(), TEXT).decorate(TextDecoration.BOLD))
+                .build());
+
+        out.add(Component.text(INDENT + "Moved to trash, unloaded on restart.", MUTED));
+        out.add(Component.empty());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(button("Confirm", "/catalog uninstall " + key(plugin), DANGER, "Remove it now"))
+                .append(Component.space())
+                .append(button("Cancel", "/catalog list", MUTED, "Leave it installed"))
+                .build());
+
+        return out;
+    }
+
+    public static Component staged(String name, String version) {
+        return line()
+                .append(Component.text(name + " " + version, TEXT))
+                .append(Component.text(" staged, applies on restart", MUTED))
+                .build();
+    }
+
+    public static Component stagedAll(int count) {
+        return line()
+                .append(Component.text(count, DONE))
+                .append(Component.text(count == 1 ? " update staged, applies on restart"
+                        : " updates staged, apply on restart", MUTED))
+                .build();
+    }
+
+    public static Component installed(String name, String version) {
+        return line()
+                .append(Component.text(name + " " + version, TEXT))
+                .append(Component.text(" installed, loads on restart", MUTED))
+                .build();
+    }
+
+    public static Component removed(String name, boolean deleted) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(deleted ? " removed, unloads on restart"
+                        : " removed, file is locked and is deleted on shutdown", MUTED))
+                .build();
+    }
+
+    public static Component channelSet(String name, ReleaseChannel channel) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" now follows ", MUTED))
+                .append(Component.text(channel.apiName(), BRAND))
+                .build();
+    }
+
+    public static Component held(String name, boolean held) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(held ? " held at this version" : " no longer held", MUTED))
+                .build();
+    }
+
+    public static Component upToDate() {
+        return Component.text("Nothing to update", MUTED);
+    }
+
+    public static Component noUpdate(String name) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" is already up to date", MUTED))
+                .build();
+    }
+
+    public static Component unknownPlugin(String query) {
+        return line()
+                .append(Component.text("No plugin found for ", DANGER))
+                .append(Component.text(query, TEXT))
+                .build();
+    }
+
+    public static Component nothingTracked() {
+        return Component.text("No plugins tracked", MUTED);
+    }
+
+    public static Component failed(String reason) {
+        return Component.text(reason, DANGER);
+    }
+
+    // --- plumbing ---------------------------------------------------------------------------
+
+    /**
+     * A clickable label wrapped in brackets, so it reads as a button rather than as prose.
+     *
+     * <p>A command ending in a space is offered for the player to complete rather than run.</p>
+     */
+    private static Component button(String label, String command, TextColor colour, String description) {
+
+        boolean complete = !command.endsWith(" ");
+
+        return Component.text("[", MUTED)
+                .append(Component.text(label, colour))
+                .append(Component.text("]", MUTED))
+                .clickEvent(complete ? ClickEvent.runCommand(command) : ClickEvent.suggestCommand(command))
+                .hoverEvent(HoverEvent.showText(explain(description, command)));
+    }
+
+    private static Component icon(String glyph, TextColor colour, String command, String description) {
+
+        return Component.text("[", MUTED)
+                .append(Component.text(glyph, colour))
+                .append(Component.text("]", MUTED))
+                .clickEvent(ClickEvent.runCommand(command))
+                .hoverEvent(HoverEvent.showText(explain(description, command)));
+    }
+
+    /**
+     * What a click will do, and only then how it does it.
+     */
+    private static Component explain(String description, String command) {
+
+        return Component.text(description, TEXT)
+                .append(Component.newline())
+                .append(Component.text(command.trim(), MUTED));
+    }
+
+    /**
+     * Starts a line with no styling of its own, so nothing a child sets is inherited by its
+     * siblings. Bold titles next to unbolded counts depend on it.
+     */
+    private static TextComponent.Builder line() {
+        return Component.text();
+    }
+
+    private static String key(TrackedPlugin plugin) {
+        return plugin.slug() != null ? plugin.slug() : plugin.displayName();
+    }
+
+    static String compact(int count) {
+
+        if (count >= 1_000_000) {
+            return Math.round(count / 100_000.0) / 10.0 + "M";
+        }
+
+        if (count >= 10_000) {
+            return (count / 1_000) + "K";
+        }
+
+        if (count >= 1_000) {
+            return Math.round(count / 100.0) / 10.0 + "K";
+        }
+
+        return String.valueOf(count);
+    }
+
+    private static String ago(Instant when) {
+
+        if (when == null) {
+            return "unknown";
+        }
+
+        long minutes = Duration.between(when, Instant.now()).toMinutes();
+
+        if (minutes < 60) {
+            return Math.max(minutes, 0) + "m ago";
+        }
+
+        long hours = minutes / 60;
+        return hours < 24 ? hours + "h ago" : (hours / 24) + "d ago";
+    }
+
+}
