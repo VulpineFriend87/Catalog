@@ -27,8 +27,17 @@ public final class ProjectView {
     /** Who to credit, or null if the team could not be fetched. */
     private final String author;
 
-    /** The newest build this server could run, or null if the project publishes none. */
+    /** The newest build on the channel being followed, or null if that channel has none. */
     private final ModrinthVersion latest;
+
+    /**
+     * What the install button would fetch: the newest stable build, or the newest of anything when
+     * the project has never published a stable one. Null only when nothing here runs at all.
+     */
+    private final ModrinthVersion installTarget;
+
+    /** How many builds this server could run, which is what the version picker will list. */
+    private final int compatibleCount;
 
     /** This server's exact Minecraft version, to say whether {@link #latest} actually names it. */
     private final String gameVersion;

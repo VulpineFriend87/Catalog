@@ -110,9 +110,8 @@ public final class MainCommand {
     @Description("Install a plugin from Modrinth")
     @RequiresPermission("command.install")
     public void install(CommandSender sender, @Named("plugin") @Single String query,
-                        @Optional @Named("channel") ReleaseChannel channel) {
+                        @Optional @Named("version") String wanted) {
 
-        ReleaseChannel wanted = channel == null ? defaultChannel() : channel;
         String data = context.take(sender);
 
         plugin.getScheduler().runAsync(task -> {
@@ -131,15 +130,22 @@ public final class MainCommand {
                     return;
                 }
 
-                ModrinthVersion version = plugin.newestCompatible(project.id(), wanted);
+                List<ModrinthVersion> compatible = plugin.compatibleVersions(project.id());
+                ModrinthVersion version = choose(compatible, wanted);
 
                 if (version == null) {
-                    send(sender, Messages.failed(project.title() + " has no "
-                            + wanted.apiName() + " build for this server"));
+                    send(sender, Messages.failed(wanted == null
+                            ? project.title() + " has no build for this server"
+                            : "No build of " + project.title() + " called " + wanted));
                     return;
                 }
 
-                plugin.install(project, version, wanted, sender.getName());
+                // The channel to follow from now on is the one that was just installed. Anything
+                // stricter would leave a plugin installed on beta never seeing another update.
+                ReleaseChannel follow = version.versionType() == null
+                        ? defaultChannel() : version.versionType();
+
+                plugin.install(project, version, follow, sender.getName());
 
                 // Install cannot carry a payload — its slug argument is followed by the channel, so
                 // it is not greedy and the client refuses to parse anything trailing. It is only
@@ -151,6 +157,54 @@ public final class MainCommand {
                 send(sender, Messages.failed(rootMessage(e)));
             }
         });
+    }
+
+    @Subcommand("versions")
+    @Description("Every build of a plugin this server can run")
+    @RequiresPermission("command.info")
+    public void versions(CommandSender sender,
+                         @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
+
+        plugin.getScheduler().runAsync(task -> {
+
+            try {
+
+                TrackedPlugin tracked = resolve(query);
+                ModrinthProject project = plugin.project(tracked != null
+                        ? tracked.projectId() : ClickContext.strip(query));
+
+                if (project == null) {
+                    send(sender, Messages.unknownPlugin(query));
+                    return;
+                }
+
+                send(sender, Messages.versions(project, plugin.compatibleVersions(project.id()),
+                        plugin.getTracking().byProjectId(project.id())));
+
+            } catch (Exception e) {
+                send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
+            }
+        });
+    }
+
+    /**
+     * Finds the build someone named, by version id or by the number they can actually see.
+     *
+     * @param wanted the id or version number, or null to take what installing would default to
+     */
+    private static ModrinthVersion choose(List<ModrinthVersion> compatible, String wanted) {
+
+        if (wanted == null) {
+            return installTarget(compatible);
+        }
+
+        for (ModrinthVersion version : compatible) {
+            if (wanted.equals(version.id()) || wanted.equalsIgnoreCase(version.versionNumber())) {
+                return version;
+            }
+        }
+
+        return null;
     }
 
     @Subcommand("channel")
@@ -451,12 +505,18 @@ public final class MainCommand {
             }
 
             ReleaseChannel channel = tracked != null ? tracked.channel() : defaultChannel();
-            ModrinthVersion latest = newestOrNull(project.id(), channel);
+
+            // One request answers all three questions: what the followed channel offers, what
+            // installing would fetch, and how many builds a picker would have to show.
+            List<ModrinthVersion> compatible = compatibleOrEmpty(project.id());
+            ModrinthVersion latest = newestOn(compatible, channel);
 
             ProjectView.ProjectViewBuilder view = ProjectView.builder()
                     .project(project)
                     .author(author(project.id()))
                     .latest(latest)
+                    .installTarget(installTarget(compatible))
+                    .compatibleCount(compatible.size())
                     .gameVersion(plugin.gameVersion())
                     .installed(tracked)
                     .updateAvailable(isNewer(latest, tracked))
@@ -586,13 +646,38 @@ public final class MainCommand {
         }
     }
 
-    private ModrinthVersion newestOrNull(String projectId, ReleaseChannel channel) {
+    private List<ModrinthVersion> compatibleOrEmpty(String projectId) {
 
         try {
-            return plugin.newestCompatible(projectId, channel);
+            return plugin.compatibleVersions(projectId);
         } catch (Exception e) {
-            return null;
+            return List.of();
         }
+    }
+
+    private static ModrinthVersion newestOn(List<ModrinthVersion> versions, ReleaseChannel channel) {
+
+        for (ModrinthVersion version : versions) {
+            if (version.versionType() == null || channel.accepts(version.versionType())) {
+                return version;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * What installing without naming a version should fetch.
+     *
+     * <p>The newest stable build, because that is what almost everyone wants and nobody should be
+     * handed an alpha by accident. When a project has never published one for this server the
+     * newest of whatever exists is offered instead, and the button says so — refusing outright and
+     * calling it "no build for this server" is a lie about a project that plainly has one.</p>
+     */
+    private static ModrinthVersion installTarget(List<ModrinthVersion> versions) {
+
+        ModrinthVersion stable = newestOn(versions, ReleaseChannel.RELEASE);
+        return stable != null ? stable : versions.isEmpty() ? null : versions.get(0);
     }
 
     /**

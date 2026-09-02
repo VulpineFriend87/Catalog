@@ -92,7 +92,8 @@ public final class Messages {
         out.add(entry("list", "", "Managed plugins"));
         out.add(entry("info", "<plugin>", "Full details, installed or not"));
         out.add(entry("search", "<query>", "Find plugins on Modrinth"));
-        out.add(entry("install", "<slug>", "Add a plugin"));
+        out.add(entry("install", "<slug> [version]", "Add a plugin"));
+        out.add(entry("versions", "<plugin>", "Every build this server can run"));
         out.add(entry("update", "<plugin|all>", "Download and stage updates"));
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
         out.add(entry("channel", "<plugin> <channel>", "Which builds to follow"));
@@ -331,16 +332,18 @@ public final class Messages {
             }
         }
 
-        if (view.latest() != null) {
+        ModrinthVersion newest = offered(view);
+
+        if (newest != null) {
             hover.append(Component.newline())
                     .append(Component.newline())
                     .append(Component.text("latest  ", MUTED))
-                    .append(Component.text(view.latest().versionNumber(), TEXT))
-                    .append(Component.text(view.latest().versionType() == null ? ""
-                            : "  " + view.latest().versionType().apiName(), MUTED))
+                    .append(Component.text(newest.versionNumber(), TEXT))
+                    .append(Component.text(newest.versionType() == null ? ""
+                            : "  " + newest.versionType().apiName(), MUTED))
                     .append(Component.newline())
                     .append(Component.text("published  ", MUTED))
-                    .append(Component.text(ago(view.latest().datePublished()), TEXT));
+                    .append(Component.text(ago(newest.datePublished()), TEXT));
         }
 
         return hover.build();
@@ -354,7 +357,7 @@ public final class Messages {
      */
     private static Component builtFor(ProjectView view) {
 
-        ModrinthVersion latest = view.latest();
+        ModrinthVersion latest = offered(view);
 
         if (latest == null || latest.gameVersions() == null || view.gameVersion() == null
                 || latest.gameVersions().contains(view.gameVersion())) {
@@ -366,6 +369,14 @@ public final class Messages {
                 .append(Component.text(String.join(", ", latest.gameVersions()), PENDING))
                 .append(Component.text("  not " + view.gameVersion(), MUTED))
                 .build();
+    }
+
+    /**
+     * The build this page is talking about: what the followed channel offers, or failing that what
+     * installing would fetch. They differ only for a project with no stable build for this server.
+     */
+    private static ModrinthVersion offered(ProjectView view) {
+        return view.latest() != null ? view.latest() : view.installTarget();
     }
 
     private static Component author(ProjectView view) {
@@ -436,10 +447,25 @@ public final class Messages {
 
         if (installed == null) {
 
-            return view.latest() == null
-                    ? out.append(Component.text("No build for this server", MUTED)).build()
-                    : out.append(button("Install", "/catalog install " + key, BRAND,
-                            "Install " + view.latest().versionNumber())).build();
+            ModrinthVersion target = view.installTarget();
+
+            if (target == null) {
+                return out.append(Component.text("No build for this server", MUTED)).build();
+            }
+
+            out.append(button("Install", "/catalog install " + key, BRAND,
+                    target.versionType() == ReleaseChannel.RELEASE
+                            ? "Install " + target.versionNumber()
+                            : "Install " + target.versionNumber() + ", the newest build there is — "
+                                    + "this project has no stable release for this server"));
+
+            if (view.compatibleCount() > 1) {
+                out.append(Component.space())
+                        .append(button("Versions", "/catalog versions " + key, MUTED,
+                                "Choose from all " + view.compatibleCount() + " builds this server can run"));
+            }
+
+            return out.build();
         }
 
         if (view.updateAvailable() && !installed.pendingRestart()) {
@@ -471,6 +497,104 @@ public final class Messages {
                 .append(Component.text(INDENT + label + ":  ", MUTED))
                 .append(value)
                 .build();
+    }
+
+    // --- /catalog versions ------------------------------------------------------------------
+
+    /** How many builds the picker lists before it stops. */
+    private static final int VERSIONS = 10;
+
+    /**
+     * Every build of a project this server can run, to pick one from.
+     *
+     * <p>Channels are shown rather than filtered. Somebody looking at this list has already decided
+     * they want to choose, and hiding the betas would only send them back to the website.</p>
+     */
+    public static List<Component> versions(ModrinthProject project, List<ModrinthVersion> versions,
+                                           TrackedPlugin installed) {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text(project.title(), BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  " + versions.size() + " builds for this server", MUTED))
+                .build());
+
+        out.add(Component.empty());
+
+        if (versions.isEmpty()) {
+            out.add(Component.text(INDENT + "No build for this server", MUTED));
+            return out;
+        }
+
+        for (ModrinthVersion version : versions.subList(0, Math.min(versions.size(), VERSIONS))) {
+            out.add(versionRow(project, version, installed));
+        }
+
+        if (versions.size() > VERSIONS) {
+            out.add(Component.text(INDENT + (versions.size() - VERSIONS) + " older builds not shown",
+                    MUTED));
+        }
+
+        out.add(Component.empty());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(button("Back", "/catalog info " + project.slug(), MUTED,
+                        "Back to " + project.title()))
+                .build());
+
+        return out;
+    }
+
+    private static Component versionRow(ModrinthProject project, ModrinthVersion version,
+                                        TrackedPlugin installed) {
+
+        boolean current = installed != null && version.id().equals(installed.versionId());
+
+        Component hover = Component.text(version.name() == null
+                        ? version.versionNumber() : version.name(), TEXT)
+                .append(Component.newline())
+                .append(Component.text("published  ", MUTED))
+                .append(Component.text(ago(version.datePublished()), TEXT))
+                .append(Component.newline())
+                .append(Component.text("for  ", MUTED))
+                .append(Component.text(version.gameVersions() == null ? "unknown"
+                        : String.join(", ", version.gameVersions()), TEXT))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text(current ? "Already installed" : "Install this build", TEXT));
+
+        TextComponent.Builder row = line()
+                .append(Component.text(INDENT))
+                .append(Component.text(version.versionNumber(), current ? MUTED : TEXT))
+                .append(Component.text("  ", MUTED))
+                .append(channel(version.versionType()));
+
+        if (current) {
+            row.append(Component.text("  installed", DONE));
+        }
+
+        return row.hoverEvent(HoverEvent.showText(hover))
+                .clickEvent(current ? ClickEvent.suggestCommand("/catalog info " + project.slug())
+                        : ClickEvent.runCommand("/catalog install " + project.slug() + " " + version.id()))
+                .build();
+    }
+
+    /**
+     * The channel, coloured by how much it is asking of you.
+     */
+    private static Component channel(ReleaseChannel channel) {
+
+        if (channel == null) {
+            return Component.empty();
+        }
+
+        return Component.text(channel.apiName(), switch (channel) {
+            case RELEASE -> MUTED;
+            case BETA -> PENDING;
+            case ALPHA -> DANGER;
+        });
     }
 
     // --- /catalog search --------------------------------------------------------------------
