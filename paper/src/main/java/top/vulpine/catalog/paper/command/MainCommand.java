@@ -3,15 +3,12 @@ package top.vulpine.catalog.paper.command;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import revxrsal.commands.annotation.Command;
-import revxrsal.commands.annotation.Default;
 import revxrsal.commands.annotation.Description;
-import revxrsal.commands.annotation.Flag;
 import revxrsal.commands.annotation.Named;
 import revxrsal.commands.annotation.Optional;
 import revxrsal.commands.annotation.Single;
 import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
-import revxrsal.commands.annotation.Switch;
 import top.vulpine.catalog.modrinth.model.Dependency;
 import top.vulpine.catalog.modrinth.model.DependencyType;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
@@ -49,6 +46,18 @@ public final class MainCommand {
     /** How long a removal stays confirmable before it has to be asked for again. */
     private static final Duration CONFIRM_WINDOW = Duration.ofSeconds(30);
 
+    /**
+     * Trailing markers the buttons add to a command, read here rather than declared as Lamp flags.
+     *
+     * <p>Lamp requires a flag to be the last parameter, and requires a greedy parameter to be the
+     * last parameter, so an argument that may contain spaces and a flag cannot coexist. Reading
+     * them off the end of the text keeps search phrases and plugin names free-form, and keeps a
+     * second subcommand out of tab completion.</p>
+     */
+    private static final String PAGE_MARKER = " --page ";
+
+    private static final String INFO_MARKER = " --info";
+
     private final CatalogPaper plugin;
 
     /** Pending removals, by sender name. Console counts as one sender, which is correct. */
@@ -83,16 +92,26 @@ public final class MainCommand {
         plugin.getScheduler().runAsync(task -> showProject(sender, query));
     }
 
-    /**
-     * The page is a flag rather than an argument because the search text has to come last to be
-     * allowed spaces, and flags are read out of the input wherever they appear.
-     */
     @Subcommand("search")
     @Description("Find plugins on Modrinth")
     @RequiresPermission("command.search")
-    public void search(CommandSender sender, @Flag("page") @Default("1") int page,
-                       @Named("query") String query) {
-        runSearch(sender, query, Math.max(page, 1));
+    public void search(CommandSender sender, @Named("query") String query) {
+
+        int page = 1;
+        String text = query;
+        int marker = query.lastIndexOf(PAGE_MARKER);
+
+        if (marker >= 0) {
+
+            try {
+                page = Math.max(Integer.parseInt(query.substring(marker + PAGE_MARKER.length()).trim()), 1);
+                text = query.substring(0, marker).trim();
+            } catch (NumberFormatException ignored) {
+                // Not a page after all, so it is part of what someone wanted to search for.
+            }
+        }
+
+        runSearch(sender, text, page);
     }
 
     @Subcommand("install")
@@ -156,26 +175,28 @@ public final class MainCommand {
         redraw(sender, tracked, Messages.channelSet(tracked.displayName(), channel));
     }
 
-    /**
-     * @param fromInfo set by the button on the project page, so the answer comes back as that page
-     *                 rather than as the list
-     */
     @Subcommand("update")
     @Description("Download an update and stage it for the next restart")
     @RequiresPermission("command.update")
     public void update(CommandSender sender,
-                       @Named("plugin") @SuggestWith(Suggestions.TrackedOrAll.class) String query,
-                       @Switch("info") boolean fromInfo) {
+                       @Named("plugin") @SuggestWith(Suggestions.TrackedOrAll.class) String query) {
 
-        if (query.equalsIgnoreCase("all")) {
+        // Set by the button on the project page, so the answer comes back as that page rather than
+        // as the list.
+        boolean fromInfo = query.endsWith(INFO_MARKER);
+        String wanted = fromInfo
+                ? query.substring(0, query.length() - INFO_MARKER.length()).trim()
+                : query;
+
+        if (wanted.equalsIgnoreCase("all")) {
             updateAll(sender);
             return;
         }
 
-        TrackedPlugin tracked = resolve(query);
+        TrackedPlugin tracked = resolve(wanted);
 
         if (tracked == null) {
-            send(sender, Messages.unknownPlugin(query));
+            send(sender, Messages.unknownPlugin(wanted));
             return;
         }
 
