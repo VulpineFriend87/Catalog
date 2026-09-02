@@ -258,9 +258,11 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
-     * Asks Modrinth what is out of date, and says so.
+     * Asks Modrinth what is out of date, so the answer is ready before anyone asks for it.
      *
-     * <p>Nothing is downloaded here. This only reports.</p>
+     * <p>Kept out of the console on purpose. Startup already scrolls past, and a list of updates
+     * printed there is read once and then ignored forever — {@code /catalog list} is where it
+     * belongs, current at the moment it is asked for. Only a failure is worth saying out loud.</p>
      */
     private void checkForUpdates() {
 
@@ -277,27 +279,8 @@ public final class CatalogPaper extends JavaPlugin {
             return;
         }
 
-        if (candidates.isEmpty()) {
-            Logger.info(Action.UPDATE, "Everything is up to date.");
-            return;
-        }
-
-        Logger.info(Action.UPDATE, candidates.size() + " update"
-                + (candidates.size() == 1 ? "" : "s") + " available:");
-
-        boolean folia = detectPlatform() == ServerPlatform.FOLIA;
-
-        for (UpdateCandidate candidate : candidates) {
-
-            // Only worth saying on Folia, which refuses plugins that do not declare support. A
-            // Spigot-tagged plugin running on Paper is entirely normal and needs no remark.
-            String note = folia && !candidate.declaresPlatform()
-                    ? " — does not declare Folia support"
-                    : "";
-
-            Logger.info(Action.UPDATE, "  " + candidate.plugin().displayName()
-                    + " " + candidate.from() + " -> " + candidate.to() + note);
-        }
+        Logger.debug(Action.UPDATE, candidates.size() + " update"
+                + (candidates.size() == 1 ? "" : "s") + " available.");
     }
 
     /**
