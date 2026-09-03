@@ -10,6 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import revxrsal.commands.Lamp;
 import revxrsal.commands.bukkit.BukkitLamp;
 import revxrsal.commands.bukkit.actor.BukkitCommandActor;
+import top.vulpine.catalog.hash.Hashing;
 import top.vulpine.catalog.install.Downloader;
 import top.vulpine.catalog.install.InstallException;
 import top.vulpine.catalog.jar.JarScanner;
@@ -300,6 +301,8 @@ public final class CatalogPaper extends JavaPlugin {
      */
     public List<UpdateCandidate> refreshUpdates() {
 
+        noticeStagedApplied();
+
         ServerTarget target = target();
         Logger.debug(Action.UPDATE, "Checking against " + target + ", asking for loaders "
                 + String.join(", ", target.loaders()) + ".");
@@ -308,6 +311,100 @@ public final class CatalogPaper extends JavaPlugin {
         checkedAt = Instant.now();
 
         return lastCheck;
+    }
+
+    /**
+     * Notices a staged build that something else already applied, mid-session.
+     *
+     * <p>Paper consumes the update folder in {@code FileProviderSource#checkUpdate}, which runs for
+     * every plugin file it loads — not only during the startup scan. So a reload tool loading a
+     * single plugin applies whatever Catalog staged for it, there and then. That is a fine outcome
+     * and Catalog has no say in it; what it must not do is keep insisting a restart is owed for a
+     * build that is already running.</p>
+     *
+     * <p>Cheap because it only looks at plugins actually marked staged, which is almost always
+     * none. Blocks, so it must be called off the main thread.</p>
+     */
+    private void noticeStagedApplied() {
+
+        Path updates = getServer().getUpdateFolderFile().toPath();
+        Map<String, TrackedPlugin> rehashed = new HashMap<>();
+        List<TrackedPlugin> abandoned = new ArrayList<>();
+
+        for (TrackedPlugin plugin : tracking.pendingRestart()) {
+
+            // Still sitting there waiting for a restart, which is the normal case.
+            if (Files.exists(updates.resolve(plugin.fileName()))) {
+                continue;
+            }
+
+            String hash = hashOf(pluginsFolder().resolve(plugin.fileName()));
+
+            if (hash == null || hash.equals(plugin.sha512())) {
+                // Gone from the update folder without the jar changing: somebody deleted it.
+                abandoned.add(plugin);
+            } else {
+                rehashed.put(hash, plugin);
+            }
+        }
+
+        if (rehashed.isEmpty() && abandoned.isEmpty()) {
+            return;
+        }
+
+        for (TrackedPlugin plugin : abandoned) {
+            plugin.pendingRestart(false);
+            Logger.warn(Action.UPDATE, "The build staged for " + plugin.displayName()
+                    + " is gone from the update folder and was never applied.");
+        }
+
+        identifyApplied(rehashed);
+        saveTracking();
+    }
+
+    /**
+     * Re-identifies jars that changed underneath Catalog and records what they became.
+     */
+    private void identifyApplied(Map<String, TrackedPlugin> byHash) {
+
+        if (byHash.isEmpty()) {
+            return;
+        }
+
+        Map<String, ModrinthVersion> identified;
+
+        try {
+            identified = modrinth.identify(byHash.keySet()).join();
+        } catch (Exception e) {
+            // The flags stay set and the next startup sorts it out from the hashes on disk.
+            Logger.debug(Action.UPDATE, "Could not identify applied builds: " + rootMessage(e));
+            return;
+        }
+
+        for (Map.Entry<String, TrackedPlugin> entry : byHash.entrySet()) {
+
+            TrackedPlugin plugin = entry.getValue();
+            ModrinthVersion became = identified.get(entry.getKey());
+
+            if (became == null || !plugin.projectId().equals(became.projectId())) {
+                continue;
+            }
+
+            plugin.moveTo(became, plugin.fileName(), entry.getKey());
+            plugin.pendingRestart(false);
+
+            Logger.info(Action.UPDATE, plugin.displayName() + " is now "
+                    + became.versionNumber() + ", applied without a restart by something else.");
+        }
+    }
+
+    private static String hashOf(Path jar) {
+
+        try {
+            return Files.isRegularFile(jar) ? Hashing.sha512(jar) : null;
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     /**
@@ -411,10 +508,15 @@ public final class CatalogPaper extends JavaPlugin {
     /**
      * Downloads an update and puts it in the update folder.
      *
-     * <p>Staged under the name the plugin already has on disk, because that is what Bukkit matches
-     * on: modern Paper replaces a jar only when the update file has the identical file name. The
-     * cost is that a versioned file name goes stale, which is what the canonical naming step will
-     * fix once it lands.</p>
+     * <p>Staged under the name the plugin already has on disk. Not because the name is what gets
+     * matched — it is not, on either semantics: 1.18.2 and modern Paper both read the plugin name
+     * out of the descriptor and search the update folder for it. Keeping the name is what stops the
+     * jar being renamed underneath the tracking record, which finds a plugin by hash and then by
+     * file name and by nothing else.</p>
+     *
+     * <p>The cost is that a versioned file name goes stale. Paper renames the installed jar to the
+     * update file's name, so staging under the new build's real file name would fix that for free —
+     * once reconciliation can survive a rename and a content change landing together.</p>
      *
      * <p>Nothing is loaded or unloaded here. The swap happens during the next startup, before any
      * plugin is enabled, which is the only moment it is safe.</p>
