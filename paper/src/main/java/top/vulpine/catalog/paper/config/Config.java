@@ -64,6 +64,18 @@ public class Config extends OkaeriConfig {
 
     }
 
+    @CustomKey("updates")
+    public Updates updates = new Updates();
+
+    public static class Updates extends OkaeriConfig {
+
+        @Comment("How often to ask Modrinth whether anything is out of date, in minutes.")
+        @Comment("Set to 0 to only check when the server starts.")
+        @CustomKey("check_interval_minutes")
+        public int checkIntervalMinutes = 180;
+
+    }
+
     @Comment("Allow installing builds this server is not declared compatible with.")
     @Comment("With this on, a plugin's version screen gains a button listing every build ever")
     @Comment("published, and any of them can be installed. They are not filtered by Minecraft")

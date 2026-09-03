@@ -34,6 +34,7 @@ import top.vulpine.catalog.tracking.model.ReconcileReport;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
 import top.vulpine.catalog.trash.TrashBin;
+import top.vulpine.catalog.update.AutoUpdatePolicy;
 import top.vulpine.catalog.update.UpdateChecker;
 import top.vulpine.catalog.update.model.ServerPlatform;
 import top.vulpine.catalog.update.model.ServerTarget;
@@ -54,6 +55,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Catalog on Paper, Purpur and Folia.
@@ -131,6 +133,7 @@ public final class CatalogPaper extends JavaPlugin {
         lamp.register(new MainCommand(this, clicks));
 
         getScheduler().runAsync(task -> index());
+        scheduleUpdateChecks();
     }
 
     @Override
@@ -287,6 +290,57 @@ public final class CatalogPaper extends JavaPlugin {
 
         Logger.debug(Action.UPDATE, candidates.size() + " update"
                 + (candidates.size() == 1 ? "" : "s") + " available.");
+
+        applyAutomatic(candidates);
+    }
+
+    /**
+     * Stages the updates that were allowed to happen without being asked.
+     *
+     * <p>The only part of Catalog that acts on its own, so it is also the only part that says so
+     * without being asked: an operator who comes back to a changed server is owed an explanation in
+     * the log for every file that changed.</p>
+     */
+    private void applyAutomatic(List<UpdateCandidate> candidates) {
+
+        AutoUpdatePolicy policy = new AutoUpdatePolicy(configuration.tracking.defaults.soakMinutes);
+        List<UpdateCandidate> ready = policy.readyToApply(candidates, Instant.now());
+
+        for (UpdateCandidate candidate : ready) {
+
+            try {
+
+                stage(candidate);
+
+                Logger.info(Action.UPDATE, "Updated " + candidate.plugin().displayName()
+                        + " " + candidate.from() + " -> " + candidate.to()
+                        + ", applies on the next restart.");
+
+            } catch (Exception e) {
+                Logger.warn(Action.UPDATE, "Could not update " + candidate.plugin().displayName()
+                        + ": " + rootMessage(e));
+            }
+        }
+    }
+
+    /**
+     * Asks again on a timer, so a server left running for a fortnight is not working from what it
+     * learned at boot.
+     *
+     * <p>Auto-updating plugins depend on this loop coming round: a build inside its soak window is
+     * refused now and wanted later, and without another check later never arrives.</p>
+     */
+    private void scheduleUpdateChecks() {
+
+        int minutes = configuration.updates.checkIntervalMinutes;
+
+        if (minutes <= 0) {
+            Logger.debug(Action.SETUP, "Periodic update checks are off.");
+            return;
+        }
+
+        getScheduler().runTimerAsync(this::checkForUpdates, minutes, minutes, TimeUnit.MINUTES);
+        Logger.debug(Action.SETUP, "Checking for updates every " + minutes + " minutes.");
     }
 
     /**
