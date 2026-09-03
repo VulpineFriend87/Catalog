@@ -71,9 +71,22 @@ public final class Reconciler {
 
         Changes changes = new Changes();
         Set<String> claimed = new HashSet<>();
+        List<Unsettled> unsettled = new ArrayList<>();
 
+        // Two rounds, because the strong evidence has to win everywhere before the weak evidence is
+        // used anywhere. Settled one plugin at a time, the first to be looked at could claim a jar
+        // that a later one owns byte for byte, and that later one would then look deleted.
         for (TrackedPlugin tracked : store.all()) {
-            settle(tracked, scan, identified, claimed, changes);
+
+            Unsettled left = settle(tracked, scan, identified, claimed, changes);
+
+            if (left != null) {
+                unsettled.add(left);
+            }
+        }
+
+        for (Unsettled left : unsettled) {
+            settleByProject(left, scan, identified, claimed, changes);
         }
 
         for (InstalledJar jar : scan.jars()) {
@@ -123,6 +136,15 @@ public final class Reconciler {
                 .build();
     }
 
+    /**
+     * A tracked plugin neither the hash nor the file name could account for.
+     *
+     * @param nameTaken whether a jar was sitting under its file name, holding something else — the
+     *                  difference between a plugin that was replaced and one that simply left
+     */
+    private record Unsettled(TrackedPlugin plugin, boolean nameTaken) {
+    }
+
     /** What became of the plugins already tracked, gathered as each one is settled. */
     private static final class Changes {
 
@@ -142,8 +164,9 @@ public final class Reconciler {
      * that moved to a different name is the same plugin, while a jar keeping its name with different
      * contents is not.</p>
      */
-    private void settle(TrackedPlugin tracked, ScanResult scan, Map<String, ModrinthVersion> identified,
-                        Set<String> claimed, Changes changes) {
+    private Unsettled settle(TrackedPlugin tracked, ScanResult scan,
+                             Map<String, ModrinthVersion> identified, Set<String> claimed,
+                             Changes changes) {
 
         InstalledJar sameContent = tracked.sha512() == null ? null : scan.byHash(tracked.sha512());
 
@@ -166,15 +189,13 @@ public final class Reconciler {
             tracked.pendingLoad(false);
 
             claimed.add(sameContent.fileName());
-            return;
+            return null;
         }
 
         InstalledJar sameName = tracked.fileName() == null ? null : scan.byFileName(tracked.fileName());
 
         if (sameName == null) {
-            store.remove(tracked.projectId());
-            changes.removed.add(tracked);
-            return;
+            return new Unsettled(tracked, false);
         }
 
         ModrinthVersion replacement = identified.get(sameName.sha512());
@@ -193,13 +214,59 @@ public final class Reconciler {
 
             claimed.add(sameName.fileName());
             (wasStaged ? changes.applied : changes.moved).add(tracked);
+            return null;
+        }
+
+        // The file now holds something else entirely. The name is left unclaimed so whatever
+        // actually lives there can be adopted, and the plugin goes to the second round in case it
+        // is still on disk somewhere under a name nobody has looked at yet.
+        return new Unsettled(tracked, true);
+    }
+
+    /**
+     * Last resort: find the plugin by the only thing a rename and a new version both leave alone.
+     *
+     * <p>Reached when neither the contents nor the file name led anywhere, which is what happens
+     * when both changed at once — the jar was replaced and renamed in the same downtime. The
+     * Modrinth project id survives that, and needs no second opinion: matching it <em>is</em> the
+     * proof that this is the same plugin, where a file name or a declared name would still have to
+     * be checked against something.</p>
+     *
+     * <p>Only jars nobody else claimed are considered, so this can never take a jar away from a
+     * plugin that matched it exactly. If two are left over for the same project, the first is taken
+     * and the other falls through to be reported as a duplicate.</p>
+     */
+    private void settleByProject(Unsettled left, ScanResult scan,
+                                 Map<String, ModrinthVersion> identified, Set<String> claimed,
+                                 Changes changes) {
+
+        TrackedPlugin tracked = left.plugin();
+
+        for (InstalledJar jar : scan.jars()) {
+
+            if (claimed.contains(jar.fileName())) {
+                continue;
+            }
+
+            ModrinthVersion version = identified.get(jar.sha512());
+
+            if (version == null || !tracked.projectId().equals(version.projectId())) {
+                continue;
+            }
+
+            boolean wasStaged = tracked.pendingRestart();
+
+            tracked.moveTo(version, jar.fileName(), jar.sha512());
+            tracked.pendingRestart(false);
+            tracked.pendingLoad(false);
+
+            claimed.add(jar.fileName());
+            (wasStaged ? changes.applied : changes.moved).add(tracked);
             return;
         }
 
-        // The file now holds something else entirely. Tracking stops, and the name is left
-        // unclaimed so the pass below can adopt whatever actually lives there now.
         store.remove(tracked.projectId());
-        changes.orphaned.add(tracked);
+        (left.nameTaken() ? changes.orphaned : changes.removed).add(tracked);
     }
 
     private TrackedPlugin adopt(ModrinthVersion version, InstalledJar jar) {

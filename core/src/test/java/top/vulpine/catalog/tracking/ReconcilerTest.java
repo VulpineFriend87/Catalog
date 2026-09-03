@@ -226,6 +226,89 @@ class ReconcilerTest {
     }
 
     @Test
+    @DisplayName("a jar renamed and updated in the same downtime is still the same plugin")
+    void survivesRenameAndUpdateTogether() {
+
+        // Neither clue survives: the contents changed, so the hash misses, and the file is not
+        // where it was, so the name misses. Only the project id is left, and it is enough.
+        TrackedPlugin tracked = TrackedPlugin.of(version("v1", "PROJ-A"), "LuckPerms-5.4.jar",
+                "hash-old", ReleaseChannel.RELEASE, "test");
+        tracked.autoUpdate(true);
+        tracked.soakMinutes(30);
+        store.put(tracked);
+
+        onDisk("LuckPerms-5.5.jar", "hash-new", "LuckPerms", version("v2", "PROJ-A"));
+
+        ReconcileReport report = run();
+
+        assertEquals(0, report.removed().size(), "losing it here quietly resets every setting");
+        assertEquals(0, report.adopted().size(), "and re-adopting it is how the settings are lost");
+        assertEquals(1, report.moved().size());
+
+        TrackedPlugin after = store.byProjectId("PROJ-A");
+        assertEquals("LuckPerms-5.5.jar", after.fileName());
+        assertEquals("v2", after.versionId());
+        assertTrue(after.autoUpdate(), "the whole point is that the settings survive");
+        assertEquals(30, after.soakMinutes());
+    }
+
+    @Test
+    @DisplayName("an exact match always wins the jar over a merely same-project one")
+    void exactMatchOutranksTheProjectId() {
+
+        // If the project id were tried plugin by plugin, whichever was looked at first could take
+        // the jar the other owns byte for byte, and that one would then look uninstalled.
+        TrackedPlugin renamed = TrackedPlugin.of(version("v1", "PROJ-A"), "gone.jar", "hash-old",
+                ReleaseChannel.RELEASE, "test");
+        store.put(renamed);
+
+        TrackedPlugin exact = TrackedPlugin.of(version("v2", "PROJ-B"), "other.jar", "hash-exact",
+                ReleaseChannel.RELEASE, "test");
+        store.put(exact);
+
+        onDisk("other.jar", "hash-exact", "Other", version("v2", "PROJ-B"));
+        onDisk("renamed.jar", "hash-new", "LuckPerms", version("v3", "PROJ-A"));
+
+        run();
+
+        assertEquals("other.jar", store.byProjectId("PROJ-B").fileName(), "kept by exact contents");
+        assertEquals("renamed.jar", store.byProjectId("PROJ-A").fileName(), "found by project id");
+    }
+
+    @Test
+    @DisplayName("a staged build applied under a new name is reported as applied")
+    void countsAsAppliedWhenStagedAndRenamed() {
+
+        TrackedPlugin tracked = TrackedPlugin.of(version("v1", "PROJ-A"), "LuckPerms-5.4.jar",
+                "hash-old", ReleaseChannel.RELEASE, "test");
+        tracked.pendingRestart(true);
+        store.put(tracked);
+
+        onDisk("LuckPerms-5.5.jar", "hash-new", "LuckPerms", version("v2", "PROJ-A"));
+
+        ReconcileReport report = run();
+
+        assertEquals(1, report.applied().size(), "Catalog asked for this one, so it is not a swap");
+        assertFalse(store.byProjectId("PROJ-A").pendingRestart());
+    }
+
+    @Test
+    @DisplayName("a second leftover jar of the same project is reported as a duplicate")
+    void reportsLeftoverDuplicates() {
+
+        store.put(TrackedPlugin.of(version("v1", "PROJ-A"), "gone.jar", "hash-old",
+                ReleaseChannel.RELEASE, "test"));
+
+        onDisk("one.jar", "hash-1", "LuckPerms", version("v2", "PROJ-A"));
+        onDisk("two.jar", "hash-2", "LuckPerms", version("v3", "PROJ-A"));
+
+        ReconcileReport report = run();
+
+        assertEquals(1, report.moved().size(), "one of them is the plugin");
+        assertEquals(1, report.conflicting().size(), "the other is a second copy and must be said");
+    }
+
+    @Test
     @DisplayName("swapping a jar for a different plugin untracks the old one and adopts the new")
     void handlesSwapToAnotherProject() {
 
