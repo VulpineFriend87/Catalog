@@ -446,7 +446,10 @@ public final class Messages {
                     .append(Component.space());
         }
 
-        out.append(installed.isPinned()
+        out.append(button("Switch", "/catalog versions " + key, MUTED,
+                        "Choose a different build, including going back to an older one"))
+                .append(Component.space())
+                .append(installed.isPinned()
                         ? button("Unhold", from("/catalog unhold " + key, here), MUTED,
                         "Allow updates again")
                         : button("Hold", from("/catalog hold " + key, here), MUTED,
@@ -774,6 +777,54 @@ public final class Messages {
                         DANGER, "Remove it now"))
                 .append(Component.space())
                 .append(button("Cancel", back(from), MUTED, "Leave it installed"))
+                .build());
+
+        return out;
+    }
+
+    /**
+     * Asked before replacing a jar that already works.
+     *
+     * <p>A rollback says so in its own words. Going backwards is a legitimate thing to want and
+     * Catalog will do it, but it is not the same act as taking an update and should not read like
+     * one — and the files a plugin has already written are not coming back with it.</p>
+     */
+    public static List<Component> confirmSwitch(TrackedPlugin plugin, ModrinthVersion version,
+                                                boolean older, String from) {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text(older ? "Roll back " : "Switch ", PENDING)
+                        .decorate(TextDecoration.BOLD))
+                .append(Component.text(plugin.displayName(), TEXT).decorate(TextDecoration.BOLD))
+                .build());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(Component.text(String.valueOf(plugin.versionNumber()), MUTED))
+                .append(Component.text(" → ", MUTED))
+                .append(Component.text(version.versionNumber(), TEXT))
+                .append(Component.text("  " + (version.versionType() == null ? ""
+                        : version.versionType().apiName()), MUTED))
+                .build());
+
+        out.add(Component.text(INDENT + "Applied on restart."
+                + (older ? " Config and data are not rolled back with it." : ""), MUTED));
+
+        out.add(Component.empty());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(button("Confirm", from == null
+                                ? "/catalog install " + key(plugin) + " " + version.id()
+                                : from("/catalog install " + key(plugin) + " " + version.id(), from),
+                        PENDING, older ? "Roll back now" : "Switch now"))
+                .append(Component.space())
+                // Back to the picker rather than to wherever the payload points: a switch is only
+                // ever chosen from there, and the payload is aimed at where to land afterwards.
+                .append(button("Cancel", "/catalog versions " + key(plugin), MUTED,
+                        "Leave it as it is"))
                 .build());
 
         return out;

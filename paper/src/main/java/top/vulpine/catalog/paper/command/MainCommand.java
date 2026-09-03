@@ -171,6 +171,14 @@ public final class MainCommand {
 
                 if (tracked != null) {
 
+                    // Replacing a jar that already works is worth a second press. A fresh install
+                    // is not: there is nothing yet to lose.
+                    if (!confirmed(sender, "switch:" + tracked.projectId() + ":" + version.id())) {
+                        send(sender, Messages.confirmSwitch(tracked, version,
+                                isOlder(version, tracked), data));
+                        return;
+                    }
+
                     plugin.setChannel(tracked, follow);
                     plugin.stage(tracked, version);
 
@@ -424,19 +432,15 @@ public final class MainCommand {
             return;
         }
 
-        Pending pending = confirmations.get(sender.getName());
         String data = context.take(sender);
 
-        if (pending == null || pending.expired() || !pending.projectId.equals(tracked.projectId())) {
-            confirmations.put(sender.getName(), new Pending(tracked.projectId(), Instant.now()));
+        if (!confirmed(sender, "remove:" + tracked.projectId())) {
 
             // The button carries the payload back, so confirming lands on the screen this started
             // from rather than on whatever the confirmation itself replaced.
             send(sender, Messages.confirmRemove(tracked, data));
             return;
         }
-
-        confirmations.remove(sender.getName());
 
         plugin.getScheduler().runAsync(task -> {
 
@@ -525,6 +529,29 @@ public final class MainCommand {
      */
     private void abandonConfirmation(CommandSender sender) {
         confirmations.remove(sender.getName());
+    }
+
+    /**
+     * Whether this exact action was already asked for and is being asked for again.
+     *
+     * <p>The same command does both halves: the confirmation button runs it a second time, and a
+     * second call inside the window goes through. Asking for something else in between replaces
+     * what is waiting rather than confirming it.</p>
+     *
+     * @param action identifies precisely what is being confirmed
+     * @return true to go ahead, false when the caller should show a confirmation instead
+     */
+    private boolean confirmed(CommandSender sender, String action) {
+
+        Pending pending = confirmations.get(sender.getName());
+
+        if (pending != null && !pending.expired() && pending.action().equals(action)) {
+            confirmations.remove(sender.getName());
+            return true;
+        }
+
+        confirmations.put(sender.getName(), new Pending(action, Instant.now()));
+        return false;
     }
 
     /**
@@ -765,6 +792,19 @@ public final class MainCommand {
      * <p>A different id is not enough. Narrowing to one game version can make the newest compatible
      * build an older one, and offering that is how an operator gets talked into a downgrade.</p>
      */
+    /**
+     * Whether a build was published before the one installed, which makes choosing it a rollback.
+     *
+     * <p>By publish date, never by reading the version numbers: those are display strings their
+     * authors chose, and deciding a rollback from one is how a manager talks somebody into the
+     * opposite of what they asked for.</p>
+     */
+    private static boolean isOlder(ModrinthVersion version, TrackedPlugin tracked) {
+
+        return tracked.datePublished() != null && version.datePublished() != null
+                && version.datePublished().isBefore(tracked.datePublished());
+    }
+
     private static boolean isNewer(ModrinthVersion latest, TrackedPlugin tracked) {
 
         if (latest == null || tracked == null || tracked.pinnedVersionId() != null) {
@@ -856,7 +896,11 @@ public final class MainCommand {
         sender.sendMessage(line);
     }
 
-    private record Pending(String projectId, Instant asked) {
+    /**
+     * @param action what is waiting to be confirmed, identified precisely enough that confirming
+     *               one thing can never carry out another
+     */
+    private record Pending(String action, Instant asked) {
 
         private boolean expired() {
             return Duration.between(asked, Instant.now()).compareTo(CONFIRM_WINDOW) > 0;
