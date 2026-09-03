@@ -330,9 +330,11 @@ public final class Messages {
         ModrinthVersion newest = offered(view);
 
         if (newest != null) {
+            // Not the project's newest build: the newest one that runs here, on the channel being
+            // followed. Saying "latest" invited exactly the wrong reading.
             hover.append(Component.newline())
                     .append(Component.newline())
-                    .append(Component.text("latest  ", MUTED))
+                    .append(Component.text("newest here  ", MUTED))
                     .append(Component.text(newest.versionNumber(), TEXT))
                     .append(Component.text(newest.versionType() == null ? ""
                             : "  " + newest.versionType().apiName(), MUTED))
@@ -446,8 +448,7 @@ public final class Messages {
                     .append(Component.space());
         }
 
-        out.append(button("Switch", "/catalog versions " + key, MUTED,
-                        "Choose a different build, including going back to an older one"))
+        out.append(button("Switch", "/catalog versions " + key, MUTED, "Choose a different version"))
                 .append(Component.space())
                 .append(installed.isPinned()
                         ? button("Unhold", from("/catalog unhold " + key, here), MUTED,
@@ -771,9 +772,7 @@ public final class Messages {
 
         out.add(line()
                 .append(Component.text(INDENT))
-                .append(button("Confirm", from == null
-                                ? "/catalog uninstall " + key(plugin)
-                                : from("/catalog uninstall " + key(plugin), from),
+                .append(button("Confirm", confirming("/catalog uninstall " + key(plugin), from),
                         DANGER, "Remove it now"))
                 .append(Component.space())
                 .append(button("Cancel", back(from), MUTED, "Leave it installed"))
@@ -816,9 +815,8 @@ public final class Messages {
 
         out.add(line()
                 .append(Component.text(INDENT))
-                .append(button("Confirm", from == null
-                                ? "/catalog install " + key(plugin) + " " + version.id()
-                                : from("/catalog install " + key(plugin) + " " + version.id(), from),
+                .append(button("Confirm", confirming("/catalog install " + key(plugin)
+                                + " " + version.id(), from),
                         PENDING, older ? "Roll back now" : "Switch now"))
                 .append(Component.space())
                 // Back to the picker rather than to wherever the payload points: a switch is only
@@ -978,6 +976,16 @@ public final class Messages {
      */
     private static String from(String command, String screen) {
         return command + " " + ClickContext.MARKER + screen;
+    }
+
+    /**
+     * Tags a command as the confirmation of one already asked about.
+     *
+     * <p>What makes it a confirmation is this payload, not the fact that the command has been run
+     * before — so pressing the button that asked cannot double as the answer.</p>
+     */
+    private static String confirming(String command, String screen) {
+        return from(command, ClickContext.CONFIRM + (screen == null ? "" : screen));
     }
 
     /**

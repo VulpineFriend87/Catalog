@@ -41,6 +41,15 @@ public final class ClickContext implements Listener {
     /** One project's page, followed by its slug. */
     public static final String INFO = "info:";
 
+    /**
+     * Marks a payload as coming from a confirmation button, wrapping the screen to return to.
+     *
+     * <p>Confirming has to be a different click from asking. Without this the confirmation was
+     * "run the same command twice", which meant pressing a remove or version button twice in a row
+     * carried the action out without the dialog ever being read.</p>
+     */
+    public static final String CONFIRM = "confirm:";
+
     private final Map<String, String> pending = new ConcurrentHashMap<>();
 
     @EventHandler(priority = EventPriority.LOWEST)

@@ -173,23 +173,23 @@ public final class MainCommand {
 
                     // Replacing a jar that already works is worth a second press. A fresh install
                     // is not: there is nothing yet to lose.
-                    if (!confirmed(sender, "switch:" + tracked.projectId() + ":" + version.id())) {
+                    if (!confirmed(sender, "switch:" + tracked.projectId() + ":" + version.id(), data)) {
                         send(sender, Messages.confirmSwitch(tracked, version,
-                                isOlder(version, tracked), data));
+                                isOlder(version, tracked), screen(data)));
                         return;
                     }
 
                     plugin.setChannel(tracked, follow);
                     plugin.stage(tracked, version);
 
-                    redraw(sender, data);
+                    redraw(sender, screen(data));
                     send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
                     return;
                 }
 
                 plugin.install(project, version, follow, sender.getName());
 
-                redraw(sender, data);
+                redraw(sender, screen(data));
                 send(sender, Messages.installed(project.title(), version.versionNumber()));
 
             } catch (Exception e) {
@@ -205,6 +205,8 @@ public final class MainCommand {
                          @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
                          @Switch("all") boolean everything,
                          @Flag("page") @Default("1") int page) {
+
+        abandonConfirmation(sender);
 
         plugin.getScheduler().runAsync(task -> {
 
@@ -434,11 +436,11 @@ public final class MainCommand {
 
         String data = context.take(sender);
 
-        if (!confirmed(sender, "remove:" + tracked.projectId())) {
+        if (!confirmed(sender, "remove:" + tracked.projectId(), data)) {
 
             // The button carries the payload back, so confirming lands on the screen this started
             // from rather than on whatever the confirmation itself replaced.
-            send(sender, Messages.confirmRemove(tracked, data));
+            send(sender, Messages.confirmRemove(tracked, screen(data)));
             return;
         }
 
@@ -448,7 +450,7 @@ public final class MainCommand {
 
                 boolean deleted = plugin.uninstall(tracked, sender.getName());
 
-                redraw(sender, data);
+                redraw(sender, screen(data));
                 send(sender, Messages.removed(tracked.displayName(), deleted));
 
             } catch (Exception e) {
@@ -532,16 +534,25 @@ public final class MainCommand {
     }
 
     /**
-     * Whether this exact action was already asked for and is being asked for again.
+     * Whether to go ahead, or to ask first.
      *
-     * <p>The same command does both halves: the confirmation button runs it a second time, and a
-     * second call inside the window goes through. Asking for something else in between replaces
-     * what is waiting rather than confirming it.</p>
+     * <p>A click says outright which it is, because the confirmation button carries a payload the
+     * button that asked does not. Pressing the same remove or version button twice therefore asks
+     * twice, instead of quietly carrying the action out — which is what happened while confirming
+     * meant nothing more than running the same command again.</p>
+     *
+     * <p>A typed command has no payload to carry, so there it still means exactly that: the same
+     * command a second time inside the window. Console cannot click, and needs a way through.</p>
      *
      * @param action identifies precisely what is being confirmed
+     * @param data   the payload the command arrived with, or null if it was typed
      * @return true to go ahead, false when the caller should show a confirmation instead
      */
-    private boolean confirmed(CommandSender sender, String action) {
+    private boolean confirmed(CommandSender sender, String action, String data) {
+
+        if (data != null) {
+            return data.startsWith(ClickContext.CONFIRM);
+        }
 
         Pending pending = confirmations.get(sender.getName());
 
@@ -552,6 +563,21 @@ public final class MainCommand {
 
         confirmations.put(sender.getName(), new Pending(action, Instant.now()));
         return false;
+    }
+
+    /**
+     * The screen a payload points at, with any confirmation marker peeled off.
+     */
+    private static String screen(String data) {
+
+        if (data == null) {
+            return null;
+        }
+
+        String screen = data.startsWith(ClickContext.CONFIRM)
+                ? data.substring(ClickContext.CONFIRM.length()) : data;
+
+        return screen.isEmpty() ? null : screen;
     }
 
     /**
