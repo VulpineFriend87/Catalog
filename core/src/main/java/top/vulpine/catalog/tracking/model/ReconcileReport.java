@@ -27,6 +27,20 @@ public final class ReconcileReport {
     @Builder.Default
     private final List<TrackedPlugin> moved = Collections.emptyList();
 
+    /** An update Catalog staged is now the jar on disk, so the restart that applies it has happened. */
+    @Builder.Default
+    private final List<TrackedPlugin> applied = Collections.emptyList();
+
+    /**
+     * An update Catalog staged is still not the jar on disk after a restart.
+     *
+     * <p>The server did not take the file from the update folder. Worth saying out loud: the
+     * operator restarted expecting a new version and has the old one, and nothing else would tell
+     * them so.</p>
+     */
+    @Builder.Default
+    private final List<TrackedPlugin> notApplied = Collections.emptyList();
+
     /** Same file contents under a new name, so only the recorded file name changed. */
     @Builder.Default
     private final List<TrackedPlugin> renamed = Collections.emptyList();
@@ -76,7 +90,7 @@ public final class ReconcileReport {
      */
     public boolean hasChanges() {
         return !adopted.isEmpty() || !moved.isEmpty() || !renamed.isEmpty()
-                || !removed.isEmpty() || !orphaned.isEmpty();
+                || !removed.isEmpty() || !orphaned.isEmpty() || !applied.isEmpty();
     }
 
     /**
@@ -85,7 +99,7 @@ public final class ReconcileReport {
      * @return true if there is something worth a warning
      */
     public boolean needsAttention() {
-        return !orphaned.isEmpty() || !conflicting.isEmpty();
+        return !orphaned.isEmpty() || !conflicting.isEmpty() || !notApplied.isEmpty();
     }
 
 }

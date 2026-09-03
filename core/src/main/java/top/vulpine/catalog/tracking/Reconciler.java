@@ -64,19 +64,16 @@ public final class Reconciler {
     public ReconcileReport reconcile(ScanResult scan, Map<String, ModrinthVersion> identified) {
 
         List<TrackedPlugin> adopted = new ArrayList<>();
-        List<TrackedPlugin> moved = new ArrayList<>();
-        List<TrackedPlugin> renamed = new ArrayList<>();
-        List<TrackedPlugin> removed = new ArrayList<>();
-        List<TrackedPlugin> orphaned = new ArrayList<>();
         List<InstalledJar> unknown = new ArrayList<>();
         List<InstalledJar> ignored = new ArrayList<>();
         List<InstalledJar> conflicting = new ArrayList<>();
         List<InstalledJar> notAdopted = new ArrayList<>();
 
+        Changes changes = new Changes();
         Set<String> claimed = new HashSet<>();
 
         for (TrackedPlugin tracked : store.all()) {
-            settle(tracked, scan, identified, claimed, moved, renamed, removed, orphaned);
+            settle(tracked, scan, identified, claimed, changes);
         }
 
         for (InstalledJar jar : scan.jars()) {
@@ -113,15 +110,29 @@ public final class Reconciler {
 
         return ReconcileReport.builder()
                 .adopted(adopted)
-                .moved(moved)
-                .renamed(renamed)
-                .removed(removed)
-                .orphaned(orphaned)
+                .moved(changes.moved)
+                .applied(changes.applied)
+                .notApplied(changes.notApplied)
+                .renamed(changes.renamed)
+                .removed(changes.removed)
+                .orphaned(changes.orphaned)
                 .unknown(unknown)
                 .ignored(ignored)
                 .conflicting(conflicting)
                 .notAdopted(notAdopted)
                 .build();
+    }
+
+    /** What became of the plugins already tracked, gathered as each one is settled. */
+    private static final class Changes {
+
+        private final List<TrackedPlugin> moved = new ArrayList<>();
+        private final List<TrackedPlugin> applied = new ArrayList<>();
+        private final List<TrackedPlugin> notApplied = new ArrayList<>();
+        private final List<TrackedPlugin> renamed = new ArrayList<>();
+        private final List<TrackedPlugin> removed = new ArrayList<>();
+        private final List<TrackedPlugin> orphaned = new ArrayList<>();
+
     }
 
     /**
@@ -132,8 +143,7 @@ public final class Reconciler {
      * contents is not.</p>
      */
     private void settle(TrackedPlugin tracked, ScanResult scan, Map<String, ModrinthVersion> identified,
-                        Set<String> claimed, List<TrackedPlugin> moved, List<TrackedPlugin> renamed,
-                        List<TrackedPlugin> removed, List<TrackedPlugin> orphaned) {
+                        Set<String> claimed, Changes changes) {
 
         InstalledJar sameContent = tracked.sha512() == null ? null : scan.byHash(tracked.sha512());
 
@@ -141,7 +151,14 @@ public final class Reconciler {
 
             if (!sameContent.fileName().equals(tracked.fileName())) {
                 tracked.fileName(sameContent.fileName());
-                renamed.add(tracked);
+                changes.renamed.add(tracked);
+            }
+
+            // Byte for byte what was here before a restart that was supposed to replace it. The
+            // server did not take the file from the update folder, and the staged build is still
+            // waiting, so the flag stays set and somebody is told.
+            if (tracked.pendingRestart()) {
+                changes.notApplied.add(tracked);
             }
 
             claimed.add(sameContent.fileName());
@@ -152,23 +169,32 @@ public final class Reconciler {
 
         if (sameName == null) {
             store.remove(tracked.projectId());
-            removed.add(tracked);
+            changes.removed.add(tracked);
             return;
         }
 
         ModrinthVersion replacement = identified.get(sameName.sha512());
 
         if (replacement != null && tracked.projectId().equals(replacement.projectId())) {
+
+            // A staged update becoming the jar on disk is the same event as somebody swapping it by
+            // hand — the difference is only that Catalog asked for this one. Without checking the
+            // flag first, applying an update reads as "replaced by hand" and the plugin stays
+            // marked staged forever, because nothing else ever clears it.
+            boolean wasStaged = tracked.pendingRestart();
+
             tracked.moveTo(replacement, sameName.fileName(), sameName.sha512());
+            tracked.pendingRestart(false);
+
             claimed.add(sameName.fileName());
-            moved.add(tracked);
+            (wasStaged ? changes.applied : changes.moved).add(tracked);
             return;
         }
 
         // The file now holds something else entirely. Tracking stops, and the name is left
         // unclaimed so the pass below can adopt whatever actually lives there now.
         store.remove(tracked.projectId());
-        orphaned.add(tracked);
+        changes.orphaned.add(tracked);
     }
 
     private TrackedPlugin adopt(ModrinthVersion version, InstalledJar jar) {

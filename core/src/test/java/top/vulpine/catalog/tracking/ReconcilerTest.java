@@ -152,6 +152,61 @@ class ReconcilerTest {
         assertEquals("new-hash", tracked.sha512());
     }
 
+    @Test
+    @DisplayName("a staged update landing is an update, not a manual replacement")
+    void clearsTheFlagWhenAnUpdateLands() {
+
+        // The jar Catalog put in the update folder is now the jar in the plugins folder. Read as a
+        // manual swap it would stay marked staged forever, because nothing else ever clears it.
+        TrackedPlugin staged = TrackedPlugin.of(version("v1", "PROJ-A"), "LuckPerms.jar",
+                "old-hash", ReleaseChannel.RELEASE, "test");
+        staged.pendingRestart(true);
+        store.put(staged);
+
+        onDisk("LuckPerms.jar", "new-hash", "LuckPerms", version("v2", "PROJ-A"));
+
+        ReconcileReport report = run();
+
+        assertEquals(1, report.applied().size());
+        assertEquals(0, report.moved().size(), "Catalog asked for this one");
+
+        TrackedPlugin tracked = store.byProjectId("PROJ-A");
+
+        assertEquals("v2", tracked.versionId());
+        assertFalse(tracked.pendingRestart(), "and it is no longer waiting for a restart");
+    }
+
+    @Test
+    @DisplayName("a staged update that did not land is reported and stays staged")
+    void reportsAnUpdateThatDidNotLand() {
+
+        // Same bytes as before the restart: the server never took the file from the update folder.
+        TrackedPlugin staged = TrackedPlugin.of(version("v1", "PROJ-A"), "LuckPerms.jar",
+                "same-hash", ReleaseChannel.RELEASE, "test");
+        staged.pendingRestart(true);
+        store.put(staged);
+
+        onDisk("LuckPerms.jar", "same-hash", "LuckPerms", version("v1", "PROJ-A"));
+
+        ReconcileReport report = run();
+
+        assertEquals(1, report.notApplied().size());
+        assertTrue(report.needsAttention(), "somebody restarted for nothing and should be told");
+        assertTrue(store.byProjectId("PROJ-A").pendingRestart(), "the build is still waiting");
+    }
+
+    @Test
+    @DisplayName("an unstaged plugin is never reported as failing to update")
+    void saysNothingAboutPluginsWithNothingStaged() {
+
+        store.put(TrackedPlugin.of(version("v1", "PROJ-A"), "LuckPerms.jar", "same-hash",
+                ReleaseChannel.RELEASE, "test"));
+
+        onDisk("LuckPerms.jar", "same-hash", "LuckPerms", version("v1", "PROJ-A"));
+
+        assertTrue(run().notApplied().isEmpty());
+    }
+
     // --- the cases that are easy to get wrong ------------------------------------------------
 
     @Test
