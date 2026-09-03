@@ -39,6 +39,9 @@ public final class ProjectView {
     /** Null when the project is not installed here. */
     private final TrackedPlugin installed;
 
+    /** True when this page is Catalog's own, which may be updated but never removed from here. */
+    private final boolean self;
+
     private final boolean updateAvailable;
 
     /** The loaders this server can use, so the project's list can show which ones apply. */

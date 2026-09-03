@@ -125,7 +125,8 @@ public final class Messages {
 
     // --- /catalog list ----------------------------------------------------------------------
 
-    public static List<Component> list(List<TrackedPlugin> plugins, Map<String, UpdateCandidate> updates) {
+    public static List<Component> list(List<TrackedPlugin> plugins, Map<String, UpdateCandidate> updates,
+                                       String self) {
 
         List<TrackedPlugin> ordered = new ArrayList<>(plugins);
 
@@ -151,7 +152,7 @@ public final class Messages {
         out.add(Component.empty());
 
         for (TrackedPlugin plugin : ordered) {
-            out.add(row(plugin, updates.get(plugin.projectId())));
+            out.add(row(plugin, updates.get(plugin.projectId()), plugin.fileName().equals(self)));
         }
 
         out.add(Component.empty());
@@ -170,7 +171,7 @@ public final class Messages {
         return out;
     }
 
-    private static Component row(TrackedPlugin plugin, UpdateCandidate update) {
+    private static Component row(TrackedPlugin plugin, UpdateCandidate update, boolean self) {
 
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
@@ -182,9 +183,13 @@ public final class Messages {
                     "Stage " + update.to() + " for the next restart"));
         }
 
-        row.append(Component.space()).append(icon("×", DANGER,
-                from("/catalog uninstall " + key(plugin), ClickContext.LIST),
-                "Move " + plugin.displayName() + " to the trash"));
+        // No remove button on Catalog's own row: pressing it would delete the thing holding the
+        // button, and nothing in game could put it back.
+        if (!self) {
+            row.append(Component.space()).append(icon("×", DANGER,
+                    from("/catalog uninstall " + key(plugin), ClickContext.LIST),
+                    "Move " + plugin.displayName() + " to the trash"));
+        }
 
         // One word for both, because the only fact that matters here is that a restart is owed.
         // Which of the two it is belongs in the hover, where it is asked for rather than imposed.
@@ -483,9 +488,14 @@ public final class Messages {
                         "Allow updates again")
                         : button("Hold", from("/catalog hold " + key, here), MUTED,
                         "Freeze at the installed version"))
-                .append(Component.space())
-                .append(button("Remove", from("/catalog uninstall " + key, here), DANGER,
-                        "Move to the trash"));
+                .append(Component.space());
+
+        if (view.self()) {
+            out.append(Component.text("cannot remove itself", MUTED));
+        } else {
+            out.append(button("Remove", from("/catalog uninstall " + key, here), DANGER,
+                    "Move to the trash"));
+        }
 
         return out.build();
     }
@@ -948,6 +958,13 @@ public final class Messages {
         return line()
                 .append(Component.text("No plugin found for ", DANGER))
                 .append(Component.text(query, TEXT))
+                .build();
+    }
+
+    public static Component cannotRemoveSelf(String name) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" cannot remove itself. Delete the jar by hand.", MUTED))
                 .build();
     }
 

@@ -768,6 +768,27 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
+     * The jar Catalog is running from.
+     *
+     * <p>Used to keep its own entry out of reach of its own remove button. Updating itself is fine
+     * — the swap happens at startup, while it is not running — but removing itself would take away
+     * the only thing that could put it back, and nothing in game could undo it.</p>
+     *
+     * @return the file name of Catalog's own jar
+     */
+    public String ownFileName() {
+        return getFile().getName();
+    }
+
+    /**
+     * @param plugin the tracked plugin to test
+     * @return true if this record is Catalog itself
+     */
+    public boolean isSelf(TrackedPlugin plugin) {
+        return plugin != null && ownFileName().equals(plugin.fileName());
+    }
+
+    /**
      * @return the exact Minecraft version this server runs
      */
     public String gameVersion() {

@@ -434,6 +434,12 @@ public final class MainCommand {
             return;
         }
 
+        // Blocked here as well as hidden from the buttons: the command can still be typed.
+        if (plugin.isSelf(tracked)) {
+            send(sender, Messages.cannotRemoveSelf(tracked.displayName()));
+            return;
+        }
+
         String data = context.take(sender);
 
         if (!confirmed(sender, "remove:" + tracked.projectId(), data)) {
@@ -604,7 +610,8 @@ public final class MainCommand {
             }
         }
 
-        send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject()));
+        send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject(),
+                plugin.ownFileName()));
     }
 
     /**
@@ -651,6 +658,7 @@ public final class MainCommand {
                     .latest(latest)
                     .installTarget(installTarget(compatible))
                     .installed(tracked)
+                    .self(plugin.isSelf(tracked))
                     .updateAvailable(isNewer(latest, tracked))
                     .platformLoaders(plugin.platformLoaders());
 
