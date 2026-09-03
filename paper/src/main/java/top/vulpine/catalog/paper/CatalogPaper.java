@@ -779,6 +779,17 @@ public final class CatalogPaper extends JavaPlugin {
                     + " plugins: " + names(report.adopted()));
         }
 
+        if (!report.applied().isEmpty()) {
+            Logger.info(Action.UPDATE, "Updates applied on this start: " + names(report.applied()));
+        }
+
+        for (TrackedPlugin plugin : report.notApplied()) {
+            Logger.warn(Action.UPDATE, plugin.displayName() + " is still "
+                    + plugin.versionNumber() + ": the staged build was not taken from "
+                    + getServer().getUpdateFolderFile().getName()
+                    + ". It is still there and will be tried again on the next start.");
+        }
+
         if (!report.moved().isEmpty()) {
             Logger.info(Action.TRACK, "Replaced by hand since last start: " + names(report.moved()));
         }
