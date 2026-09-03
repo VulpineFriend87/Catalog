@@ -161,6 +161,10 @@ public final class Reconciler {
                 changes.notApplied.add(tracked);
             }
 
+            // A fresh install is a different case entirely: the jar was always the right one, and
+            // reaching a startup at all is the whole of what it was waiting for.
+            tracked.pendingLoad(false);
+
             claimed.add(sameContent.fileName());
             return;
         }
@@ -185,6 +189,7 @@ public final class Reconciler {
 
             tracked.moveTo(replacement, sameName.fileName(), sameName.sha512());
             tracked.pendingRestart(false);
+            tracked.pendingLoad(false);
 
             claimed.add(sameName.fileName());
             (wasStaged ? changes.applied : changes.moved).add(tracked);

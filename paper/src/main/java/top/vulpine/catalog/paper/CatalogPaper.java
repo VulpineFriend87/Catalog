@@ -495,6 +495,7 @@ public final class CatalogPaper extends JavaPlugin {
         tracked.name(project.title());
         tracked.slug(project.slug());
         tracked.autoUpdate(defaults.autoUpdate());
+        tracked.pendingLoad(true);
 
         tracking.put(tracked);
         saveTracking();

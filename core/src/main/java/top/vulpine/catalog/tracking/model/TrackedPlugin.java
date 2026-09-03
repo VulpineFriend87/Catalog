@@ -47,6 +47,17 @@ public final class TrackedPlugin {
     /** Set once an update is staged, cleared after the restart that applied it is verified. */
     private boolean pendingRestart;
 
+    /**
+     * Set when Catalog wrote this jar straight into the plugins folder, and cleared by the first
+     * startup that sees it.
+     *
+     * <p>Deliberately not {@link #pendingRestart}, which means something narrower: a replacement is
+     * waiting in the update folder and may fail to be taken. A freshly installed jar is already
+     * exactly where it belongs and cannot fail to apply — it has simply not been loaded yet. Both
+     * need a restart, and only one of them can go wrong.</p>
+     */
+    private boolean pendingLoad;
+
     private String sha512;
 
     private ReleaseChannel channel = ReleaseChannel.RELEASE;
@@ -116,6 +127,15 @@ public final class TrackedPlugin {
         this.datePublished = version.datePublished();
         this.fileName = fileName;
         this.sha512 = sha512;
+    }
+
+    /**
+     * Whether anything about this plugin is waiting for the server to restart.
+     *
+     * @return true if a build is staged or a fresh install has not been loaded yet
+     */
+    public boolean awaitingRestart() {
+        return pendingRestart || pendingLoad;
     }
 
     /**

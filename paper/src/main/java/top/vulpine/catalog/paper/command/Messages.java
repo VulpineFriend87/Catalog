@@ -176,7 +176,7 @@ public final class Messages {
                 .append(Component.text(INDENT))
                 .append(name(plugin));
 
-        if (update != null && !plugin.pendingRestart()) {
+        if (update != null && !plugin.awaitingRestart()) {
             row.append(Component.space()).append(icon("↑", BRAND,
                     from("/catalog update " + key(plugin), ClickContext.LIST),
                     "Stage " + update.to() + " for the next restart"));
@@ -186,8 +186,10 @@ public final class Messages {
                 from("/catalog uninstall " + key(plugin), ClickContext.LIST),
                 "Move " + plugin.displayName() + " to the trash"));
 
-        if (plugin.pendingRestart()) {
-            row.append(Component.text("  staged", PENDING));
+        // One word for both, because the only fact that matters here is that a restart is owed.
+        // Which of the two it is belongs in the hover, where it is asked for rather than imposed.
+        if (plugin.awaitingRestart()) {
+            row.append(Component.text("  restart", PENDING));
         } else if (plugin.isPinned()) {
             row.append(Component.text("  held", MUTED));
         }
@@ -204,6 +206,7 @@ public final class Messages {
                 .append(Component.text("  " + plugin.channel().apiName(), MUTED))
                 .append(Component.newline())
                 .append(Component.text(String.valueOf(plugin.fileName()), MUTED))
+                .append(waiting(plugin))
                 .append(Component.newline())
                 .append(Component.newline())
                 .append(Component.text("Open the plugin page", TEXT))
@@ -213,6 +216,27 @@ public final class Messages {
         return Component.text(plugin.displayName(), TEXT)
                 .clickEvent(ClickEvent.runCommand("/catalog info " + key(plugin)))
                 .hoverEvent(HoverEvent.showText(hover));
+    }
+
+    /**
+     * Which kind of restart a plugin is waiting for, if any.
+     *
+     * <p>Both mean "not in effect yet" and neither is worth a word on the row itself, but they are
+     * not the same event and the difference decides what to do if a restart does not fix it.</p>
+     */
+    private static Component waiting(TrackedPlugin plugin) {
+
+        if (plugin.pendingRestart()) {
+            return Component.newline()
+                    .append(Component.text("update staged, applies on restart", PENDING));
+        }
+
+        if (plugin.pendingLoad()) {
+            return Component.newline()
+                    .append(Component.text("installed, loads on restart", PENDING));
+        }
+
+        return Component.empty();
     }
 
     // --- /catalog info ----------------------------------------------------------------------
@@ -273,7 +297,11 @@ public final class Messages {
         }
 
         if (view.installed().pendingRestart()) {
-            return Component.text("  staged", PENDING);
+            return Component.text("  update staged", PENDING);
+        }
+
+        if (view.installed().pendingLoad()) {
+            return Component.text("  loads on restart", PENDING);
         }
 
         if (view.updateAvailable()) {
