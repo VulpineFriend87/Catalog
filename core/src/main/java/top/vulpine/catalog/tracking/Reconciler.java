@@ -210,6 +210,7 @@ public final class Reconciler {
 
             tracked.moveTo(replacement, sameName.fileName(), sameName.sha512());
             tracked.pendingRestart(false);
+            tracked.stagedAs(null);
             tracked.pendingLoad(false);
 
             claimed.add(sameName.fileName());
@@ -258,6 +259,7 @@ public final class Reconciler {
 
             tracked.moveTo(version, jar.fileName(), jar.sha512());
             tracked.pendingRestart(false);
+            tracked.stagedAs(null);
             tracked.pendingLoad(false);
 
             claimed.add(jar.fileName());

@@ -48,6 +48,16 @@ public final class TrackedPlugin {
     private boolean pendingRestart;
 
     /**
+     * What the staged build is called inside the update folder, while one is waiting.
+     *
+     * <p>Not the same as {@link #fileName()} any more: a build is staged under the name its author
+     * published it as, and Paper renames the installed jar to match when it applies it. Until that
+     * restart the two names differ, and this is the only record of where the staged file actually
+     * is. Null when nothing is staged.</p>
+     */
+    private String stagedAs;
+
+    /**
      * Set when Catalog wrote this jar straight into the plugins folder, and cleared by the first
      * startup that sees it.
      *

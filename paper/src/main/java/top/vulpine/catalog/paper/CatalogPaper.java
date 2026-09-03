@@ -388,7 +388,7 @@ public final class CatalogPaper extends JavaPlugin {
         for (TrackedPlugin plugin : tracking.pendingRestart()) {
 
             // Still sitting there waiting for a restart, which is the normal case.
-            if (Files.exists(updates.resolve(plugin.fileName()))) {
+            if (Files.exists(updates.resolve(stagedName(plugin)))) {
                 continue;
             }
 
@@ -408,6 +408,7 @@ public final class CatalogPaper extends JavaPlugin {
 
         for (TrackedPlugin plugin : abandoned) {
             plugin.pendingRestart(false);
+            plugin.stagedAs(null);
             Logger.warn(Action.UPDATE, "The build staged for " + plugin.displayName()
                     + " is gone from the update folder and was never applied.");
         }
@@ -446,10 +447,21 @@ public final class CatalogPaper extends JavaPlugin {
 
             plugin.moveTo(became, plugin.fileName(), entry.getKey());
             plugin.pendingRestart(false);
+            plugin.stagedAs(null);
 
             Logger.info(Action.UPDATE, plugin.displayName() + " is now "
                     + became.versionNumber() + ", applied without a restart by something else.");
         }
+    }
+
+    /**
+     * Where a staged build is sitting in the update folder.
+     *
+     * <p>Falls back to the installed name for records written before builds were staged under the
+     * name their author published, so an update queued by an older version is still found.</p>
+     */
+    private static String stagedName(TrackedPlugin plugin) {
+        return plugin.stagedAs() != null ? plugin.stagedAs() : plugin.fileName();
     }
 
     private static String hashOf(Path jar) {
@@ -562,15 +574,15 @@ public final class CatalogPaper extends JavaPlugin {
     /**
      * Downloads an update and puts it in the update folder.
      *
-     * <p>Staged under the name the plugin already has on disk. Not because the name is what gets
-     * matched — it is not, on either semantics: 1.18.2 and modern Paper both read the plugin name
-     * out of the descriptor and search the update folder for it. Keeping the name is what stops the
-     * jar being renamed underneath the tracking record, which finds a plugin by hash and then by
-     * file name and by nothing else.</p>
+     * <p>Staged under the name its author published it as, not the name the old jar happens to
+     * have. Paper finds it either way — it reads the plugin name out of the descriptor and searches
+     * the update folder for a match, on every version from 1.18.2 to 26.2 — and then renames the
+     * installed jar to the staged file's name. So the file in {@code plugins/} ends up called what
+     * the author called it, instead of carrying a version number that stopped being true.</p>
      *
-     * <p>The cost is that a versioned file name goes stale. Paper renames the installed jar to the
-     * update file's name, so staging under the new build's real file name would fix that for free —
-     * once reconciliation can survive a rename and a content change landing together.</p>
+     * <p>That rename is only survivable because reconciliation can now find a plugin by its project
+     * id: after this restart both the contents and the file name have changed, and those were the
+     * only two things it used to match on.</p>
      *
      * <p>Nothing is loaded or unloaded here. The swap happens during the next startup, before any
      * plugin is enabled, which is the only moment it is safe.</p>
@@ -600,13 +612,17 @@ public final class CatalogPaper extends JavaPlugin {
         Path staged = downloader.fetch(version, Runtime.version().feature());
         Path folder = getServer().getUpdateFolderFile().toPath();
 
+        // The downloader already writes it under the file name Modrinth publishes it as.
+        String published = staged.getFileName().toString();
+
         try {
             Files.createDirectories(folder);
-            Files.move(staged, folder.resolve(plugin.fileName()), StandardCopyOption.REPLACE_EXISTING);
+            Files.move(staged, folder.resolve(published), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             throw new InstallException("Could not stage the build: " + e.getMessage(), e);
         }
 
+        plugin.stagedAs(published);
         plugin.pendingRestart(true);
         saveTracking();
     }
@@ -701,7 +717,7 @@ public final class CatalogPaper extends JavaPlugin {
 
         try {
             Files.deleteIfExists(getServer().getUpdateFolderFile().toPath()
-                    .resolve(plugin.fileName()));
+                    .resolve(stagedName(plugin)));
         } catch (IOException e) {
             Logger.warn(Action.UPDATE, "A staged update for " + plugin.displayName()
                     + " is still in the update folder and should be deleted by hand.");

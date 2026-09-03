@@ -282,6 +282,7 @@ class ReconcilerTest {
         TrackedPlugin tracked = TrackedPlugin.of(version("v1", "PROJ-A"), "LuckPerms-5.4.jar",
                 "hash-old", ReleaseChannel.RELEASE, "test");
         tracked.pendingRestart(true);
+        tracked.stagedAs("LuckPerms-5.5.jar");
         store.put(tracked);
 
         onDisk("LuckPerms-5.5.jar", "hash-new", "LuckPerms", version("v2", "PROJ-A"));
@@ -290,6 +291,7 @@ class ReconcilerTest {
 
         assertEquals(1, report.applied().size(), "Catalog asked for this one, so it is not a swap");
         assertFalse(store.byProjectId("PROJ-A").pendingRestart());
+        assertNull(store.byProjectId("PROJ-A").stagedAs(), "nothing is waiting in the update folder");
     }
 
     @Test
