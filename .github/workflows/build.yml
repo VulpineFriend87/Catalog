@@ -79,9 +79,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: plugin-jars
-          path: |
-            paper/build/libs/*.jar
-            velocity/build/libs/*.jar
+          path: paper/build/libs/*.jar
           retention-days: 1
 
   publish:
@@ -97,8 +95,7 @@ jobs:
       - name: Upload to Modrinth
         uses: Kir-Antipov/mc-publish@v3.3
         with:
-          # TODO: replace with the real Modrinth project id before the first release.
-          modrinth-id: PLACEHOLDER
+          modrinth-id: i5brxoU7
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           files: build/libs/**/*.jar
           version: ${{ needs.build.outputs.version }}
@@ -109,7 +106,6 @@ jobs:
             paper
             purpur
             folia
-            velocity
           game-versions: |
             1.18.2
             1.19
