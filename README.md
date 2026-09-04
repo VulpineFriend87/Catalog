@@ -1,57 +1,55 @@
 # Catalog
 
-A free and open source plugin manager for Paper and Velocity, built exclusively on the
-[Modrinth API](https://docs.modrinth.com/).
+The Modrinth-native plugin manager for Paper servers.
 
-Catalog identifies every jar in your `plugins/` folder by its SHA-512 hash, so it always knows
-exactly which project and which version you are running. It never compares version strings, never
-scrapes a website, and never guesses.
+Catalog analyses your plugins folder once the server boots, figuring out which Modrinth plugin each .jar belongs to. Then you will get your updates in chat and be able to install new plugins with a click. Every plugin that Catalog does not recognize is left untouched.
 
-## Why Modrinth only
+## Installation
 
-Managers that abstract several stores at once have to work around the fact that most of those
-stores have no API. That means scraping "recently updated" feeds and comparing version strings,
-which produces update notifications for updates that do not exist.
+You can search Modrinth without leaving the game. `/catalog search <query>` gives you the plugins that run on your server, and clicking a result opens its page with the description, author, downloads and what the plugin needs to work.
 
-Modrinth exposes a real API with hash lookups. Catalog asks it a direct question — *what is this
-exact file, and is there a newer one?* — and gets an authoritative answer in a single request for
-the entire server.
+Installing is one click from there. The .jar goes into your plugins folder and the plugin starts working after the next restart.
 
-## Principles
+Only builds made for your exact Minecraft version are offered. Purpur and Folia builds are recognized separately from plain Paper ones, so if a plugin ships both a Paper and a Purpur build, the Purpur one gets installed on a Purpur server.
 
-- **Catalog never touches a running plugin.** No hot-loading, no hot-unloading, no reflection into
-  the plugin manager. Changes are applied at restart through Bukkit's native update folder.
-- **Never compare version strings.** Identity is the version id, ordering is the publish date,
-  integrity is the SHA-512 hash.
-- **What Catalog does not recognise, Catalog does not touch.**
-- **No network calls on the main thread.**
-- **No paid features.**
+## Updates
 
-## Status
+Nothing is ever swapped while the plugin runs. Catalog downloads the new build and gives it to the server, which installs it automatically once the next restart happens, before plugins load.
 
-Under initial development. Not yet released.
+You can let Catalog handle that process. Once you enable automatic updates for a trusted plugin, it will stay up-to-date. Catalog waits a couple of hours after a build comes out before installing it. If the author notices a problem and puts out a fix in that time, you get the fixed build and never install the broken one. The pause time and auto-update switch are set per each plugin, so you can choose which plugins you want updated immediately and which ones can wait.
 
-## Modules
+Each downloaded file is being validated before being added to your plugin folder: the right file is expected, the right size is expected and it is being made for the Java version you can use on your server. Anything that does not pass this check will be deleted instead of being placed into your plugin folder.
 
-| Module | Contents |
-|---|---|
-| `core` | Modrinth client, jar index, tracking state, update and dependency logic. No platform dependencies. |
-| `paper` | Paper, Purpur and Folia frontend, including the inventory GUI. |
-| `velocity` | Velocity frontend, with a chat-based interface. |
+## Uninstallation
 
-## Building
+Uninstalled plugins are moved to a separate "trash" folder with their history, so they can be installed later.
 
-```
-./gradlew build
-```
+## Commands
 
-The jars are written to `paper/build/libs/` and `velocity/build/libs/`.
+| Command | |
+| --- | --- |
+| `/catalog list` | All plugins managed by Catalog |
+| `/catalog info <plugin>` | All available information about any plugin, whether installed or not |
+| `/catalog search <query>` | Searches Modrinth for plugins compatible with your server |
+| `/catalog versions <plugin>` | Newest release, beta and alpha |
+| `/catalog install <slug>` | Install a plugin |
+| `/catalog update <plugin\|all>` | Download updates, apply them on next restart |
+| `/catalog uninstall <plugin>` | Move a plugin to trash |
+| `/catalog settings <plugin>` | Set channels, enable auto-updates, set holds |
+| `/catalog reload` | Reload config |
 
-## Releasing
+Everything is clickable, so you rarely need to type any command. `/catalog help` lists all commands.
 
-Releases are published to Modrinth by CI when an annotated `v*` tag is pushed. The Modrinth
-project id in `.github/workflows/build.yml` still needs to be filled in.
+The settings screen sets everything below by clicking, but these also work as commands, which is what you need from the console.
 
-## License
+| Command | |
+| --- | --- |
+| `/catalog channel <plugin> <channel>` | Follow release, beta or alpha |
+| `/catalog auto <plugin> <on\|off>` | Update this plugin without asking |
+| `/catalog soak <plugin> <window>` | How long to wait before an automatic update |
+| `/catalog hold <plugin>` | Keep the current version and stop offering updates |
+| `/catalog unhold <plugin>` | Allow updates again |
 
-MIT
+## Requirements
+
+Paper 1.18.2 and newer, Purpur and Folia included. Java 17 and newer. Plugins should be on Modrinth in order to be managed by Catalog.
