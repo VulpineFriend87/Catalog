@@ -6,6 +6,7 @@ import eu.okaeri.configs.ConfigManager;
 import eu.okaeri.configs.yaml.bukkit.YamlBukkitConfigurer;
 import eu.okaeri.configs.yaml.bukkit.serdes.SerdesBukkit;
 import lombok.Getter;
+import org.bstats.bukkit.Metrics;
 import org.bukkit.plugin.java.JavaPlugin;
 import revxrsal.commands.Lamp;
 import revxrsal.commands.bukkit.BukkitLamp;
@@ -69,6 +70,8 @@ public final class CatalogPaper extends JavaPlugin {
 
     private static final String MODRINTH = "https://modrinth.com/plugin/catalog";
 
+    private static final int PLUGIN_ID = 33849;
+
     private Config configuration;
     private FoliaLib foliaLib;
     private ModrinthClient modrinth;
@@ -131,6 +134,9 @@ public final class CatalogPaper extends JavaPlugin {
         getServer().getPluginManager().registerEvents(clicks, this);
 
         lamp.register(new MainCommand(this, clicks));
+
+        Logger.debug(Action.SETUP, "Initializing metrics...");
+        new Metrics(this, PLUGIN_ID);
 
         getScheduler().runAsync(task -> index());
         scheduleUpdateChecks();
