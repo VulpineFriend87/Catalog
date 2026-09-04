@@ -739,6 +739,35 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
+     * Decides whether Catalog may update this plugin without being asked.
+     *
+     * @param plugin the plugin to change
+     * @param on     true to let it update itself
+     */
+    public void setAutoUpdate(TrackedPlugin plugin, boolean on) {
+        plugin.autoUpdate(on);
+        saveTracking();
+    }
+
+    /**
+     * Sets how long a build must have been public before this plugin will take it unattended.
+     *
+     * @param plugin  the plugin to change
+     * @param minutes the window, or {@link TrackedPlugin#INHERIT_SOAK} to follow the config
+     */
+    public void setSoak(TrackedPlugin plugin, int minutes) {
+        plugin.soakMinutes(minutes == TrackedPlugin.INHERIT_SOAK ? minutes : Math.max(minutes, 0));
+        saveTracking();
+    }
+
+    /**
+     * @return the soak window plugins fall back to when they follow the config
+     */
+    public int defaultSoakMinutes() {
+        return configuration.tracking.defaults.soakMinutes;
+    }
+
+    /**
      * Freezes a plugin at the version it has now, or lets it move again.
      *
      * <p>Resolved to the concrete version rather than stored as "current", so the hold cannot

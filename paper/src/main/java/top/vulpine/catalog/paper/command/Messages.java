@@ -69,9 +69,10 @@ public final class Messages {
     // --- /catalog ---------------------------------------------------------------------------
 
     /**
-     * The plugin's own card, and the only place the whole command surface is written down.
+     * The plugin's own card: what it is, and nothing else.
      *
-     * <p>Says nothing about the server's plugins — that is what {@code /catalog list} is for.</p>
+     * <p>Says nothing about the server's plugins — that is {@code /catalog list} — and nothing
+     * about how to drive it, which is {@code /catalog help}.</p>
      */
     public static List<Component> about(String version, String author) {
 
@@ -89,15 +90,52 @@ public final class Messages {
 
         out.add(Component.empty());
 
+        // The one pointer that has to be here, or nothing else is findable.
+        out.add(entry("help", "", "Every command"));
+
+        return out;
+    }
+
+    /**
+     * The whole command surface.
+     *
+     * <p>Grouped by blank lines rather than headings — reading, then changing what is installed,
+     * then changing what a plugin does on its own. Labelling the groups would cost three more lines
+     * to say what the spacing already says.</p>
+     */
+    public static List<Component> help() {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text("Catalog", BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  commands", MUTED))
+                .build());
+
+        out.add(Component.empty());
+
         out.add(entry("list", "", "Managed plugins"));
         out.add(entry("info", "<plugin>", "Full details, installed or not"));
         out.add(entry("search", "<query>", "Find plugins on Modrinth"));
-        out.add(entry("install", "<slug> [version]", "Add a plugin"));
         out.add(entry("versions", "<plugin>", "Newest build of each channel"));
+
+        out.add(Component.empty());
+
+        out.add(entry("install", "<slug> [version]", "Add a plugin"));
         out.add(entry("update", "<plugin|all>", "Download and stage updates"));
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
+
+        out.add(Component.empty());
+
+        out.add(entry("settings", "<plugin>", "What a plugin does on its own"));
         out.add(entry("channel", "<plugin> <channel>", "Which builds to follow"));
+        out.add(entry("auto", "<plugin> <on|off>", "Update without asking"));
+        out.add(entry("soak", "<plugin> <window>", "How long a build must be public first"));
         out.add(entry("hold", "<plugin>", "Freeze a plugin at its version"));
+        out.add(entry("unhold", "<plugin>", "Allow updates again"));
+
+        out.add(Component.empty());
+
         out.add(entry("reload", "", "Reload the configuration"));
 
         return out;
@@ -483,11 +521,8 @@ public final class Messages {
 
         out.append(button("Switch", "/catalog versions " + key, MUTED, "Choose a different version"))
                 .append(Component.space())
-                .append(installed.isPinned()
-                        ? button("Unhold", from("/catalog unhold " + key, here), MUTED,
-                        "Allow updates again")
-                        : button("Hold", from("/catalog hold " + key, here), MUTED,
-                        "Freeze at the installed version"))
+                .append(button("Settings", "/catalog settings " + key, MUTED,
+                        "Channel, auto-update and whether it is held"))
                 .append(Component.space());
 
         if (view.self()) {
@@ -510,6 +545,174 @@ public final class Messages {
                 .append(Component.text(INDENT + label + ":  ", MUTED))
                 .append(value)
                 .build();
+    }
+
+    // --- /catalog settings ------------------------------------------------------------------
+
+    /** The soak windows offered as one click each. Anything else can still be typed. */
+    private static final int[] SOAK_PRESETS = {0, 30, 120, 360, 1440};
+
+    /**
+     * What a plugin does on its own, as four rows of choices.
+     *
+     * <p>Separate from the project page because these are settings rather than actions: nothing
+     * here happens now, it decides what happens later. Mixing them into a row of verbs is what made
+     * the channel picker feel wrong when it lived there.</p>
+     */
+    public static List<Component> settings(TrackedPlugin plugin, int defaultSoak) {
+
+        String key = key(plugin);
+        String here = ClickContext.SETTINGS + key;
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text(plugin.displayName(), BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  settings", MUTED))
+                .build());
+
+        // The installed build and the channel it follows, together: running a beta while following
+        // release means nothing will be offered until a release overtakes it, and that looks like
+        // nothing happening unless both are on screen.
+        out.add(line()
+                .append(Component.text(INDENT + String.valueOf(plugin.versionNumber()), MUTED))
+                .append(Component.text(" · ", MUTED))
+                .append(channel(plugin.channel()))
+                .build());
+
+        out.add(Component.empty());
+
+        out.add(setting("Channel", channelChoices(plugin, key)));
+        out.add(setting("Auto-update", autoChoices(plugin, key)));
+
+        // Only meaningful when Catalog is the one deciding to install.
+        if (plugin.autoUpdate()) {
+            out.add(setting("Soak", soakChoices(plugin, key, defaultSoak)));
+        }
+
+        out.add(setting("Updates", holdChoices(plugin, key, here)));
+
+        out.add(Component.empty());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(button("Back", "/catalog info " + key, MUTED, "Back to " + plugin.displayName()))
+                .build());
+
+        return out;
+    }
+
+    private static Component channelChoices(TrackedPlugin plugin, String key) {
+
+        TextComponent.Builder out = Component.text();
+
+        for (ReleaseChannel channel : ReleaseChannel.values()) {
+            out.append(choice(channel.apiName(), "/catalog channel " + key + " " + channel.apiName(),
+                    channel == plugin.channel(),
+                    channel == ReleaseChannel.RELEASE
+                            ? "Only offer stable builds"
+                            : "Offer " + channel.apiName() + " builds, and anything more stable"));
+        }
+
+        return out.build();
+    }
+
+    /**
+     * No payload on this one, nor on the channel row: both commands take a value after the plugin
+     * name, so neither is greedy and the client refuses to parse anything trailing. They find their
+     * way back to this screen on their own.
+     */
+    private static Component autoChoices(TrackedPlugin plugin, String key) {
+
+        return Component.text()
+                .append(choice("on", "/catalog auto " + key + " on", plugin.autoUpdate(),
+                        "Install updates without asking, once they have soaked"))
+                .append(choice("off", "/catalog auto " + key + " off", !plugin.autoUpdate(),
+                        "Only update when you say so"))
+                .build();
+    }
+
+    private static Component soakChoices(TrackedPlugin plugin, String key, int defaultSoak) {
+
+        boolean inherits = plugin.soakMinutes() == TrackedPlugin.INHERIT_SOAK;
+
+        TextComponent.Builder out = Component.text()
+                .append(choice("default", "/catalog soak " + key + " default", inherits,
+                        "Follow the config, currently " + soakLabel(defaultSoak)));
+
+        boolean custom = !inherits;
+
+        for (int minutes : SOAK_PRESETS) {
+
+            boolean selected = !inherits && plugin.soakMinutes() == minutes;
+            custom &= !selected;
+
+            out.append(choice(soakLabel(minutes), "/catalog soak " + key + " " + minutes, selected,
+                    minutes == 0
+                            ? "Install as soon as a build appears"
+                            : "Wait " + soakLabel(minutes) + " after a build is published"));
+        }
+
+        // A window someone typed that is not one of the presets still has to be visible.
+        if (custom) {
+            out.append(chosen(soakLabel(plugin.soakMinutes())));
+        }
+
+        return out.build();
+    }
+
+    private static Component holdChoices(TrackedPlugin plugin, String key, String here) {
+
+        return Component.text()
+                .append(choice("offered", from("/catalog unhold " + key, here), !plugin.isPinned(),
+                        "Let this plugin be updated"))
+                .append(choice("held", from("/catalog hold " + key, here), plugin.isPinned(),
+                        "Freeze it at " + plugin.versionNumber() + " and stop offering updates"))
+                .build();
+    }
+
+    /**
+     * One value of a setting: the chosen one stands out and does nothing, the rest are clickable.
+     */
+    private static Component choice(String label, String command, boolean selected, String description) {
+
+        if (selected) {
+            return chosen(label);
+        }
+
+        return Component.text(label, MUTED)
+                .clickEvent(ClickEvent.runCommand(command))
+                .hoverEvent(HoverEvent.showText(explain(description, command)))
+                .append(Component.text("  ", MUTED));
+    }
+
+    /** The value a setting currently holds: stands out, and does nothing when clicked. */
+    private static Component chosen(String label) {
+        return Component.text(label, BRAND).append(Component.text("  ", MUTED));
+    }
+
+    private static Component setting(String label, Component values) {
+
+        return line()
+                .append(Component.text(INDENT + label + ":  ", MUTED))
+                .append(values)
+                .build();
+    }
+
+    /**
+     * A soak window as something readable, since minutes stop meaning anything past an hour or two.
+     */
+    static String soakLabel(int minutes) {
+
+        if (minutes <= 0) {
+            return "none";
+        }
+
+        if (minutes < 60) {
+            return minutes + "m";
+        }
+
+        return minutes % 60 == 0 ? (minutes / 60) + "h" : (minutes / 60) + "h" + (minutes % 60) + "m";
     }
 
     // --- /catalog versions ------------------------------------------------------------------
@@ -929,6 +1132,27 @@ public final class Messages {
                 .append(Component.text(name, TEXT))
                 .append(Component.text(" now follows ", MUTED))
                 .append(Component.text(channel.apiName(), BRAND))
+                .build();
+    }
+
+    public static Component autoSet(String name, boolean on) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(on ? " updates itself once builds have soaked"
+                        : " only updates when you say so", MUTED))
+                .build();
+    }
+
+    public static Component soakSet(String name, int minutes, int defaultSoak) {
+
+        boolean inherits = minutes == TrackedPlugin.INHERIT_SOAK;
+
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" waits ", MUTED))
+                .append(Component.text(soakLabel(inherits ? defaultSoak : minutes), BRAND))
+                .append(Component.text(inherits ? " before updating itself, following the config"
+                        : " before updating itself", MUTED))
                 .build();
     }
 

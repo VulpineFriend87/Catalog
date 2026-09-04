@@ -41,6 +41,9 @@ public final class ClickContext implements Listener {
     /** One project's page, followed by its slug. */
     public static final String INFO = "info:";
 
+    /** One plugin's settings, followed by its slug. */
+    public static final String SETTINGS = "settings:";
+
     /**
      * Marks a payload as coming from a confirmation button, wrapping the screen to return to.
      *

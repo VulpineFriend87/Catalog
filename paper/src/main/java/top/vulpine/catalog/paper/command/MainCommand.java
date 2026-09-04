@@ -85,6 +85,13 @@ public final class MainCommand {
                 authors.isEmpty() ? "Vulpine" : String.join(", ", authors)));
     }
 
+    @Subcommand("help")
+    @Description("Every command")
+    @RequiresPermission("command.about")
+    public void help(CommandSender sender) {
+        send(sender, Messages.help());
+    }
+
     @Subcommand("list")
     @Description("Managed plugins")
     @RequiresPermission("command.list")
@@ -302,6 +309,111 @@ public final class MainCommand {
                         + "The settings already loaded are still in use."));
     }
 
+    @Subcommand("settings")
+    @Description("What a plugin does on its own")
+    @RequiresPermission("command.settings")
+    public void settings(CommandSender sender,
+                         @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
+
+        TrackedPlugin tracked = resolve(query);
+
+        if (tracked == null) {
+            send(sender, Messages.unknownPlugin(query));
+            return;
+        }
+
+        showSettings(sender, tracked);
+    }
+
+    @Subcommand("auto")
+    @Description("Whether a plugin updates itself")
+    @RequiresPermission("command.settings")
+    public void auto(CommandSender sender,
+                     @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
+                     @Named("state") Toggle state) {
+
+        TrackedPlugin tracked = resolve(query);
+
+        if (tracked == null) {
+            send(sender, Messages.unknownPlugin(query));
+            return;
+        }
+
+        plugin.setAutoUpdate(tracked, state.on());
+        afterSettingChanged(sender, tracked, Messages.autoSet(tracked.displayName(), state.on()));
+    }
+
+    @Subcommand("soak")
+    @Description("How long a build must be public before this plugin takes it")
+    @RequiresPermission("command.settings")
+    public void soak(CommandSender sender,
+                     @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
+                     @Named("window") String window) {
+
+        TrackedPlugin tracked = resolve(query);
+
+        if (tracked == null) {
+            send(sender, Messages.unknownPlugin(query));
+            return;
+        }
+
+        Integer minutes = parseSoak(window);
+
+        if (minutes == null) {
+            send(sender, Messages.failed("Say a number of minutes, something like 30m or 2h, "
+                    + "or default to follow the config"));
+            return;
+        }
+
+        plugin.setSoak(tracked, minutes);
+        afterSettingChanged(sender, tracked, Messages.soakSet(tracked.displayName(), minutes,
+                plugin.defaultSoakMinutes()));
+    }
+
+    /**
+     * Reads a soak window the way someone would write one.
+     *
+     * @param window minutes, or a value suffixed with m or h, or "default" to follow the config
+     * @return the window in minutes, {@link TrackedPlugin#INHERIT_SOAK} for the default, or null if
+     *         it could not be read
+     */
+    private static Integer parseSoak(String window) {
+
+        String value = ClickContext.strip(window).trim().toLowerCase(Locale.ROOT);
+
+        if (value.equals("default") || value.equals("inherit")) {
+            return TrackedPlugin.INHERIT_SOAK;
+        }
+
+        int scale = value.endsWith("h") ? 60 : 1;
+
+        if (value.endsWith("h") || value.endsWith("m")) {
+            value = value.substring(0, value.length() - 1);
+        }
+
+        try {
+            return Math.max(Integer.parseInt(value.trim()), 0) * scale;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Settings are only ever offered from the settings screen, and none of these commands can carry
+     * a payload — each has an argument after the plugin name, so the client refuses to parse
+     * anything trailing. Falling back to that screen is the same reasoning install uses.
+     */
+    private void afterSettingChanged(CommandSender sender, TrackedPlugin tracked, Component outcome) {
+
+        String data = context.take(sender);
+        String screen = data != null ? data : ClickContext.SETTINGS + key(tracked);
+
+        plugin.getScheduler().runAsync(task -> {
+            redraw(sender, screen);
+            send(sender, outcome);
+        });
+    }
+
     @Subcommand("channel")
     @Description("Which builds a plugin should follow")
     @RequiresPermission("command.channel")
@@ -317,12 +429,7 @@ public final class MainCommand {
         }
 
         plugin.setChannel(tracked, channel);
-        String data = context.take(sender);
-
-        plugin.getScheduler().runAsync(task -> {
-            redraw(sender, data);
-            send(sender, Messages.channelSet(tracked.displayName(), channel));
-        });
+        afterSettingChanged(sender, tracked, Messages.channelSet(tracked.displayName(), channel));
     }
 
     @Subcommand("update")
@@ -525,7 +632,26 @@ public final class MainCommand {
             showList(sender, false);
         } else if (data.startsWith(ClickContext.INFO)) {
             showProject(sender, data.substring(ClickContext.INFO.length()));
+        } else if (data.startsWith(ClickContext.SETTINGS)) {
+
+            TrackedPlugin tracked = resolve(data.substring(ClickContext.SETTINGS.length()));
+
+            if (tracked != null) {
+                showSettings(sender, tracked);
+            }
         }
+    }
+
+    /**
+     * Renders one plugin's settings. Answers from memory, so it does not block.
+     */
+    private void showSettings(CommandSender sender, TrackedPlugin tracked) {
+        abandonConfirmation(sender);
+        send(sender, Messages.settings(tracked, plugin.defaultSoakMinutes()));
+    }
+
+    private static String key(TrackedPlugin plugin) {
+        return plugin.slug() != null ? plugin.slug() : plugin.displayName();
     }
 
     /**
