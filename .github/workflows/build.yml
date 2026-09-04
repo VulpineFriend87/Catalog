@@ -13,6 +13,7 @@ jobs:
       version: ${{ steps.version.outputs.VERSION }}
       type: ${{ steps.type.outputs.TYPE }}
       changelog: ${{ steps.changelog.outputs.CHANGELOG }}
+      title: ${{ steps.changelog.outputs.TITLE }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -45,9 +46,16 @@ jobs:
             exit 0
           fi
 
-          NOTES=$(git tag -l "$CURRENT_TAG" --format='%(contents)')
+          TITLE=$(git tag -l "$CURRENT_TAG" --format='%(contents:subject)')
+          NOTES=$(git tag -l "$CURRENT_TAG" --format='%(contents:body)')
 
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)
+
+          {
+            echo "TITLE<<TITLE_EOF"
+            echo "$TITLE"
+            echo "TITLE_EOF"
+          } >> "$GITHUB_OUTPUT"
 
           {
             echo "CHANGELOG<<CHANGELOG_EOF"
@@ -99,7 +107,7 @@ jobs:
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           files: build/libs/**/*.jar
           version: ${{ needs.build.outputs.version }}
-          name: ${{ needs.build.outputs.version }}
+          name: ${{ needs.build.outputs.title || needs.build.outputs.version }}
           version-type: ${{ needs.build.outputs.type }}
           changelog: ${{ needs.build.outputs.changelog }}
           loaders: |
