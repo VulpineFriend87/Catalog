@@ -22,7 +22,7 @@ Each downloaded file is being validated before being added to your plugin folder
 
 ## Uninstallation
 
-Uninstalled plugins are moved to a separate "trash" folder with their history, so they can be installed later.
+Uninstalled plugins are moved to a separate "trash" folder instead of being deleted.
 
 ## Commands
 
