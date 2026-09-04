@@ -76,11 +76,15 @@ public final class Suggestions {
     }
 
     /**
-     * What to offer for a plugin argument.
+     * What to offer for a plugin argument: the name the plugin is listed under.
      *
-     * <p>The display name when it is one word, the slug otherwise. A suggestion containing a space
-     * cannot be completed in a single argument, so a name like "Axiom Paper Plugin" would only ever
-     * fill in "Axiom" and then fail to resolve.</p>
+     * <p>Names with a space are offered quoted, because Lamp reads a quoted argument as one value —
+     * {@code readString} stops at the closing quote — so {@code "Axiom Paper Plugin"} arrives whole
+     * and unquoted. Suggesting the slug instead would complete to something the list never showed
+     * you.</p>
+     *
+     * <p>A name containing a quote of its own cannot be quoted this way, and falls back to the slug
+     * rather than producing an argument that will not parse.</p>
      */
     private static List<String> names(Predicate<TrackedPlugin> filter) {
 
@@ -89,20 +93,27 @@ public final class Suggestions {
 
         for (TrackedPlugin tracked : plugin.getTracking().all()) {
 
-            if (!filter.test(tracked)) {
-                continue;
+            if (filter.test(tracked)) {
+                names.add(suggestionFor(tracked));
             }
-
-            String name = tracked.displayName();
-
-            if (name.indexOf(' ') >= 0 && tracked.slug() != null) {
-                name = tracked.slug();
-            }
-
-            names.add(name);
         }
 
         return names;
+    }
+
+    private static String suggestionFor(TrackedPlugin tracked) {
+
+        String name = tracked.displayName();
+
+        if (name.indexOf(' ') < 0) {
+            return name;
+        }
+
+        if (name.indexOf('"') >= 0) {
+            return tracked.slug() != null ? tracked.slug() : name;
+        }
+
+        return '"' + name + '"';
     }
 
 }
