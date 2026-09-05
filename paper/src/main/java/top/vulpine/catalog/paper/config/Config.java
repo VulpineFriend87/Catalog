@@ -76,6 +76,18 @@ public class Config extends OkaeriConfig {
 
     }
 
+    @CustomKey("trash")
+    public Trash trash = new Trash();
+
+    public static class Trash extends OkaeriConfig {
+
+        @Comment("How long a removed plugin stays in the trash before it is deleted.")
+        @Comment("Old removals are cleared out when the server starts. Set to 0 to keep them forever.")
+        @CustomKey("retention_days")
+        public int retentionDays = 30;
+
+    }
+
     @Comment("Allow installing builds this server is not declared compatible with.")
     @Comment("With this on, a plugin's version screen gains a button listing every build ever")
     @Comment("published, and any of them can be installed. They are not filtered by Minecraft")

@@ -35,6 +35,7 @@ import top.vulpine.catalog.tracking.model.ReconcileReport;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
 import top.vulpine.catalog.trash.TrashBin;
+import top.vulpine.catalog.trash.model.TrashEntry;
 import top.vulpine.catalog.update.AutoUpdatePolicy;
 import top.vulpine.catalog.update.UpdateChecker;
 import top.vulpine.catalog.update.model.ServerPlatform;
@@ -50,12 +51,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -79,6 +83,24 @@ public final class CatalogPaper extends JavaPlugin {
     private IgnoreList ignored;
     private Downloader downloader;
     private TrashBin trash;
+
+    /**
+     * Jars this server would not let us delete, to be removed once it has let go of them.
+     *
+     * <p>A set drained by a shutdown hook rather than {@link java.io.File#deleteOnExit()}, because
+     * a removal can be undone and {@code deleteOnExit} cannot be called off: an undone removal
+     * would still lose the file at the next shutdown.</p>
+     */
+    private final Set<Path> deleteAtShutdown = ConcurrentHashMap.newKeySet();
+
+    /**
+     * When this server came up, which is what tells a restored plugin whether it needs a restart.
+     *
+     * <p>Catalog never unloads anything, so a plugin removed during this session is still running
+     * and putting its jar back changes nothing the server has to be told about. One removed before
+     * this session started has been gone since the restart that started it, and does.</p>
+     */
+    private final Instant startedAt = Instant.now();
 
     private volatile List<UpdateCandidate> lastCheck = List.of();
     private volatile Instant checkedAt;
@@ -138,7 +160,10 @@ public final class CatalogPaper extends JavaPlugin {
         Logger.debug(Action.SETUP, "Initializing metrics...");
         new Metrics(this, PLUGIN_ID);
 
+        Runtime.getRuntime().addShutdownHook(new Thread(this::finishRemovals, "Catalog removals"));
+
         getScheduler().runAsync(task -> index());
+        getScheduler().runAsync(task -> pruneTrash());
         scheduleUpdateChecks();
     }
 
@@ -673,7 +698,7 @@ public final class CatalogPaper extends JavaPlugin {
         tracked.name(project.title());
         tracked.slug(project.slug());
         tracked.autoUpdate(defaults.autoUpdate());
-        tracked.pendingLoad(true);
+        tracked.pendingLoad(!stillRunning(version.primaryFile().sha512()));
 
         tracking.put(tracked);
         saveTracking();
@@ -690,20 +715,20 @@ public final class CatalogPaper extends JavaPlugin {
      *
      * @param plugin the plugin to remove
      * @param by     who asked
-     * @return true if the file is already gone, false if it goes at shutdown
+     * @return what was binned, which identifies this exact removal so it can be undone, or null
+     *         if there was no file to bin
      */
-    public boolean uninstall(TrackedPlugin plugin, String by) {
+    public TrashBin.Result uninstall(TrackedPlugin plugin, String by) {
 
         Path jar = pluginsFolder().resolve(plugin.fileName());
-        boolean deleted = true;
+        TrashBin.Result result = null;
 
         if (Files.isRegularFile(jar)) {
 
-            TrashBin.Result result = trash.bin(jar, plugin, by);
-            deleted = result.deleted();
+            result = trash.bin(jar, plugin, by);
 
-            if (!deleted) {
-                jar.toFile().deleteOnExit();
+            if (!result.deleted()) {
+                deleteAtShutdown.add(jar);
             }
         }
 
@@ -712,7 +737,177 @@ public final class CatalogPaper extends JavaPlugin {
         tracking.remove(plugin.projectId());
         saveTracking();
 
-        return deleted;
+        return result;
+    }
+
+    /**
+     * Everything currently in the trash, newest removal first.
+     */
+    public List<TrashEntry> trashed() {
+        return trash.list();
+    }
+
+    /**
+     * One removal by the name it is filed under.
+     *
+     * @param storedAs the id carried by an undo button
+     * @return the entry, or null if it has already been restored or pruned
+     */
+    public TrashEntry trashed(String storedAs) {
+        return trash.find(storedAs);
+    }
+
+    /**
+     * Puts a removed plugin back and starts tracking it again.
+     *
+     * @param entry what to restore
+     * @param by    who asked
+     * @return the plugin Catalog is tracking again, or null if it was never tracked to begin with
+     * @throws InstallException if the jar is gone, or something already occupies its file name
+     */
+    public TrackedPlugin restore(TrashEntry entry, String by) {
+
+        if (entry.projectId() != null && tracking.byProjectId(entry.projectId()) != null) {
+            throw new InstallException(entry.displayName() + " is already installed.");
+        }
+
+        Path target = pluginsFolder().resolve(entry.fileName());
+
+        // A removal this server would not carry out left the jar exactly where it belongs, so
+        // undoing that one is a matter of calling the deletion off rather than copying anything.
+        if (deleteAtShutdown.remove(target)) {
+            trash.discard(entry);
+        } else {
+            trash.restore(entry, target);
+        }
+
+        return track(entry, by);
+    }
+
+    /**
+     * Rebuilds the tracking record a restored plugin had, from what was written down when it was
+     * removed rather than from Modrinth: the version it was on may no longer be the newest, and by
+     * now may not even be listed.
+     *
+     * <p>Whether a restart is owed follows from when the removal happened, not from asking the
+     * server what is loaded: nothing is ever unloaded without one. A removal from this session left
+     * the plugin running, so the jar is back before anything noticed it had gone. An older one did
+     * not survive the restart in between.</p>
+     */
+    private TrackedPlugin track(TrashEntry entry, String by) {
+
+        if (entry.projectId() == null) {
+            return null;
+        }
+
+        TrackingDefaults defaults = defaults();
+
+        TrackedPlugin tracked = new TrackedPlugin();
+
+        tracked.projectId(entry.projectId());
+        tracked.slug(entry.slug());
+        tracked.name(entry.name());
+        tracked.versionId(entry.versionId());
+        tracked.versionNumber(entry.versionNumber());
+        tracked.fileName(entry.fileName());
+        tracked.sha512(entry.sha512());
+        tracked.channel(entry.channel() == null ? defaults.channel() : entry.channel());
+        tracked.autoUpdate(defaults.autoUpdate());
+        tracked.installedBy(by);
+        tracked.installedAt(Instant.now());
+        tracked.pendingLoad(!removedWhileRunning(entry.removedAt()));
+
+        tracking.put(tracked);
+        saveTracking();
+
+        return tracked;
+    }
+
+    /**
+     * Whether a build that has just been written to the plugins folder is already loaded.
+     *
+     * <p>It is exactly when the same file was taken out of this server since it came up. Removing a
+     * plugin never unloads it, so putting the same bytes back — through the trash or by installing
+     * the build again — leaves the server running code it was already running, and there is nothing
+     * for a restart to do.</p>
+     *
+     * <p>Matched on the hash rather than on the project, because installing a <em>different</em>
+     * build of a plugin that is still loaded genuinely does need a restart.</p>
+     */
+    private boolean stillRunning(String sha512) {
+
+        if (sha512 == null) {
+            return false;
+        }
+
+        for (TrashEntry entry : trash.list()) {
+
+            if (sha512.equalsIgnoreCase(entry.sha512()) && removedWhileRunning(entry.removedAt())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether a removal happened while this server has been up, which is what decides if the plugin
+     * it took away is still loaded. Nothing is ever unloaded without a restart, so it is.
+     */
+    private boolean removedWhileRunning(Instant removedAt) {
+        return removedAt != null && !removedAt.isBefore(startedAt);
+    }
+
+    /**
+     * Deletes one removal permanently.
+     *
+     * @param entry what to delete
+     */
+    public void discardTrashed(TrashEntry entry) {
+        trash.discard(entry);
+    }
+
+    /**
+     * Deletes every removal permanently.
+     *
+     * @return how many went
+     */
+    public int emptyTrash() {
+        return trash.empty();
+    }
+
+    /**
+     * Drops removals older than the configured window.
+     */
+    private void pruneTrash() {
+
+        int days = configuration.trash.retentionDays;
+
+        if (days <= 0) {
+            return;
+        }
+
+        int dropped = trash.prune(Duration.ofDays(days), Instant.now());
+
+        if (dropped > 0) {
+            Logger.debug(Action.SETUP, "Emptied " + dropped + " removals older than "
+                    + days + " days from the trash.");
+        }
+    }
+
+    /**
+     * Deletes the jars this server would not let go of, once it has.
+     */
+    private void finishRemovals() {
+
+        for (Path jar : deleteAtShutdown) {
+
+            try {
+                Files.deleteIfExists(jar);
+            } catch (IOException ignored) {
+                // There is no longer anywhere to report this to.
+            }
+        }
     }
 
     /**
