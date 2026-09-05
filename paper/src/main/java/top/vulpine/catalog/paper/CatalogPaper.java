@@ -676,34 +676,67 @@ public final class CatalogPaper extends JavaPlugin {
     public TrackedPlugin install(ModrinthProject project, ModrinthVersion version,
                                  ReleaseChannel channel, String by) {
 
+        String hash = version.primaryFile().sha512();
+
         Path staged = downloader.fetch(version, Runtime.version().feature());
         String fileName = staged.getFileName().toString();
-        Path target = pluginsFolder().resolve(fileName);
 
-        if (Files.exists(target)) {
-            throw new InstallException(fileName + " already exists in the plugins folder.");
-        }
-
-        try {
-            Files.move(staged, target);
-        } catch (IOException e) {
-            throw new InstallException("Could not write " + fileName + ": " + e.getMessage(), e);
-        }
+        place(staged, pluginsFolder().resolve(fileName), hash);
 
         TrackingDefaults defaults = defaults();
 
-        TrackedPlugin tracked = TrackedPlugin.of(version, fileName,
-                version.primaryFile().sha512(), channel, by);
+        TrackedPlugin tracked = TrackedPlugin.of(version, fileName, hash, channel, by);
 
         tracked.name(project.title());
         tracked.slug(project.slug());
         tracked.autoUpdate(defaults.autoUpdate());
-        tracked.pendingLoad(!stillRunning(version.primaryFile().sha512()));
+        tracked.pendingLoad(!stillRunning(hash));
 
         tracking.put(tracked);
         saveTracking();
 
         return tracked;
+    }
+
+    /**
+     * Puts a downloaded build into the plugins folder.
+     *
+     * <p>Something being there already is normally the end of it — Catalog does not write over a
+     * jar it was not asked to touch. There is one exception, and it is a build Catalog itself left
+     * behind: a removal this server would not carry out leaves the jar in place until shutdown, so
+     * installing that same build again is not a write at all. The bytes wanted are the bytes on
+     * disk, and all that is needed is to call the deletion off.</p>
+     *
+     * <p>The hash is what makes that safe. A <em>different</em> build sharing the file name is a
+     * genuine collision and still refused, because replacing a jar the server has open is what the
+     * update folder exists for.</p>
+     */
+    private void place(Path staged, Path target, String sha512) {
+
+        if (Files.exists(target)) {
+
+            boolean sameBuild = sha512 != null && sha512.equalsIgnoreCase(hashOf(target));
+
+            if (!sameBuild || !deleteAtShutdown.remove(target)) {
+                throw new InstallException(target.getFileName()
+                        + " already exists in the plugins folder.");
+            }
+
+            try {
+                Files.deleteIfExists(staged);
+            } catch (IOException ignored) {
+                // Staging is emptied on startup, so a download left behind costs one file until then.
+            }
+
+            return;
+        }
+
+        try {
+            Files.move(staged, target);
+        } catch (IOException e) {
+            throw new InstallException("Could not write " + target.getFileName() + ": "
+                    + e.getMessage(), e);
+        }
     }
 
     /**
