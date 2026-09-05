@@ -74,14 +74,11 @@ public final class TrashBin {
             throw new InstallException("Could not open the trash: " + e.getMessage(), e);
         }
 
-        long millis = clock.millis();
+        long millis = nextStamp();
         Path stored;
 
         // The copy is what claims the name, so nothing can slip between asking whether a name is
-        // free and taking it. Removing two plugins inside one millisecond would otherwise give them
-        // the same name and let the second quietly replace the first, which is the one thing an
-        // undo must never do. Borrowing a millisecond that has not happened yet costs nothing:
-        // these are only ever compared to each other.
+        // free and taking it, however the stamp was chosen.
         while (true) {
 
             stored = directory.resolve(millis + "-" + fileName);
@@ -113,6 +110,60 @@ public final class TrashBin {
         }
 
         return new Result(entry, stored, deleted);
+    }
+
+    /**
+     * The stamp to file the next removal under, always past every one already there.
+     *
+     * <p>A millisecond is not fine enough to tell two removals apart: a server can easily bin two
+     * plugins inside one, and then nothing about their timestamps says which went first. Since the
+     * stamp is both the name and the order the trash is shown in, it has to be the removal that is
+     * unique rather than the moment — so a stamp already spoken for is stepped past.</p>
+     *
+     * <p>Borrowing a millisecond that has not happened yet costs nothing. These are only ever
+     * compared to each other, and being seconds fast would take thousands of removals in one
+     * sitting.</p>
+     */
+    private long nextStamp() {
+
+        long now = clock.millis();
+
+        if (!Files.isDirectory(directory)) {
+            return now;
+        }
+
+        try (Stream<Path> files = Files.list(directory)) {
+
+            long latest = files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".jar"))
+                    .mapToLong(TrashBin::stampOf)
+                    .max()
+                    .orElse(Long.MIN_VALUE);
+
+            return Math.max(now, latest + 1);
+
+        } catch (IOException e) {
+            return now;
+        }
+    }
+
+    /**
+     * The millisecond a stored name is filed under, or {@link Long#MIN_VALUE} if it was not named
+     * by us and therefore claims no stamp at all.
+     */
+    private static long stampOf(String storedAs) {
+
+        int split = storedAs.indexOf('-');
+
+        if (split <= 0) {
+            return Long.MIN_VALUE;
+        }
+
+        try {
+            return Long.parseLong(storedAs.substring(0, split));
+        } catch (NumberFormatException notOurs) {
+            return Long.MIN_VALUE;
+        }
     }
 
     /**
@@ -295,17 +346,11 @@ public final class TrashBin {
     private static TrashEntry fromName(String storedAs) {
 
         int split = storedAs.indexOf('-');
+        long stamp = stampOf(storedAs);
+
+        // Named by hand rather than by us. It still restores; it just has no date.
         String fileName = split < 0 ? storedAs : storedAs.substring(split + 1);
-        Instant removedAt = null;
-
-        if (split > 0) {
-
-            try {
-                removedAt = Instant.ofEpochMilli(Long.parseLong(storedAs.substring(0, split)));
-            } catch (NumberFormatException ignored) {
-                // Named by hand rather than by us. It still restores; it just has no date.
-            }
-        }
+        Instant removedAt = stamp == Long.MIN_VALUE ? null : Instant.ofEpochMilli(stamp);
 
         return TrashEntry.builder()
                 .fileName(fileName)

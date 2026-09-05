@@ -160,18 +160,29 @@ class TrashBinTest {
         assertNotNull(bin.find(entry.storedAs()), "a refused restore leaves the copy in the bin");
     }
 
+    /**
+     * Two removals of differently named plugins never collide on a name, so only a stamp that is
+     * always past the last one keeps them in order. The clock is stopped to prove it is the stamp
+     * doing the work and not the machine being slow enough to tick between them.
+     */
     @Test
     @DisplayName("lists newest first, because the wanted one is almost always the last removed")
     void newestFirst() throws IOException {
 
-        TrashBin bin = bin();
+        TrashBin bin = new TrashBin(root.resolve("trash"),
+                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC));
 
         bin.bin(jar("A.jar", "a"), tracked("a", "A"), "x");
         bin.bin(jar("B.jar", "b"), tracked("b", "B"), "x");
+        bin.bin(jar("C.jar", "c"), tracked("c", "C"), "x");
 
         List<TrashEntry> listed = bin.list();
 
-        assertEquals("B", listed.get(0).displayName());
+        assertAll(
+                () -> assertEquals("C", listed.get(0).displayName()),
+                () -> assertEquals("B", listed.get(1).displayName()),
+                () -> assertEquals("A", listed.get(2).displayName())
+        );
     }
 
     /**
