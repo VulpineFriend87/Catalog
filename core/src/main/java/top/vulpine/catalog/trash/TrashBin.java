@@ -6,10 +6,11 @@ import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.trash.model.TrashEntry;
 
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,9 +39,19 @@ public final class TrashBin {
     private static final String SIDECAR = ".json";
 
     private final Path directory;
+    private final Clock clock;
 
     public TrashBin(Path directory) {
+        this(directory, Clock.systemUTC());
+    }
+
+    /**
+     * @param directory where removed jars are kept
+     * @param clock     what stamps a removal, which a test fixes to force two into one millisecond
+     */
+    TrashBin(Path directory, Clock clock) {
         this.directory = directory;
+        this.clock = clock;
     }
 
     /**
@@ -56,19 +67,41 @@ public final class TrashBin {
     public Result bin(Path jar, TrackedPlugin plugin, String removedBy) {
 
         String fileName = jar.getFileName().toString();
-        String storedAs = Instant.now().toEpochMilli() + "-" + fileName;
-
-        Path stored = directory.resolve(storedAs);
 
         try {
             Files.createDirectories(directory);
-            Files.copy(jar, stored, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new InstallException("Could not copy " + fileName + " to the trash: "
-                    + e.getMessage(), e);
+            throw new InstallException("Could not open the trash: " + e.getMessage(), e);
         }
 
-        TrashEntry entry = entry(fileName, storedAs, plugin, removedBy);
+        long millis = clock.millis();
+        Path stored;
+
+        // The copy is what claims the name, so nothing can slip between asking whether a name is
+        // free and taking it. Removing two plugins inside one millisecond would otherwise give them
+        // the same name and let the second quietly replace the first, which is the one thing an
+        // undo must never do. Borrowing a millisecond that has not happened yet costs nothing:
+        // these are only ever compared to each other.
+        while (true) {
+
+            stored = directory.resolve(millis + "-" + fileName);
+
+            try {
+                Files.copy(jar, stored);
+                break;
+
+            } catch (FileAlreadyExistsException taken) {
+                millis++;
+
+            } catch (IOException e) {
+                throw new InstallException("Could not copy " + fileName + " to the trash: "
+                        + e.getMessage(), e);
+            }
+        }
+
+        TrashEntry entry = entry(fileName, stored.getFileName().toString(), plugin, removedBy,
+                Instant.ofEpochMilli(millis));
+
         write(stored, entry);
 
         boolean deleted;
@@ -282,13 +315,13 @@ public final class TrashBin {
     }
 
     private static TrashEntry entry(String fileName, String storedAs, TrackedPlugin plugin,
-                                    String removedBy) {
+                                    String removedBy, Instant removedAt) {
 
         TrashEntry.TrashEntryBuilder entry = TrashEntry.builder()
                 .fileName(fileName)
                 .storedAs(storedAs)
                 .removedBy(removedBy)
-                .removedAt(Instant.now());
+                .removedAt(removedAt);
 
         if (plugin != null) {
             entry.projectId(plugin.projectId())

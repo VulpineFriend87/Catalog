@@ -11,8 +11,11 @@ import top.vulpine.catalog.trash.model.TrashEntry;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -111,6 +114,37 @@ class TrashBinTest {
                 () -> assertNull(bin.find(older.storedAs()), "the restored copy leaves the bin"),
                 () -> assertEquals(1, bin.list().size(), "the other removal is untouched")
         );
+    }
+
+    /**
+     * Removals are filed under the millisecond they happened, so a fast enough machine puts several
+     * into one. Each still has to keep its own bytes, or an undo restores somebody else's.
+     *
+     * <p>The clock is stopped rather than trusted to collide: on a slow enough machine it never
+     * does, which is how this went out in the first place.</p>
+     */
+    @Test
+    @DisplayName("keeps removals apart even when they land in the same millisecond")
+    void sameMillisecond() throws IOException {
+
+        TrashBin bin = new TrashBin(root.resolve("trash"),
+                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC));
+
+        List<TrashEntry> removals = new ArrayList<>();
+
+        for (int i = 0; i < 20; i++) {
+            removals.add(bin.bin(jar("Vault.jar", "build " + i), tracked("v", "Vault"), "a").entry());
+        }
+
+        assertEquals(20, bin.list().size(), "every removal is its own file");
+
+        for (int i = 0; i < removals.size(); i++) {
+
+            Path back = plugins().resolve("restored-" + i + ".jar");
+            bin.restore(removals.get(i), back);
+
+            assertEquals("build " + i, Files.readString(back), "each removal keeps its own bytes");
+        }
     }
 
     @Test
