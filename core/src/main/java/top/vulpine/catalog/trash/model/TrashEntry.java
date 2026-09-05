@@ -3,6 +3,7 @@ package top.vulpine.catalog.trash.model;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.experimental.Accessors;
+import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 
 import java.time.Instant;
 
@@ -32,7 +33,20 @@ public final class TrashEntry {
     private String versionNumber;
     private String sha512;
 
+    /** The channel the plugin was following, so restoring it does not silently reset the setting. */
+    private ReleaseChannel channel;
+
     private String removedBy;
     private Instant removedAt;
+
+    /**
+     * What to call this on screen: the Modrinth title when it is known, and the file name when the
+     * jar was never tracked or its metadata was lost.
+     *
+     * @return a name that is never null
+     */
+    public String displayName() {
+        return name != null ? name : fileName;
+    }
 
 }
