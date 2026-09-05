@@ -22,7 +22,7 @@ Each downloaded file is being validated before being added to your plugin folder
 
 ## Uninstallation
 
-Uninstalled plugins are moved to a separate "trash" folder instead of being deleted.
+Uninstalled plugins are moved to a separate "trash" folder instead of being deleted. Removing one gives you an Undo, and `/catalog trash` lists everything you have taken out so you can put any of it back. Removals are deleted after 30 days, which you can change or turn off in the config.
 
 ## Commands
 
@@ -35,6 +35,9 @@ Uninstalled plugins are moved to a separate "trash" folder instead of being dele
 | `/catalog install <slug>` | Install a plugin |
 | `/catalog update <plugin\|all>` | Download updates, apply them on next restart |
 | `/catalog uninstall <plugin>` | Move a plugin to trash |
+| `/catalog trash` | What you have removed |
+| `/catalog trash restore <plugin>` | Put a removed plugin back |
+| `/catalog trash delete <plugin\|all>` | Delete a removal permanently |
 | `/catalog settings <plugin>` | Set channels, enable auto-updates, set holds |
 | `/catalog reload` | Reload config |
 
