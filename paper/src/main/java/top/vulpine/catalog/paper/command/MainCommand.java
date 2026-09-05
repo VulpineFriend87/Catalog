@@ -24,6 +24,8 @@ import top.vulpine.catalog.modrinth.model.TeamMember;
 import top.vulpine.catalog.paper.CatalogPaper;
 import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
+import top.vulpine.catalog.trash.TrashBin;
+import top.vulpine.catalog.trash.model.TrashEntry;
 import top.vulpine.catalog.update.model.UpdateCandidate;
 
 import java.time.Duration;
@@ -522,11 +524,11 @@ public final class MainCommand {
     }
 
     /**
-     * Asks first, then removes.
+     * Removes a plugin, and offers the way back rather than asking first.
      *
-     * <p>The same command does both: the confirmation button runs it again, and a second call
-     * within the window goes through. One subcommand instead of two, and nothing to type that only
-     * makes sense as the second half of something else.</p>
+     * <p>Nothing is unloaded until a restart, so a removal is reversible for as long as it takes to
+     * read the line saying it happened. A confirmation would spend a click on every removal to save
+     * one on the rare mistaken one; undo spends it only when there was a mistake.</p>
      */
     @Subcommand("uninstall")
     @Description("Move a plugin to the trash")
@@ -548,12 +550,87 @@ public final class MainCommand {
         }
 
         String data = context.take(sender);
+        String name = tracked.displayName();
 
-        if (!confirmed(sender, "remove:" + tracked.projectId(), data)) {
+        plugin.getScheduler().runAsync(task -> {
 
-            // The button carries the payload back, so confirming lands on the screen this started
-            // from rather than on whatever the confirmation itself replaced.
-            send(sender, Messages.confirmRemove(tracked, screen(data)));
+            try {
+
+                TrashBin.Result result = plugin.uninstall(tracked, sender.getName());
+
+                redraw(sender, screen(data));
+                send(sender, Messages.removed(name, result == null || result.deleted(),
+                        result == null ? null : result.entry()));
+
+            } catch (Exception e) {
+                send(sender, Messages.failed(rootMessage(e)));
+            }
+        });
+    }
+
+    @Subcommand("trash")
+    @Description("Plugins you have removed")
+    @RequiresPermission("command.trash")
+    public void trash(CommandSender sender, @Flag("page") @Default("1") int page) {
+        plugin.getScheduler().runAsync(task -> showTrash(sender, Math.max(page, 1)));
+    }
+
+    private void showTrash(CommandSender sender, int page) {
+        abandonConfirmation(sender);
+        send(sender, Messages.trash(plugin.trashed(),
+                plugin.getConfiguration().trash.retentionDays, page));
+    }
+
+    /**
+     * Puts one removal back.
+     *
+     * <p>Addressed by the name the jar is filed under, which is unique per removal, so an undo
+     * button further up the chat still means the removal it was offered for. A name typed by hand
+     * resolves to the most recent removal of that plugin instead.</p>
+     */
+    @Subcommand("trash restore")
+    @Description("Put a removed plugin back")
+    @RequiresPermission("command.trash")
+    public void restore(CommandSender sender,
+                        @Named("removal") @SuggestWith(Suggestions.Trashed.class) String query) {
+
+        plugin.getScheduler().runAsync(task -> {
+
+            try {
+
+                TrashEntry entry = resolveTrashed(query);
+
+                if (entry == null) {
+                    send(sender, Messages.nothingToRestore());
+                    return;
+                }
+
+                TrackedPlugin tracked = plugin.restore(entry, sender.getName());
+                send(sender, Messages.restored(entry.displayName(), tracked != null));
+
+            } catch (Exception e) {
+                send(sender, Messages.failed(rootMessage(e)));
+            }
+        });
+    }
+
+    /**
+     * Deletes a removal permanently, or all of them.
+     *
+     * <p>{@code all} is asked about and a single removal is not: that one was already removed once
+     * on purpose, while emptying the bin is a different size of mistake. The argument is last and
+     * not single, so it is greedy and the confirmation payload can ride on the end of it.</p>
+     */
+    @Subcommand("trash delete")
+    @Description("Delete a removal permanently")
+    @RequiresPermission("command.trash")
+    public void delete(CommandSender sender,
+                       @Named("removal") @SuggestWith(Suggestions.Discardable.class) String query) {
+
+        String data = context.take(sender);
+
+        if ("all".equalsIgnoreCase(ClickContext.strip(query).trim())) {
+            emptyTrash(sender, data);
             return;
         }
 
@@ -561,15 +638,81 @@ public final class MainCommand {
 
             try {
 
-                boolean deleted = plugin.uninstall(tracked, sender.getName());
+                TrashEntry entry = resolveTrashed(query);
+
+                if (entry == null) {
+                    send(sender, Messages.nothingToRestore());
+                    return;
+                }
+
+                plugin.discardTrashed(entry);
 
                 redraw(sender, screen(data));
-                send(sender, Messages.removed(tracked.displayName(), deleted));
+                send(sender, Messages.discarded(entry.displayName()));
 
             } catch (Exception e) {
                 send(sender, Messages.failed(rootMessage(e)));
             }
         });
+    }
+
+    private void emptyTrash(CommandSender sender, String data) {
+
+        plugin.getScheduler().runAsync(task -> {
+
+            try {
+
+                int waiting = plugin.trashed().size();
+
+                if (waiting == 0) {
+                    send(sender, Messages.trashAlreadyEmpty());
+                    return;
+                }
+
+                if (!confirmed(sender, "empty", data)) {
+                    send(sender, Messages.confirmEmpty(waiting));
+                    return;
+                }
+
+                int deleted = plugin.emptyTrash();
+
+                redraw(sender, screen(data));
+                send(sender, Messages.emptied(deleted));
+
+            } catch (Exception e) {
+                send(sender, Messages.failed(rootMessage(e)));
+            }
+        });
+    }
+
+    /**
+     * Finds a removal by its stored name first, and only then by what it is called.
+     *
+     * <p>That order is what keeps buttons exact and typing convenient: a button always carries the
+     * stored name, and only a person types "luckperms" and means the last one of those.</p>
+     */
+    private TrashEntry resolveTrashed(String query) {
+
+        String wanted = ClickContext.strip(query).trim();
+        TrashEntry exact = plugin.trashed(wanted);
+
+        if (exact != null) {
+            return exact;
+        }
+
+        String lowered = wanted.toLowerCase(Locale.ROOT);
+
+        for (TrashEntry entry : plugin.trashed()) {
+
+            if (matches(entry.name(), lowered)
+                    || matches(entry.slug(), lowered)
+                    || matches(entry.fileName(), lowered)
+                    || matches(entry.projectId(), lowered)) {
+                return entry;
+            }
+        }
+
+        return null;
     }
 
     @Subcommand("hold")
@@ -630,6 +773,8 @@ public final class MainCommand {
 
         if (data.equals(ClickContext.LIST)) {
             showList(sender, false);
+        } else if (data.equals(ClickContext.TRASH)) {
+            showTrash(sender, 1);
         } else if (data.startsWith(ClickContext.INFO)) {
             showProject(sender, data.substring(ClickContext.INFO.length()));
         } else if (data.startsWith(ClickContext.SETTINGS)) {

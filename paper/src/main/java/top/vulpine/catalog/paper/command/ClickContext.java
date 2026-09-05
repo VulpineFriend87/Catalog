@@ -38,6 +38,9 @@ public final class ClickContext implements Listener {
     /** The screen showing every managed plugin. */
     public static final String LIST = "list";
 
+    /** The screen showing what has been removed. */
+    public static final String TRASH = "trash";
+
     /** One project's page, followed by its slug. */
     public static final String INFO = "info:";
 

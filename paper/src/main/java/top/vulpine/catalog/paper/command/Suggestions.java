@@ -7,6 +7,7 @@ import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 import revxrsal.commands.node.ExecutionContext;
 import top.vulpine.catalog.paper.CatalogPaper;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
+import top.vulpine.catalog.trash.model.TrashEntry;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -75,6 +76,44 @@ public final class Suggestions {
 
     }
 
+    /** Only what is in the trash, by the name it was removed under. */
+    public static final class Trashed implements SuggestionProvider<BukkitCommandActor> {
+
+        @Override
+        public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
+
+            List<String> names = new ArrayList<>();
+
+            for (TrashEntry entry : JavaPlugin.getPlugin(CatalogPaper.class).trashed()) {
+                names.add(quoted(entry.displayName()));
+            }
+
+            return names;
+        }
+
+    }
+
+    /** What is in the trash, plus the word that means every one of them. */
+    public static final class Discardable implements SuggestionProvider<BukkitCommandActor> {
+
+        @Override
+        public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
+
+            List<String> names = new ArrayList<>();
+
+            for (TrashEntry entry : JavaPlugin.getPlugin(CatalogPaper.class).trashed()) {
+                names.add(quoted(entry.displayName()));
+            }
+
+            if (!names.isEmpty()) {
+                names.add(0, "all");
+            }
+
+            return names;
+        }
+
+    }
+
     /**
      * What to offer for a plugin argument: the name the plugin is listed under.
      *
@@ -105,12 +144,17 @@ public final class Suggestions {
 
         String name = tracked.displayName();
 
-        if (name.indexOf(' ') < 0) {
-            return name;
+        if (name.indexOf(' ') >= 0 && name.indexOf('"') >= 0) {
+            return tracked.slug() != null ? tracked.slug() : name;
         }
 
-        if (name.indexOf('"') >= 0) {
-            return tracked.slug() != null ? tracked.slug() : name;
+        return quoted(name);
+    }
+
+    private static String quoted(String name) {
+
+        if (name.indexOf(' ') < 0 || name.indexOf('"') >= 0) {
+            return name;
         }
 
         return '"' + name + '"';

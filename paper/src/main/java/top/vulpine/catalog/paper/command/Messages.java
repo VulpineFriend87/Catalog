@@ -13,6 +13,7 @@ import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import top.vulpine.catalog.modrinth.model.SearchHit;
 import top.vulpine.catalog.modrinth.model.SearchResults;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
+import top.vulpine.catalog.trash.model.TrashEntry;
 import top.vulpine.catalog.update.model.UpdateCandidate;
 
 import java.time.Duration;
@@ -124,6 +125,7 @@ public final class Messages {
         out.add(entry("install", "<slug> [version]", "Add a plugin"));
         out.add(entry("update", "<plugin|all>", "Download and stage updates"));
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
+        out.add(entry("trash", "", "Put back something you removed"));
 
         out.add(Component.empty());
 
@@ -202,7 +204,9 @@ public final class Messages {
                     BRAND, "Stage every update")).append(Component.space());
         }
 
-        footer.append(button("Search", "/catalog search ", MUTED, "Search Modrinth"));
+        footer.append(button("Search", "/catalog search ", MUTED, "Search Modrinth"))
+                .append(Component.space())
+                .append(button("Trash", "/catalog trash", MUTED, "Plugins you have removed"));
 
         out.add(footer.build());
 
@@ -997,30 +1001,151 @@ public final class Messages {
                 .build();
     }
 
-    // --- confirmations and outcomes ---------------------------------------------------------
+    // --- /catalog trash ---------------------------------------------------------------------
 
-    public static List<Component> confirmRemove(TrackedPlugin plugin, String from) {
+    /** How many removals one page of the trash shows. */
+    private static final int BIN = 10;
+
+    /**
+     * What has been removed and can still be put back.
+     *
+     * <p>Ordered by when it was removed rather than by name: the thing somebody wants back is
+     * almost always the last thing they got rid of.</p>
+     */
+    public static List<Component> trash(List<TrashEntry> entries, int retentionDays, int page) {
+
+        int pages = Math.max((entries.size() + BIN - 1) / BIN, 1);
+        int shown = Math.min(Math.max(page, 1), pages);
+        int first = (shown - 1) * BIN;
 
         List<Component> out = new ArrayList<>();
 
         out.add(line()
-                .append(Component.text("Remove ", DANGER).decorate(TextDecoration.BOLD))
-                .append(Component.text(plugin.displayName(), TEXT).decorate(TextDecoration.BOLD))
+                .append(Component.text("Trash", BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  " + entries.size(), TEXT))
+                .append(Component.text(" removed", MUTED))
                 .build());
 
-        out.add(Component.text(INDENT + "Moved to trash, unloaded on restart.", MUTED));
+        if (entries.isEmpty()) {
+            out.add(Component.empty());
+            out.add(Component.text(INDENT + "Nothing has been removed", MUTED));
+            return out;
+        }
+
+        out.add(Component.text(INDENT + (retentionDays > 0
+                ? "Deleted after " + retentionDays + " days."
+                : "Kept until you delete them."), MUTED));
+
+        out.add(Component.empty());
+
+        for (TrashEntry entry : entries.subList(first, Math.min(first + BIN, entries.size()))) {
+            out.add(trashRow(entry));
+        }
+
+        out.add(Component.empty());
+
+        TextComponent.Builder footer = line()
+                .append(Component.text(INDENT + "page ", MUTED))
+                .append(Component.text(shown, TEXT))
+                .append(Component.text(" of " + pages + "  ", MUTED));
+
+        if (shown > 1) {
+            footer.append(button("Newer", "/catalog trash --page " + (shown - 1), MUTED,
+                    "Page " + (shown - 1))).append(Component.space());
+        }
+
+        if (shown < pages) {
+            footer.append(button("Older", "/catalog trash --page " + (shown + 1), MUTED,
+                    "Page " + (shown + 1))).append(Component.space());
+        }
+
+        footer.append(button("Empty", from("/catalog trash delete all", ClickContext.TRASH),
+                        DANGER, "Delete everything in the trash"))
+                .append(Component.space())
+                .append(button("Plugins", "/catalog list", MUTED, "Back to the plugin list"));
+
+        out.add(footer.build());
+
+        return out;
+    }
+
+    private static Component trashRow(TrashEntry entry) {
+
+        Component hover = Component.text(entry.displayName(), TEXT)
+                .append(Component.newline())
+                .append(Component.text(entry.fileName(), MUTED))
+                .append(entry.versionNumber() == null ? Component.empty()
+                        : Component.newline().append(Component.text(entry.versionNumber(), MUTED)))
+                .append(entry.removedBy() == null ? Component.empty()
+                        : Component.newline().append(Component.text("removed by " + entry.removedBy(), MUTED)))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text(entry.projectId() == null
+                        ? "Not a Modrinth plugin. Restoring only puts the file back."
+                        : "Restoring puts it back and tracks it again.", MUTED));
+
+        return line()
+                .append(Component.text(INDENT))
+                .append(Component.text(entry.displayName(), TEXT).hoverEvent(HoverEvent.showText(hover)))
+                .append(entry.versionNumber() == null ? Component.empty()
+                        : Component.text("  " + entry.versionNumber(), MUTED))
+                .append(Component.text("  " + ago(entry.removedAt()), MUTED))
+                .append(Component.space())
+                .append(button("Restore", restoreCommand(entry), BRAND,
+                        "Put " + entry.displayName() + " back"))
+                .append(Component.space())
+                .append(icon("×", DANGER, from("/catalog trash delete " + entry.storedAs(),
+                                ClickContext.TRASH),
+                        "Delete " + entry.displayName() + " permanently"))
+                .build();
+    }
+
+    /**
+     * The command that puts one removal back.
+     *
+     * <p>Keyed on the name the jar is filed under, which is unique per removal — so an undo offered
+     * ten minutes and three removals ago still means the one it was offered for, and can never put
+     * back somebody else's plugin.</p>
+     */
+    private static String restoreCommand(TrashEntry entry) {
+        return "/catalog trash restore " + entry.storedAs();
+    }
+
+    /**
+     * Asked before emptying the bin, which is the one action here that cannot be undone.
+     *
+     * <p>Deleting a single removal is not asked about: it was already removed once deliberately,
+     * and the row says what it is. Deleting all of them at once is a different size of mistake.</p>
+     */
+    public static List<Component> confirmEmpty(int count) {
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text("Empty the trash", DANGER).decorate(TextDecoration.BOLD))
+                .build());
+
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(Component.text(count, TEXT))
+                .append(Component.text(count == 1 ? " removal. This cannot be undone."
+                        : " removals. This cannot be undone.", MUTED))
+                .build());
+
         out.add(Component.empty());
 
         out.add(line()
                 .append(Component.text(INDENT))
-                .append(button("Confirm", confirming("/catalog uninstall " + key(plugin), from),
-                        DANGER, "Remove it now"))
+                .append(button("Confirm", confirming("/catalog trash delete all", ClickContext.TRASH),
+                        DANGER, "Delete them now"))
                 .append(Component.space())
-                .append(button("Cancel", back(from), MUTED, "Leave it installed"))
+                .append(button("Cancel", "/catalog trash", MUTED, "Keep them"))
                 .build());
 
         return out;
     }
+
+    // --- confirmations and outcomes ---------------------------------------------------------
 
     /**
      * Asked before replacing a jar that already works.
@@ -1069,21 +1194,6 @@ public final class Messages {
         return out;
     }
 
-    /**
-     * Where Cancel goes: back to whatever the removal was started from.
-     *
-     * <p>Redrawing that screen is also what abandons the pending confirmation, so cancelling and
-     * then clicking the same button again asks a second time rather than going straight through.</p>
-     */
-    private static String back(String from) {
-
-        if (from != null && from.startsWith(ClickContext.INFO)) {
-            return "/catalog info " + from.substring(ClickContext.INFO.length());
-        }
-
-        return "/catalog list";
-    }
-
     public static Component staged(String name, String version) {
         return line()
                 .append(Component.text(name + " " + version, TEXT))
@@ -1119,12 +1229,60 @@ public final class Messages {
                 .build();
     }
 
-    public static Component removed(String name, boolean deleted) {
+    /**
+     * What happened, and the way back.
+     *
+     * <p>Undo instead of a confirmation asked beforehand: removing a plugin does not take effect
+     * until a restart, so there is a whole window in which the decision costs nothing to reverse.
+     * The button carries the removal it belongs to, so an old one left further up the chat still
+     * undoes its own removal rather than the most recent.</p>
+     */
+    public static Component removed(String name, boolean deleted, TrashEntry entry) {
+
+        TextComponent.Builder out = line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(deleted ? " moved to trash, unloads on restart"
+                        : " moved to trash, file is locked and goes on shutdown", MUTED));
+
+        if (entry != null) {
+            out.append(Component.space()).append(button("Undo", restoreCommand(entry), BRAND,
+                    "Put " + name + " back"));
+        }
+
+        return out.build();
+    }
+
+    public static Component restored(String name, boolean tracked) {
         return line()
                 .append(Component.text(name, TEXT))
-                .append(Component.text(deleted ? " removed, unloads on restart"
-                        : " removed, file is locked and is deleted on shutdown", MUTED))
+                .append(Component.text(tracked ? " restored" : " restored, not tracked", MUTED))
                 .build();
+    }
+
+    /**
+     * Why an undo did nothing: the removal it points at is not there any more.
+     */
+    public static Component nothingToRestore() {
+        return Component.text("That removal is not in the trash any more", MUTED);
+    }
+
+    public static Component discarded(String name) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" deleted", MUTED))
+                .build();
+    }
+
+    public static Component emptied(int count) {
+        return line()
+                .append(Component.text(count, TEXT))
+                .append(Component.text(count == 1 ? " removal deleted"
+                        : " removals deleted", MUTED))
+                .build();
+    }
+
+    public static Component trashAlreadyEmpty() {
+        return Component.text("The trash is already empty", MUTED);
     }
 
     public static Component channelSet(String name, ReleaseChannel channel) {
