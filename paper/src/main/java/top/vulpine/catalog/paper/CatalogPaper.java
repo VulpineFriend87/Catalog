@@ -42,6 +42,7 @@ import top.vulpine.catalog.update.model.ServerPlatform;
 import top.vulpine.catalog.update.model.ServerTarget;
 import top.vulpine.catalog.update.model.UpdateCandidate;
 import top.vulpine.commons.log.LogAction;
+import top.vulpine.commons.log.LogLevel;
 import top.vulpine.commons.log.Logger;
 import top.vulpine.commons.text.Colorize;
 import top.vulpine.commons.text.Dialect;
@@ -56,6 +57,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -186,6 +188,23 @@ public final class CatalogPaper extends JavaPlugin {
      *
      * @return false if the config could not be read
      */
+    /**
+     * Applies the configured log level, and keeps a trace file for as long as it is DEBUG.
+     *
+     * <p>Debug output is worth keeping and painful to read in a console that is also carrying a
+     * whole server, so while it is on it is written to {@code logs/} as well. Only while it is on:
+     * a server running normally never grows the file. Rebuilt rather than just re-levelled, so
+     * turning debug on with {@code /catalog reload} starts the file there and then.</p>
+     */
+    private void applyLogging() {
+
+        Logger.builder()
+                .logger(getComponentLogger())
+                .level(configuration.logLevel)
+                .trace(configuration.logLevel == LogLevel.DEBUG ? getDataFolder() : null)
+                .build();
+    }
+
     public boolean loadConfiguration() {
 
         try {
@@ -201,7 +220,7 @@ public final class CatalogPaper extends JavaPlugin {
             return false;
         }
 
-        Logger.setLevel(configuration.logLevel);
+        applyLogging();
         return true;
     }
 
@@ -335,7 +354,26 @@ public final class CatalogPaper extends JavaPlugin {
     private void applyAutomatic(List<UpdateCandidate> candidates) {
 
         AutoUpdatePolicy policy = new AutoUpdatePolicy(configuration.tracking.defaults.soakMinutes);
-        List<UpdateCandidate> ready = policy.readyToApply(candidates, Instant.now());
+        Instant now = Instant.now();
+        List<UpdateCandidate> ready = policy.readyToApply(candidates, now);
+
+        for (UpdateCandidate candidate : candidates) {
+
+            if (ready.contains(candidate)) {
+                continue;
+            }
+
+            TrackedPlugin waiting = candidate.plugin();
+
+            Logger.debug(Action.UPDATE, "Not updating " + waiting.displayName()
+                    + " on its own: " + (!waiting.autoUpdate() ? "auto-update is off"
+                            : waiting.isPinned() ? "it is held"
+                            : waiting.awaitingRestart() ? "it is already waiting for a restart"
+                            : policy.soaking(candidate, now)
+                                    ? "the build is still soaking, " + policy.soakMinutes(waiting)
+                                            + " minutes from " + candidate.version().datePublished()
+                            : "the policy declined it"));
+        }
 
         for (UpdateCandidate candidate : ready) {
 
@@ -390,12 +428,63 @@ public final class CatalogPaper extends JavaPlugin {
 
         ServerTarget target = target();
         Logger.debug(Action.UPDATE, "Checking against " + target + ", asking for loaders "
-                + String.join(", ", target.loaders()) + ".");
+                + String.join(", ", target.loaders())
+                + " and game versions " + String.join(", ", target.gameVersions()) + ".");
+
+        for (TrackedPlugin tracked : tracking.all()) {
+            Logger.debug(Action.UPDATE, "  asking about " + state(tracked));
+        }
 
         lastCheck = new UpdateChecker(modrinth, tracking).check(target);
         checkedAt = Instant.now();
 
+        Set<String> offered = new HashSet<>();
+
+        for (UpdateCandidate candidate : lastCheck) {
+
+            offered.add(candidate.plugin().projectId());
+
+            Logger.debug(Action.UPDATE, "  Modrinth offers " + candidate.plugin().displayName()
+                    + " " + candidate.from() + " -> " + candidate.to()
+                    + (candidate.plugin().awaitingRestart()
+                            ? "; hidden from the list and skipped by auto-update, because it is"
+                                    + " already waiting for a restart"
+                            : ""));
+        }
+
+        for (TrackedPlugin tracked : tracking.all()) {
+
+            if (!offered.contains(tracked.projectId())) {
+                Logger.debug(Action.UPDATE, "  no newer build offered for " + tracked.displayName()
+                        + (tracked.isPinned() ? ", which is held" : ""));
+            }
+        }
+
         return lastCheck;
+    }
+
+    /**
+     * Everything about a tracked plugin that decides whether it can be updated, in one line.
+     *
+     * <p>Written out because these are the only things that can make an update Modrinth is willing
+     * to serve fail to reach the list or the auto-updater, and none of them is visible from the
+     * outside.</p>
+     */
+    private static String state(TrackedPlugin tracked) {
+
+        String hash = tracked.sha512();
+
+        return tracked.displayName()
+                + " project=" + tracked.projectId()
+                + " version=" + tracked.versionNumber() + " (" + tracked.versionId() + ")"
+                + " published=" + tracked.datePublished()
+                + " channel=" + tracked.channel().apiName()
+                + " sha512=" + (hash == null ? "none" : hash.substring(0, Math.min(12, hash.length())))
+                + " auto=" + tracked.autoUpdate()
+                + " soak=" + tracked.soakMinutes()
+                + " held=" + tracked.isPinned()
+                + " pendingRestart=" + tracked.pendingRestart()
+                + " pendingLoad=" + tracked.pendingLoad();
     }
 
     /**

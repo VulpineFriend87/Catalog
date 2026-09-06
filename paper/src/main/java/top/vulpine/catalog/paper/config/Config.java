@@ -98,6 +98,8 @@ public class Config extends OkaeriConfig {
 
     @Comment("Log level for the plugin. Can be: DEBUG, INFO, WARN, ERROR.")
     @Comment("Leave as it is if you don't know what to choose.")
+    @Comment("On DEBUG the same lines are also written to logs/ in this folder, so they can be")
+    @Comment("read without hunting through the server console.")
     @CustomKey("log_level")
     public LogLevel logLevel = LogLevel.INFO;
 
