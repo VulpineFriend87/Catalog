@@ -73,42 +73,29 @@ public final class ClickContext implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
-
-        if (handled(event.getPlayer(), event.getMessage())) {
-            event.setCancelled(true);
-        }
+        forget(event.getPlayer(), event.getMessage());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onConsoleCommand(ServerCommandEvent event) {
-
-        if (handled(event.getSender(), "/" + event.getCommand())) {
-            event.setCancelled(true);
-        }
+        forget(event.getSender(), "/" + event.getCommand());
     }
 
     /**
-     * Runs a pressed button, or forgets a payload nobody claimed.
+     * Forgets a screen nobody claimed.
      *
-     * <p>A command typed by hand clears whatever is held. Handlers can return before taking theirs
-     * — an unknown plugin name is enough — and a payload left behind would then be read by whatever
-     * ran next, redrawing a screen that command was never launched from.</p>
+     * <p>A handler can return before taking its screen — an unknown plugin name is enough — and one
+     * left behind would then be read by whatever ran next, redrawing a screen that command was never
+     * launched from. A command typed by hand therefore clears whatever is held.</p>
      *
-     * @return true if this was a button press and has been dealt with
+     * <p>The wrapper does not match here: it is {@code /catalog-do}, not {@code /catalog}, so a
+     * press never clears the screen it is in the middle of delivering.</p>
      */
-    private boolean handled(CommandSender sender, String message) {
+    private void forget(CommandSender sender, String message) {
 
-        if (!message.startsWith(CLICK)) {
-
-            if (isCatalog(message)) {
-                pending.remove(sender.getName());
-            }
-
-            return false;
+        if (isCatalog(message)) {
+            pending.remove(sender.getName());
         }
-
-        press(sender, message.substring(CLICK.length()));
-        return true;
     }
 
     /**
