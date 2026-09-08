@@ -1,5 +1,6 @@
 package top.vulpine.catalog.paper.command;
 
+import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -12,28 +13,31 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Carries which screen a button was clicked on, without it ever being a command argument.
+ * Carries which screen a button was pressed on, without it ever being part of a real command.
  *
- * <p>The buttons append {@code --data <something>} to the command they run. This listener takes it
- * off the command line before the command is dispatched, so Lamp parses a perfectly ordinary
- * command and nothing about it can reach tab completion. That matters because a real flag cannot be
- * hidden: Lamp always suggests a flag's name, and the Bukkit integration publishes every command
- * node to Brigadier without checking whether it is secret.</p>
+ * <p>Buttons do not run the command they mean. They run {@code /catalog-do <screen> <command>},
+ * which remembers the screen and then runs the command itself. Nothing about the screen reaches
+ * Lamp or the arguments of any real command.</p>
  *
- * <p>The payload is free text, read one time by whoever asks for it next. A command typed by hand
- * carries none, which is exactly right — there is no screen open to put back.</p>
+ * <p>That is the whole point. The commands themselves are then free to be shaped however reads
+ * best — flags, switches, single arguments — instead of every one that a button can reach being
+ * forced to end in a greedy string so a payload had somewhere to hide.</p>
  *
- * <p><strong>Only a command whose last argument is greedy may be given a payload.</strong> The
- * client parses a clickable command against its own copy of the command tree before running it, and
- * Lamp maps a non-greedy parameter to {@code StringArgumentType.string()}, which stops at the first
- * space. Anything trailing then fails to parse and the player is asked to confirm running an
- * "unrecognized or invalid command" instead. A greedy last argument swallows the payload harmlessly,
- * and this listener has already removed it by the time the command actually runs.</p>
+ * <p>Only Catalog's own commands are dispatched, and they run as whoever pressed the button, with
+ * their permissions. A player typing the wrapper by hand can therefore do nothing they could not do
+ * by typing the command directly.</p>
+ *
+ * <p>{@link ClickCommand} registers it, so the client is given it and sends it without asking
+ * whether an unrecognised command was really meant. The listener below stays for the console and
+ * for anything that reaches the server without passing through Lamp.</p>
  */
 public final class ClickContext implements Listener {
 
-    /** What the buttons append. Anything after it is the payload. */
-    public static final String MARKER = "--data ";
+    /** What every button actually runs. */
+    public static final String CLICK = "/catalog-do ";
+
+    /** Stands in for the screen when a button was not offered from one. */
+    private static final String NOWHERE = "-";
 
     /** The screen showing every managed plugin. */
     public static final String LIST = "list";
@@ -44,57 +48,101 @@ public final class ClickContext implements Listener {
     /** One project's page, followed by its slug. */
     public static final String INFO = "info:";
 
-    /** One plugin's settings, followed by its slug. */
+    /** One project's settings, followed by its slug. */
     public static final String SETTINGS = "settings:";
+
+    /** One project's dependencies, followed by its slug. */
+    public static final String DEPENDENCIES = "deps:";
 
     /**
      * Marks a payload as coming from a confirmation button, wrapping the screen to return to.
      *
-     * <p>Confirming has to be a different click from asking. Without this the confirmation was
+     * <p>Confirming has to be a different press from asking. Without this the confirmation was
      * "run the same command twice", which meant pressing a remove or version button twice in a row
      * carried the action out without the dialog ever being read.</p>
      */
     public static final String CONFIRM = "confirm:";
+
+    /** Marks an install as covering everything it requires, wrapping the screen to return to. */
+    public static final String WITH_DEPENDENCIES = "all:";
+
+    /** Marks an install as deliberately leaving what it requires unmet. */
+    public static final String ALONE = "alone:";
 
     private final Map<String, String> pending = new ConcurrentHashMap<>();
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
 
-        String cleaned = capture(event.getPlayer(), event.getMessage());
-
-        if (cleaned != null) {
-            event.setMessage(cleaned);
+        if (handled(event.getPlayer(), event.getMessage())) {
+            event.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onConsoleCommand(ServerCommandEvent event) {
 
-        String cleaned = capture(event.getSender(), "/" + event.getCommand());
-
-        if (cleaned != null) {
-            event.setCommand(cleaned.substring(1));
+        if (handled(event.getSender(), "/" + event.getCommand())) {
+            event.setCancelled(true);
         }
     }
 
     /**
-     * @return the command without its payload, or null if there was nothing to take
+     * Runs a pressed button, or forgets a payload nobody claimed.
+     *
+     * <p>A command typed by hand clears whatever is held. Handlers can return before taking theirs
+     * — an unknown plugin name is enough — and a payload left behind would then be read by whatever
+     * ran next, redrawing a screen that command was never launched from.</p>
+     *
+     * @return true if this was a button press and has been dealt with
      */
-    private String capture(CommandSender sender, String message) {
+    private boolean handled(CommandSender sender, String message) {
 
-        if (!isCatalog(message)) {
-            return null;
+        if (!message.startsWith(CLICK)) {
+
+            if (isCatalog(message)) {
+                pending.remove(sender.getName());
+            }
+
+            return false;
         }
 
-        int marker = message.indexOf(MARKER);
+        press(sender, message.substring(CLICK.length()));
+        return true;
+    }
 
-        if (marker < 0) {
-            return null;
+    /**
+     * Remembers the screen and runs what the button meant.
+     *
+     * @param arguments everything after the wrapper: a screen, a space, then the real command
+     */
+    public void press(CommandSender sender, String arguments) {
+
+        String rest = arguments.trim();
+        int space = rest.indexOf(' ');
+
+        if (space < 0) {
+            return;
         }
 
-        pending.put(sender.getName(), message.substring(marker + MARKER.length()).trim());
-        return message.substring(0, marker).trim();
+        String screen = rest.substring(0, space);
+        String command = rest.substring(space + 1).trim();
+
+        // Nothing but Catalog's own commands, so typing the wrapper by hand is never a way to run
+        // something else. It would run as the sender either way, but there is no reason to allow it.
+        if (!isCatalog(command)) {
+            return;
+        }
+
+        if (NOWHERE.equals(screen)) {
+            pending.remove(sender.getName());
+        } else {
+            pending.put(sender.getName(), screen);
+        }
+
+        // Dispatching does not fire these events again, so the screen just stored survives into the
+        // handler rather than being cleared by the command it was stored for.
+        Bukkit.dispatchCommand(sender, command.substring(1));
     }
 
     private static boolean isCatalog(String message) {
@@ -104,29 +152,45 @@ public final class ClickContext implements Listener {
     }
 
     /**
-     * Reads and forgets the payload for a sender.
+     * Wraps a command so that pressing it also says which screen it was pressed on.
      *
-     * @param sender who ran the command
-     * @return what the button said, or null if the command was typed
+     * @param command the command to run, leading slash and all
+     * @param screen  the screen it is being offered from, or null when it is not from one
+     * @return what the button should run
+     */
+    public static String press(String command, String screen) {
+        return CLICK + (screen == null || screen.isEmpty() ? NOWHERE : screen) + " " + command;
+    }
+
+    /**
+     * Reads and forgets the screen for a sender.
+     *
+     * @param sender who pressed the button
+     * @return the screen, or null if the command was typed
      */
     public String take(CommandSender sender) {
         return pending.remove(sender.getName());
     }
 
     /**
-     * Removes a payload that survived into an argument.
+     * The command a button really runs, for showing in its hover text.
      *
-     * <p>Only reachable if the command never passed through the events above — dispatched through
-     * the API, say. The payload is lost, which costs a redraw; the argument staying intact is what
-     * matters.</p>
+     * <p>The wrapper is not something anyone would type, and showing it would only invite someone
+     * to try.</p>
      *
-     * @param argument the raw argument
-     * @return the argument without any trailing payload
+     * @param command the button's command
+     * @return the command it stands for
      */
-    public static String strip(String argument) {
+    public static String strip(String command) {
 
-        int marker = argument.indexOf(MARKER);
-        return marker < 0 ? argument : argument.substring(0, marker).trim();
+        if (!command.startsWith(CLICK)) {
+            return command;
+        }
+
+        String rest = command.substring(CLICK.length()).trim();
+        int space = rest.indexOf(' ');
+
+        return space < 0 ? rest : rest.substring(space + 1).trim();
     }
 
 }
