@@ -7,6 +7,7 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import top.vulpine.catalog.modrinth.model.DependencyType;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
@@ -261,7 +262,8 @@ public final class Messages {
                 .append(Component.text("/catalog info " + key(plugin), MUTED));
 
         return Component.text(plugin.displayName(), TEXT)
-                .clickEvent(ClickEvent.runCommand("/catalog info " + key(plugin)))
+                .clickEvent(ClickEvent.runCommand(from("/catalog info " + key(plugin),
+                        ClickContext.LIST)))
                 .hoverEvent(HoverEvent.showText(hover));
     }
 
@@ -328,7 +330,11 @@ public final class Messages {
         }
 
         if (!view.requirements().isEmpty()) {
-            out.add(field("Needs", requirements(view)));
+            out.add(field("Needs", requirements(view.requirements())));
+        }
+
+        if (!view.optionals().isEmpty()) {
+            out.add(field("Optional", requirements(view.optionals())));
         }
 
         out.add(Component.empty());
@@ -467,12 +473,12 @@ public final class Messages {
         return out.build();
     }
 
-    private static Component requirements(ProjectView view) {
+    private static Component requirements(List<ProjectView.Requirement> requirements) {
 
         TextComponent.Builder out = Component.text();
         boolean first = true;
 
-        for (ProjectView.Requirement requirement : view.requirements()) {
+        for (ProjectView.Requirement requirement : requirements) {
 
             if (!first) {
                 out.append(Component.text(", ", MUTED));
@@ -491,52 +497,61 @@ public final class Messages {
 
     private static Component actions(ProjectView view, TrackedPlugin installed) {
 
-        TextComponent.Builder out = line().append(Component.text(INDENT));
         String key = view.project().slug();
         String here = ClickContext.INFO + key;
+
+        List<Component> row = new ArrayList<>();
 
         if (installed == null) {
 
             ModrinthVersion target = view.installTarget();
 
             if (target == null) {
-                return out.append(Component.text("No build for this server", MUTED)).build();
+                return line().append(Component.text(INDENT))
+                        .append(Component.text("No build for this server", MUTED))
+                        .build();
             }
 
-            out.append(button("Install", from("/catalog install " + key, here), BRAND,
+            row.add(button("Install", from("/catalog install " + key, here), BRAND,
                     target.versionType() == ReleaseChannel.RELEASE
                             ? "Install " + target.versionNumber()
                             : "Install " + target.versionNumber() + ", the newest build there is — "
                                     + "this project has no stable release for this server"));
 
-            out.append(Component.space())
-                    .append(button("Versions", "/catalog versions " + key, MUTED,
-                            "Choose a build: the newest release, beta and alpha for this server"));
+            row.add(button("Versions", from("/catalog versions " + key, here), MUTED,
+                    "Choose a build: the newest release, beta and alpha for this server"));
 
-            return out.build();
+            if (view.declaresAnything()) {
+                row.add(button("Dependencies", from("/catalog dependencies " + key, here), MUTED,
+                        "What this plugin declares"));
+            }
+
+            return buttons(row);
         }
 
         if (view.updateAvailable() && !installed.pendingRestart()) {
-            out.append(button("Update", from("/catalog update " + key, here), BRAND,
+            row.add(button("Update", from("/catalog update " + key, here), BRAND,
                     "Stage " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
-                            + " for the next restart"))
-                    .append(Component.space());
+                            + " for the next restart"));
         }
 
-        out.append(button("Switch", "/catalog versions " + key, MUTED, "Choose a different version"))
-                .append(Component.space())
-                .append(button("Settings", "/catalog settings " + key, MUTED,
-                        "Channel, auto-update and whether it is held"))
-                .append(Component.space());
+        row.add(button("Switch", from("/catalog versions " + key, here), MUTED,
+                "Choose a different version"));
 
-        if (view.self()) {
-            out.append(Component.text("cannot remove itself", MUTED));
-        } else {
-            out.append(button("Remove", from("/catalog uninstall " + key, here), DANGER,
-                    "Move to the trash"));
+        if (view.declaresAnything()) {
+            row.add(button("Dependencies", from("/catalog dependencies " + key, here), MUTED,
+                    "What this plugin declares"));
         }
 
-        return out.build();
+        row.add(button("Settings", "/catalog settings " + key, MUTED,
+                "Channel, auto-update and whether it is held"));
+
+        row.add(view.self()
+                ? Component.text("cannot remove itself", MUTED)
+                : button("Remove", from("/catalog uninstall " + key, here), DANGER,
+                        "Move to the trash"));
+
+        return buttons(row);
     }
 
     /**
@@ -563,7 +578,7 @@ public final class Messages {
      * here happens now, it decides what happens later. Mixing them into a row of verbs is what made
      * the channel picker feel wrong when it lived there.</p>
      */
-    public static List<Component> settings(TrackedPlugin plugin, int defaultSoak) {
+    public static List<Component> settings(TrackedPlugin plugin, int defaultSoak, String from) {
 
         String key = key(plugin);
         String here = ClickContext.SETTINGS + key;
@@ -586,12 +601,12 @@ public final class Messages {
 
         out.add(Component.empty());
 
-        out.add(setting("Channel", channelChoices(plugin, key)));
-        out.add(setting("Auto-update", autoChoices(plugin, key)));
+        out.add(setting("Channel", channelChoices(plugin, key, here)));
+        out.add(setting("Auto-update", autoChoices(plugin, key, here)));
 
         // Only meaningful when Catalog is the one deciding to install.
         if (plugin.autoUpdate()) {
-            out.add(setting("Soak", soakChoices(plugin, key, defaultSoak)));
+            out.add(setting("Soak", soakChoices(plugin, key, defaultSoak, here)));
         }
 
         out.add(setting("Updates", holdChoices(plugin, key, here)));
@@ -600,13 +615,13 @@ public final class Messages {
 
         out.add(line()
                 .append(Component.text(INDENT))
-                .append(button("Back", "/catalog info " + key, MUTED, "Back to " + plugin.displayName()))
+                .append(button("Back", backTo(from, "/catalog info " + key), MUTED, "Back"))
                 .build());
 
         return out;
     }
 
-    private static Component channelChoices(TrackedPlugin plugin, String key) {
+    private static Component channelChoices(TrackedPlugin plugin, String key, String here) {
 
         TextComponent.Builder out = Component.text();
 
@@ -615,34 +630,31 @@ public final class Messages {
                     channel == plugin.channel(),
                     channel == ReleaseChannel.RELEASE
                             ? "Only offer stable builds"
-                            : "Offer " + channel.apiName() + " builds, and anything more stable"));
+                            : "Offer " + channel.apiName() + " builds, and anything more stable",
+                    here));
         }
 
         return out.build();
     }
 
-    /**
-     * No payload on this one, nor on the channel row: both commands take a value after the plugin
-     * name, so neither is greedy and the client refuses to parse anything trailing. They find their
-     * way back to this screen on their own.
-     */
-    private static Component autoChoices(TrackedPlugin plugin, String key) {
+    private static Component autoChoices(TrackedPlugin plugin, String key, String here) {
 
         return Component.text()
                 .append(choice("on", "/catalog auto " + key + " on", plugin.autoUpdate(),
-                        "Install updates without asking, once they have soaked"))
+                        "Install updates without asking, once they have soaked", here))
                 .append(choice("off", "/catalog auto " + key + " off", !plugin.autoUpdate(),
-                        "Only update when you say so"))
+                        "Only update when you say so", here))
                 .build();
     }
 
-    private static Component soakChoices(TrackedPlugin plugin, String key, int defaultSoak) {
+    private static Component soakChoices(TrackedPlugin plugin, String key, int defaultSoak,
+                                         String here) {
 
         boolean inherits = plugin.soakMinutes() == TrackedPlugin.INHERIT_SOAK;
 
         TextComponent.Builder out = Component.text()
                 .append(choice("default", "/catalog soak " + key + " default", inherits,
-                        "Follow the config, currently " + soakLabel(defaultSoak)));
+                        "Follow the config, currently " + soakLabel(defaultSoak), here));
 
         boolean custom = !inherits;
 
@@ -654,7 +666,7 @@ public final class Messages {
             out.append(choice(soakLabel(minutes), "/catalog soak " + key + " " + minutes, selected,
                     minutes == 0
                             ? "Install as soon as a build appears"
-                            : "Wait " + soakLabel(minutes) + " after a build is published"));
+                            : "Wait " + soakLabel(minutes) + " after a build is published", here));
         }
 
         // A window someone typed that is not one of the presets still has to be visible.
@@ -668,24 +680,28 @@ public final class Messages {
     private static Component holdChoices(TrackedPlugin plugin, String key, String here) {
 
         return Component.text()
-                .append(choice("offered", from("/catalog unhold " + key, here), !plugin.isPinned(),
-                        "Let this plugin be updated"))
-                .append(choice("held", from("/catalog hold " + key, here), plugin.isPinned(),
-                        "Freeze it at " + plugin.versionNumber() + " and stop offering updates"))
+                .append(choice("offered", "/catalog unhold " + key, !plugin.isPinned(),
+                        "Let this plugin be updated", here))
+                .append(choice("held", "/catalog hold " + key, plugin.isPinned(),
+                        "Freeze it at " + plugin.versionNumber() + " and stop offering updates", here))
                 .build();
     }
 
     /**
-     * One value of a setting: the chosen one stands out and does nothing, the rest are clickable.
+     * One option of a setting: the chosen one stands out and does nothing, the rest are clickable.
+     *
+     * <p>Channel, auto-update, soak and hold are the same kind of thing and are all built here, so
+     * none of them can end up carrying the screen while another does not.</p>
      */
-    private static Component choice(String label, String command, boolean selected, String description) {
+    private static Component choice(String label, String command, boolean selected,
+                                    String description, String here) {
 
         if (selected) {
             return chosen(label);
         }
 
         return Component.text(label, MUTED)
-                .clickEvent(ClickEvent.runCommand(command))
+                .clickEvent(ClickEvent.runCommand(from(command, here)))
                 .hoverEvent(HoverEvent.showText(explain(description, command)))
                 .append(Component.text("  ", MUTED));
     }
@@ -729,7 +745,8 @@ public final class Messages {
      */
     public static List<Component> versions(ModrinthProject project, String gameVersion,
                                            Map<ReleaseChannel, ModrinthVersion> newest,
-                                           TrackedPlugin installed, boolean offerEverything) {
+                                           TrackedPlugin installed, boolean offerEverything,
+                                           String from) {
 
         List<Component> out = new ArrayList<>();
 
@@ -757,8 +774,8 @@ public final class Messages {
 
         TextComponent.Builder footer = line()
                 .append(Component.text(INDENT))
-                .append(button("Back", "/catalog info " + project.slug(), MUTED,
-                        "Back to " + project.title()));
+                .append(button("Back", backTo(from, "/catalog info " + project.slug()), MUTED,
+                        "Back"));
 
         if (offerEverything) {
             footer.append(Component.space())
@@ -950,7 +967,7 @@ public final class Messages {
         }
 
         for (SearchHit hit : results.hits()) {
-            out.add(hit(hit, installedProjects.contains(hit.projectId())));
+            out.add(hit(hit, installedProjects.contains(hit.projectId()), null));
         }
 
         int pages = Math.max((results.totalHits() + PAGE - 1) / PAGE, 1);
@@ -977,7 +994,7 @@ public final class Messages {
         return out;
     }
 
-    private static Component hit(SearchHit result, boolean installed) {
+    private static Component hit(SearchHit result, boolean installed, String here) {
 
         Component hover = Component.text(result.title(), TEXT)
                 .append(Component.newline())
@@ -996,9 +1013,203 @@ public final class Messages {
                 .append(Component.text(result.title(), TEXT))
                 .append(Component.text("  " + compact(result.downloads()), MUTED))
                 .append(installed ? Component.text("  installed", DONE) : Component.empty())
-                .clickEvent(ClickEvent.runCommand("/catalog info " + result.slug()))
+                .clickEvent(ClickEvent.runCommand(from("/catalog info " + result.slug(), here)))
                 .hoverEvent(HoverEvent.showText(hover))
                 .build();
+    }
+
+    // --- dependencies -----------------------------------------------------------------------
+
+    /**
+     * Everything one build declares, and what this server has to say about each.
+     *
+     * <p>A row with nothing to decide carries no buttons. What is already here is a tick and a
+     * version; only what is missing is worth offering an action on.</p>
+     */
+    public static List<Component> dependencies(ModrinthProject project, List<DependencyView> rows,
+                                               boolean installed, boolean installable, String from) {
+
+        String key = project.slug();
+        String here = ClickContext.DEPENDENCIES + key;
+
+        List<Component> out = new ArrayList<>();
+
+        out.add(line()
+                .append(Component.text(project.title(), BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text("  dependencies", MUTED))
+                .build());
+
+        int missing = 0;
+        boolean reachable = true;
+
+        for (DependencyView row : rows) {
+
+            if (row.blocking()) {
+                missing++;
+                reachable &= row.available();
+            }
+        }
+
+        if (missing > 0) {
+            out.add(line()
+                    .append(Component.text(INDENT))
+                    .append(Component.text(missing, PENDING))
+                    .append(Component.text(" required missing", MUTED))
+                    .build());
+        }
+
+        out.add(Component.empty());
+
+        if (rows.isEmpty()) {
+            out.add(Component.text(INDENT + "Declares none", MUTED));
+        }
+
+        for (DependencyView row : rows) {
+            out.add(dependencyRow(row, here));
+        }
+
+        out.add(Component.empty());
+        out.add(dependencyActions(project, installed, installable, missing, reachable, here, from));
+
+        return out;
+    }
+
+    /**
+     * What can be done from the dependency screen, which is never the same two visits running.
+     *
+     * <p>Four states and one line: a plugin that is not here yet can be installed with what it
+     * needs or without, one that is already here can only have the gaps filled, and either can have
+     * nothing outstanding at all.</p>
+     */
+    private static Component dependencyActions(ModrinthProject project, boolean installed,
+                                               boolean installable, int missing, boolean reachable,
+                                               String here, String from) {
+
+        String key = project.slug();
+        List<Component> row = new ArrayList<>();
+
+        if (!installed && missing > 0) {
+
+            // Hidden when a requirement has no build here: installing the rest would leave exactly
+            // the broken server this screen exists to prevent.
+            if (reachable) {
+                row.add(button("Install all", intent("/catalog install " + key,
+                                ClickContext.WITH_DEPENDENCIES, here), BRAND,
+                        "Install " + project.title() + " and the " + missing + " it requires"));
+            }
+
+            row.add(button("Just " + project.title(), intent("/catalog install " + key,
+                            ClickContext.ALONE, here), PENDING,
+                    "Install " + project.title() + " on its own"));
+
+        } else if (!installed && installable) {
+
+            row.add(button("Install " + project.title(), from("/catalog install " + key, here),
+                    BRAND, "Install " + project.title()));
+
+        } else if (installed && missing > 0 && reachable) {
+
+            row.add(button("Install required",
+                    from("/catalog dependencies " + key + " --install", here), BRAND,
+                    "Install the " + missing + " missing"));
+        }
+
+        row.add(button("Back", backTo(from, "/catalog info " + key), MUTED, "Back"));
+
+        return buttons(row);
+    }
+
+    private static Component dependencyRow(DependencyView row, String here) {
+
+        TextComponent.Builder line = line().append(Component.text(INDENT));
+
+        if (row.conflicting()) {
+            return line
+                    .append(Component.text("  "))
+                    .append(Component.text(row.name(), DANGER))
+                    .append(Component.text("  incompatible, installed", MUTED))
+                    .build();
+        }
+
+        if (row.installed()) {
+            return line
+                    .append(Component.text("\u2714 ", DONE))
+                    .append(Component.text(row.name(), TEXT))
+                    .append(Component.text(row.version() == null ? "" : "  " + row.version(), MUTED))
+                    .build();
+        }
+
+        boolean optional = row.type() == DependencyType.OPTIONAL;
+
+        line.append(Component.text("  "))
+                .append(Component.text(row.name(), optional ? MUTED : PENDING))
+                .append(Component.text(optional ? "  optional" : "  required", MUTED))
+                .append(Component.space());
+
+        if (!row.available()) {
+            return line.append(Component.text(" no build for this server", DANGER)).build();
+        }
+
+        return line
+                .append(button("Install", from("/catalog install " + row.slug(), here), BRAND,
+                        "Install " + row.name() + " " + row.version()))
+                .append(Component.space())
+                .append(button("Versions", from("/catalog versions " + row.slug(), here), MUTED,
+                        "Choose a build of " + row.name()))
+                .build();
+    }
+
+    /**
+     * The command that reopens the screen something was launched from.
+     *
+     * <p>Every Back and every Cancel goes through here, so a screen reachable from three places
+     * returns to whichever one it was actually opened from without any of them knowing about the
+     * others. A screen added later is one case in this method and nothing else.</p>
+     *
+     * <p>Redrawing the previous screen is also what disarms a pending confirmation, so cancelling
+     * and then pressing the same button again asks a second time rather than going through.</p>
+     *
+     * @param from     the screen token a payload carried, or null when there was none
+     * @param fallback where to go when nothing was carried
+     */
+    private static String backTo(String from, String fallback) {
+
+        if (from == null || from.isEmpty()) {
+            return fallback;
+        }
+
+        if (from.equals(ClickContext.LIST)) {
+            return "/catalog list";
+        }
+
+        if (from.equals(ClickContext.TRASH)) {
+            return "/catalog trash";
+        }
+
+        if (from.startsWith(ClickContext.INFO)) {
+            return "/catalog info " + from.substring(ClickContext.INFO.length());
+        }
+
+        if (from.startsWith(ClickContext.SETTINGS)) {
+            return "/catalog settings " + from.substring(ClickContext.SETTINGS.length());
+        }
+
+        if (from.startsWith(ClickContext.DEPENDENCIES)) {
+            return "/catalog dependencies " + from.substring(ClickContext.DEPENDENCIES.length());
+        }
+
+        return fallback;
+    }
+
+    private static String back(String from) {
+        return backTo(from, "/catalog list");
+    }
+
+    /**
+     * Tags a command with what it is an answer to, wrapping the screen it was asked from.
+     */
+    private static String intent(String command, String marker, String screen) {
+        return from(command, marker + (screen == null ? "" : screen));
     }
 
     // --- /catalog trash ---------------------------------------------------------------------
@@ -1091,7 +1302,7 @@ public final class Messages {
                         : Component.text("  " + entry.versionNumber(), MUTED))
                 .append(Component.text("  " + ago(entry.removedAt()), MUTED))
                 .append(Component.space())
-                .append(button("Restore", restoreCommand(entry), BRAND,
+                .append(button("Restore", restoreCommand(entry, ClickContext.TRASH), BRAND,
                         "Put " + entry.displayName() + " back"))
                 .append(Component.space())
                 .append(icon("×", DANGER, from("/catalog trash delete " + entry.storedAs(),
@@ -1107,8 +1318,8 @@ public final class Messages {
      * ten minutes and three removals ago still means the one it was offered for, and can never put
      * back somebody else's plugin.</p>
      */
-    private static String restoreCommand(TrashEntry entry) {
-        return "/catalog trash restore " + entry.storedAs();
+    private static String restoreCommand(TrashEntry entry, String here) {
+        return from("/catalog trash restore " + entry.storedAs(), here);
     }
 
     /**
@@ -1222,6 +1433,27 @@ public final class Messages {
                 .build();
     }
 
+    /**
+     * What went in when a plugin arrived with the projects it requires.
+     */
+    public static Component installedWith(String name, String version, int dependencies) {
+        return line()
+                .append(Component.text(name + " " + version, TEXT))
+                .append(Component.text(" and ", MUTED))
+                .append(Component.text(dependencies, TEXT))
+                .append(Component.text(dependencies == 1 ? " dependency installed, loads on restart"
+                        : " dependencies installed, load on restart", MUTED))
+                .build();
+    }
+
+    public static Component installedRequired(int count) {
+        return line()
+                .append(Component.text(count, DONE))
+                .append(Component.text(count == 1 ? " dependency installed, loads on restart"
+                        : " dependencies installed, load on restart", MUTED))
+                .build();
+    }
+
     public static Component installed(String name, String version) {
         return line()
                 .append(Component.text(name + " " + version, TEXT))
@@ -1245,7 +1477,7 @@ public final class Messages {
                         : " moved to trash, file is locked and goes on shutdown", MUTED));
 
         if (entry != null) {
-            out.append(Component.space()).append(button("Undo", restoreCommand(entry), BRAND,
+            out.append(Component.space()).append(button("Undo", restoreCommand(entry, null), BRAND,
                     "Put " + name + " back"));
         }
 
@@ -1361,6 +1593,29 @@ public final class Messages {
     // --- plumbing ---------------------------------------------------------------------------
 
     /**
+     * A row of buttons, one space between each, however many there turn out to be.
+     *
+     * <p>Spacing belongs to the row rather than to the buttons in it. A button that is only
+     * sometimes offered used to carry its own trailing space, so leaving it out left the gap where
+     * it would have been.</p>
+     */
+    private static Component buttons(List<Component> row) {
+
+        TextComponent.Builder out = line().append(Component.text(INDENT));
+
+        for (int i = 0; i < row.size(); i++) {
+
+            if (i > 0) {
+                out.append(Component.space());
+            }
+
+            out.append(row.get(i));
+        }
+
+        return out.build();
+    }
+
+    /**
      * A clickable label wrapped in brackets, so it reads as a button rather than as prose.
      *
      * <p>A command ending in a space is offered for the player to complete rather than run.</p>
@@ -1402,7 +1657,7 @@ public final class Messages {
      * Tags a command with the screen it is being offered from.
      */
     private static String from(String command, String screen) {
-        return command + " " + ClickContext.MARKER + screen;
+        return ClickContext.press(command, screen);
     }
 
     /**

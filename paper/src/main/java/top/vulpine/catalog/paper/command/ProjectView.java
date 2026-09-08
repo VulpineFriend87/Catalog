@@ -51,6 +51,15 @@ public final class ProjectView {
     @Singular
     private final List<Requirement> requirements;
 
+    /** What the build can use but does not need, which is never installed on its own. */
+    @Singular
+    private final List<Requirement> optionals;
+
+    /** Whether the build declares anything at all, and so has a dependency screen worth opening. */
+    public boolean declaresAnything() {
+        return !requirements.isEmpty() || !optionals.isEmpty();
+    }
+
     /**
      * A project the latest build declares it needs.
      *

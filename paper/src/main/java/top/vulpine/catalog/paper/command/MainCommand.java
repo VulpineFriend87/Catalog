@@ -13,6 +13,7 @@ import revxrsal.commands.annotation.Sized;
 import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
 import revxrsal.commands.annotation.Switch;
+import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.modrinth.model.Dependency;
 import top.vulpine.catalog.modrinth.model.DependencyType;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
@@ -32,6 +33,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -196,10 +198,29 @@ public final class MainCommand {
                     return;
                 }
 
-                plugin.install(project, version, follow, sender.getName());
+                DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
+                List<DependencyResolver.Requirement> missing = resolution.missing();
+                String answer = intent(data);
+
+                if ((!missing.isEmpty() || !resolution.conflicts().isEmpty()) && answer == null) {
+                    showDependencies(sender, project, version, resolution, screen(data));
+                    return;
+                }
+
+                List<CatalogPaper.Pending> pending = new ArrayList<>();
+
+                if (ClickContext.WITH_DEPENDENCIES.equals(answer)) {
+                    pending.addAll(pendingFor(missing));
+                }
+
+                pending.add(new CatalogPaper.Pending(project, version, follow, true));
+                plugin.install(pending, sender.getName());
 
                 redraw(sender, screen(data));
-                send(sender, Messages.installed(project.title(), version.versionNumber()));
+                send(sender, pending.size() == 1
+                        ? Messages.installed(project.title(), version.versionNumber())
+                        : Messages.installedWith(project.title(), version.versionNumber(),
+                                pending.size() - 1));
 
             } catch (Exception e) {
                 send(sender, Messages.failed(rootMessage(e)));
@@ -214,6 +235,8 @@ public final class MainCommand {
                          @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
                          @Switch("all") boolean everything,
                          @Flag("page") @Default("1") int page) {
+
+        String data = context.take(sender);
 
         abandonConfirmation(sender);
 
@@ -241,7 +264,7 @@ public final class MainCommand {
 
                 send(sender, Messages.versions(project, plugin.gameVersion(),
                         newestOfEachChannel(plugin.compatibleVersions(project.id())),
-                        installed, allowed));
+                        installed, allowed, screen(data)));
 
             } catch (Exception e) {
                 send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
@@ -324,7 +347,7 @@ public final class MainCommand {
             return;
         }
 
-        showSettings(sender, tracked);
+        showSettings(sender, tracked, screen(context.take(sender)));
     }
 
     @Subcommand("auto")
@@ -342,7 +365,7 @@ public final class MainCommand {
         }
 
         plugin.setAutoUpdate(tracked, state.on());
-        afterSettingChanged(sender, tracked, Messages.autoSet(tracked.displayName(), state.on()));
+        done(sender, context.take(sender), Messages.autoSet(tracked.displayName(), state.on()));
     }
 
     @Subcommand("soak")
@@ -368,7 +391,7 @@ public final class MainCommand {
         }
 
         plugin.setSoak(tracked, minutes);
-        afterSettingChanged(sender, tracked, Messages.soakSet(tracked.displayName(), minutes,
+        done(sender, context.take(sender), Messages.soakSet(tracked.displayName(), minutes,
                 plugin.defaultSoakMinutes()));
     }
 
@@ -405,13 +428,22 @@ public final class MainCommand {
      * a payload — each has an argument after the plugin name, so the client refuses to parse
      * anything trailing. Falling back to that screen is the same reasoning install uses.
      */
-    private void afterSettingChanged(CommandSender sender, TrackedPlugin tracked, Component outcome) {
-
-        String data = context.take(sender);
-        String screen = data != null ? data : ClickContext.SETTINGS + key(tracked);
+    /**
+     * Reports what an action did, and redraws the screen it was taken on.
+     *
+     * <p>Only a button carries a screen. A command typed by hand answers in one line and draws
+     * nothing — repainting a whole screen because someone set a value is not what a command line
+     * does, and it buries the answer they asked for.</p>
+     *
+     * <p>Every command that changes something ends here, so none of them can decide otherwise.</p>
+     *
+     * @param data    what the button carried, or null when the command was typed
+     * @param outcome the one line saying what happened
+     */
+    private void done(CommandSender sender, String data, Component outcome) {
 
         plugin.getScheduler().runAsync(task -> {
-            redraw(sender, screen);
+            redraw(sender, screen(data));
             send(sender, outcome);
         });
     }
@@ -431,7 +463,7 @@ public final class MainCommand {
         }
 
         plugin.setChannel(tracked, channel);
-        afterSettingChanged(sender, tracked, Messages.channelSet(tracked.displayName(), channel));
+        done(sender, context.take(sender), Messages.channelSet(tracked.displayName(), channel));
     }
 
     @Subcommand("update")
@@ -468,7 +500,7 @@ public final class MainCommand {
 
                 plugin.stage(candidate);
 
-                redraw(sender, data);
+                redraw(sender, screen(data));
                 send(sender, Messages.staged(tracked.displayName(), candidate.to()));
 
             } catch (Exception e) {
@@ -507,7 +539,7 @@ public final class MainCommand {
                     }
                 }
 
-                redraw(sender, data);
+                redraw(sender, screen(data));
 
                 if (staged > 0) {
                     send(sender, Messages.stagedAll(staged));
@@ -568,6 +600,207 @@ public final class MainCommand {
         });
     }
 
+    /**
+     * What a build declares, and a way to act on each of it.
+     *
+     * <p>Deliberately not a wizard: nothing here remembers that an install was interrupted to come
+     * and look. Every button does one thing, so there is no stack of half-finished intentions to
+     * unwind.</p>
+     */
+    @Subcommand("dependencies")
+    @Description("What a plugin declares it needs")
+    @RequiresPermission("command.info")
+    public void dependencies(CommandSender sender,
+                             @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
+                             @Switch("install") boolean installMissing) {
+
+        String data = context.take(sender);
+
+        plugin.getScheduler().runAsync(task -> {
+
+            try {
+
+                ModrinthProject project = projectFor(query);
+
+                if (project == null) {
+                    send(sender, Messages.unknownPlugin(query));
+                    return;
+                }
+
+                ModrinthVersion version = plugin.newestCompatible(project.id(), defaultChannel());
+
+                if (version == null) {
+                    send(sender, Messages.failed(project.title() + " has no build for this server"));
+                    return;
+                }
+
+                DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
+
+                if (installMissing) {
+
+                    List<CatalogPaper.Pending> pending = pendingFor(resolution.missing());
+
+                    if (pending.isEmpty()) {
+                        send(sender, Messages.failed("Nothing required is missing"));
+                        return;
+                    }
+
+                    plugin.install(pending, sender.getName());
+                    send(sender, Messages.installedRequired(pending.size()));
+
+                    resolution = plugin.dependenciesOf(version);
+                }
+
+                showDependencies(sender, project, version, resolution, screen(data));
+
+            } catch (Exception e) {
+                send(sender, Messages.failed(rootMessage(e)));
+            }
+        });
+    }
+
+    /**
+     * Draws what a build declares, whether it was asked for or run into on the way to installing.
+     *
+     * <p>The same screen either way. A blocked install used to get a list of its own that showed
+     * the same projects without letting anyone act on them, which meant the one thing you might
+     * want — a particular build of the dependency — was the one thing it could not offer.</p>
+     */
+    private void showDependencies(CommandSender sender, ModrinthProject project,
+                                  ModrinthVersion version, DependencyResolver.Resolution resolution,
+                                  String from) {
+
+        List<DependencyResolver.Requirement> declared = new ArrayList<>(resolution.required());
+        declared.addAll(resolution.optional());
+
+        List<DependencyView> rows = views(declared);
+        rows.addAll(conflicts(resolution.conflicts()));
+
+        boolean installed = plugin.getTracking().byProjectId(project.id()) != null;
+
+        send(sender, Messages.dependencies(project, rows, installed, version != null, from));
+    }
+
+    /**
+     * Rows for projects the author said must not be here, which are only listed when they are.
+     */
+    private List<DependencyView> conflicts(List<String> projectIds) {
+
+        Map<String, ModrinthProject> projects = byId(new LinkedHashSet<>(projectIds));
+        List<DependencyView> rows = new ArrayList<>();
+
+        for (String id : projectIds) {
+
+            ModrinthProject project = projects.get(id);
+
+            rows.add(new DependencyView(project != null ? project.title() : id,
+                    project != null ? project.slug() : id, null, true,
+                    DependencyType.INCOMPATIBLE, false));
+        }
+
+        return rows;
+    }
+
+    /**
+     * Turns resolved requirements into rows, naming every project in one request.
+     */
+    private List<DependencyView> views(List<DependencyResolver.Requirement> requirements) {
+
+        Map<String, ModrinthProject> projects = projectsFor(requirements);
+        List<DependencyView> views = new ArrayList<>();
+
+        for (DependencyResolver.Requirement requirement : requirements) {
+
+            ModrinthProject project = projects.get(requirement.projectId());
+            TrackedPlugin installed = plugin.getTracking().byProjectId(requirement.projectId());
+
+            String version = installed != null ? installed.versionNumber()
+                    : requirement.available() == null ? null
+                            : requirement.available().versionNumber();
+
+            views.add(new DependencyView(
+                    project != null ? project.title() : requirement.projectId(),
+                    project != null ? project.slug() : requirement.projectId(),
+                    version,
+                    requirement.installed(),
+                    requirement.type(),
+                    requirement.available() != null));
+        }
+
+        return views;
+    }
+
+    /**
+     * What to install for each missing requirement, skipping any this server cannot run.
+     */
+    private List<CatalogPaper.Pending> pendingFor(List<DependencyResolver.Requirement> missing) {
+
+        Map<String, ModrinthProject> projects = projectsFor(missing);
+        List<CatalogPaper.Pending> pending = new ArrayList<>();
+
+        for (DependencyResolver.Requirement requirement : missing) {
+
+            ModrinthProject project = projects.get(requirement.projectId());
+
+            if (project == null || requirement.available() == null) {
+                continue;
+            }
+
+            ReleaseChannel follow = requirement.available().versionType() == null
+                    ? defaultChannel() : requirement.available().versionType();
+
+            pending.add(new CatalogPaper.Pending(project, requirement.available(), follow, false));
+        }
+
+        return pending;
+    }
+
+    private Map<String, ModrinthProject> projectsFor(List<DependencyResolver.Requirement> requirements) {
+
+        Set<String> ids = new LinkedHashSet<>();
+
+        for (DependencyResolver.Requirement requirement : requirements) {
+            ids.add(requirement.projectId());
+        }
+
+        return byId(ids);
+    }
+
+    private Map<String, ModrinthProject> byId(Set<String> ids) {
+
+        Map<String, ModrinthProject> projects = new HashMap<>();
+
+        if (ids.isEmpty()) {
+            return projects;
+        }
+
+        try {
+            for (ModrinthProject project : plugin.getModrinth().projects(ids).join()) {
+                projects.put(project.id(), project);
+            }
+        } catch (Exception ignored) {
+            // The ids are still enough to name and act on a row.
+        }
+
+        return projects;
+    }
+
+    /**
+     * Which answer to the dependency question a payload carries, or null when it is not an answer.
+     */
+    private static String intent(String data) {
+
+        if (data == null) {
+            return null;
+        }
+
+        if (data.startsWith(ClickContext.WITH_DEPENDENCIES)) {
+            return ClickContext.WITH_DEPENDENCIES;
+        }
+
+        return data.startsWith(ClickContext.ALONE) ? ClickContext.ALONE : null;
+    }
+
     @Subcommand("trash")
     @Description("Plugins you have removed")
     @RequiresPermission("command.trash")
@@ -594,6 +827,8 @@ public final class MainCommand {
     public void restore(CommandSender sender,
                         @Named("removal") @SuggestWith(Suggestions.Trashed.class) String query) {
 
+        String data = context.take(sender);
+
         plugin.getScheduler().runAsync(task -> {
 
             try {
@@ -606,6 +841,8 @@ public final class MainCommand {
                 }
 
                 TrackedPlugin tracked = plugin.restore(entry, sender.getName());
+
+                redraw(sender, screen(data));
                 send(sender, Messages.restored(entry.displayName(), tracked != null));
 
             } catch (Exception e) {
@@ -741,12 +978,7 @@ public final class MainCommand {
         }
 
         plugin.setHeld(tracked, held);
-        String data = context.take(sender);
-
-        plugin.getScheduler().runAsync(task -> {
-            redraw(sender, data);
-            send(sender, Messages.held(tracked.displayName(), held));
-        });
+        done(sender, context.take(sender), Messages.held(tracked.displayName(), held));
     }
 
     // --- shared work ------------------------------------------------------------------------
@@ -775,6 +1007,8 @@ public final class MainCommand {
             showList(sender, false);
         } else if (data.equals(ClickContext.TRASH)) {
             showTrash(sender, 1);
+        } else if (data.startsWith(ClickContext.DEPENDENCIES)) {
+            dependencies(sender, data.substring(ClickContext.DEPENDENCIES.length()), false);
         } else if (data.startsWith(ClickContext.INFO)) {
             showProject(sender, data.substring(ClickContext.INFO.length()));
         } else if (data.startsWith(ClickContext.SETTINGS)) {
@@ -782,7 +1016,7 @@ public final class MainCommand {
             TrackedPlugin tracked = resolve(data.substring(ClickContext.SETTINGS.length()));
 
             if (tracked != null) {
-                showSettings(sender, tracked);
+                showSettings(sender, tracked, null);
             }
         }
     }
@@ -790,9 +1024,9 @@ public final class MainCommand {
     /**
      * Renders one plugin's settings. Answers from memory, so it does not block.
      */
-    private void showSettings(CommandSender sender, TrackedPlugin tracked) {
+    private void showSettings(CommandSender sender, TrackedPlugin tracked, String from) {
         abandonConfirmation(sender);
-        send(sender, Messages.settings(tracked, plugin.defaultSoakMinutes()));
+        send(sender, Messages.settings(tracked, plugin.defaultSoakMinutes(), from));
     }
 
     private static String key(TrackedPlugin plugin) {
@@ -851,8 +1085,16 @@ public final class MainCommand {
             return null;
         }
 
-        String screen = data.startsWith(ClickContext.CONFIRM)
-                ? data.substring(ClickContext.CONFIRM.length()) : data;
+        String screen = data;
+
+        for (String marker : new String[]{ClickContext.CONFIRM, ClickContext.WITH_DEPENDENCIES,
+                ClickContext.ALONE}) {
+
+            if (screen.startsWith(marker)) {
+                screen = screen.substring(marker.length());
+                break;
+            }
+        }
 
         return screen.isEmpty() ? null : screen;
     }
@@ -898,23 +1140,14 @@ public final class MainCommand {
 
         try {
 
-            TrackedPlugin tracked = resolve(query);
-            ModrinthProject project = plugin.project(tracked != null ? tracked.projectId() : query);
-
-            // A name rather than a slug reaches Modrinth's search but not its project endpoint,
-            // so the closest match stands in for the exact one.
-            if (project == null) {
-                project = firstSearchHit(query);
-            }
+            ModrinthProject project = projectFor(query);
 
             if (project == null) {
                 send(sender, Messages.unknownPlugin(query));
                 return;
             }
 
-            if (tracked == null) {
-                tracked = plugin.getTracking().byProjectId(project.id());
-            }
+            TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
 
             ReleaseChannel channel = tracked != null ? tracked.channel() : defaultChannel();
 
@@ -935,6 +1168,10 @@ public final class MainCommand {
 
             for (ProjectView.Requirement requirement : requirements(latest)) {
                 view.requirement(requirement);
+            }
+
+            for (ProjectView.Requirement optional : optionals(latest)) {
+                view.optional(optional);
             }
 
             send(sender, Messages.project(view.build()));
@@ -993,6 +1230,20 @@ public final class MainCommand {
      * Turns the required dependencies of a build into names, in one request.
      */
     private List<ProjectView.Requirement> requirements(ModrinthVersion version) {
+        return declared(version, DependencyType.REQUIRED);
+    }
+
+    private List<ProjectView.Requirement> optionals(ModrinthVersion version) {
+        return declared(version, DependencyType.OPTIONAL);
+    }
+
+    /**
+     * The projects a build names, for the summary rows on its page.
+     *
+     * <p>Names only, with whether each is here. Anything that can be acted on lives on the
+     * dependency screen, so this stays a sentence rather than becoming a second set of controls.</p>
+     */
+    private List<ProjectView.Requirement> declared(ModrinthVersion version, DependencyType type) {
 
         if (version == null) {
             return List.of();
@@ -1000,7 +1251,7 @@ public final class MainCommand {
 
         Set<String> ids = new LinkedHashSet<>();
 
-        for (Dependency dependency : version.dependenciesOf(DependencyType.REQUIRED)) {
+        for (Dependency dependency : version.dependenciesOf(type)) {
             if (dependency.projectId() != null) {
                 ids.add(dependency.projectId());
             }
@@ -1145,6 +1396,29 @@ public final class MainCommand {
      * <p>An exact match on the display name, slug or project id wins; otherwise the first whose
      * name starts with what was typed, so partial names work.</p>
      */
+    /**
+     * The project a name, slug or id refers to, however it was written.
+     *
+     * <p>Tracked plugins answer first and without a request, which is what makes the display names
+     * offered by tab completion work as arguments. Then Modrinth's project endpoint, which takes a
+     * slug or an id and nothing else. A name that is neither only reaches its search, so the
+     * closest match stands in for the exact one.</p>
+     *
+     * <p>Every command that takes a plugin goes through here, so they all accept the same things.
+     * Blocks, so it must be called off the main thread.</p>
+     *
+     * @param query what was typed or clicked, payload and all
+     * @return the project, or null when nothing matched
+     */
+    private ModrinthProject projectFor(String query) {
+
+        String wanted = ClickContext.strip(query).trim();
+        TrackedPlugin tracked = resolve(wanted);
+
+        ModrinthProject project = plugin.project(tracked != null ? tracked.projectId() : wanted);
+        return project != null ? project : firstSearchHit(wanted);
+    }
+
     private TrackedPlugin resolve(String query) {
 
         String wanted = ClickContext.strip(query).toLowerCase(Locale.ROOT);
