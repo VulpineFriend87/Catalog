@@ -12,6 +12,7 @@ import revxrsal.commands.Lamp;
 import revxrsal.commands.bukkit.BukkitLamp;
 import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 import top.vulpine.catalog.hash.Hashing;
+import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.install.Downloader;
 import top.vulpine.catalog.install.InstallException;
 import top.vulpine.catalog.jar.JarScanner;
@@ -23,6 +24,7 @@ import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import top.vulpine.catalog.modrinth.model.SearchResults;
 import top.vulpine.catalog.paper.command.ClickContext;
+import top.vulpine.catalog.paper.command.ClickCommand;
 import top.vulpine.catalog.paper.command.MainCommand;
 import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.paper.config.Config;
@@ -58,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -157,7 +160,7 @@ public final class CatalogPaper extends JavaPlugin {
         ClickContext clicks = new ClickContext();
         getServer().getPluginManager().registerEvents(clicks, this);
 
-        lamp.register(new MainCommand(this, clicks));
+        lamp.register(new MainCommand(this, clicks), new ClickCommand(clicks));
 
         Logger.debug(Action.SETUP, "Initializing metrics...");
         new Metrics(this, PLUGIN_ID);
@@ -764,27 +767,83 @@ public final class CatalogPaper extends JavaPlugin {
      */
     public TrackedPlugin install(ModrinthProject project, ModrinthVersion version,
                                  ReleaseChannel channel, String by) {
+        return install(List.of(new Pending(project, version, channel, true)), by).get(0);
+    }
 
-        String hash = version.primaryFile().sha512();
+    /**
+     * Installs several builds together, or none of them.
+     *
+     * <p>Every jar is downloaded and checked before any of them is written to the plugins folder.
+     * A set installed halfway is a server that starts and then fails to load something, which is
+     * the outcome asking about dependencies exists to prevent — so a failure anywhere leaves the
+     * plugins folder exactly as it was.</p>
+     *
+     * @param pending what to install, in the order it should be recorded
+     * @param by      who asked
+     * @return the tracking records, in the same order
+     * @throws InstallException if any download or check fails, having written nothing
+     */
+    public List<TrackedPlugin> install(List<Pending> pending, String by) {
 
-        Path staged = downloader.fetch(version, Runtime.version().feature());
-        String fileName = staged.getFileName().toString();
+        Map<Pending, Path> staged = new LinkedHashMap<>();
 
-        place(staged, pluginsFolder().resolve(fileName), hash);
+        for (Pending one : pending) {
+            staged.put(one, downloader.fetch(one.version(), Runtime.version().feature()));
+        }
 
         TrackingDefaults defaults = defaults();
+        List<TrackedPlugin> installed = new ArrayList<>();
 
-        TrackedPlugin tracked = TrackedPlugin.of(version, fileName, hash, channel, by);
+        for (Map.Entry<Pending, Path> entry : staged.entrySet()) {
 
-        tracked.name(project.title());
-        tracked.slug(project.slug());
-        tracked.autoUpdate(defaults.autoUpdate());
-        tracked.pendingLoad(!stillRunning(hash));
+            Pending one = entry.getKey();
+            String hash = one.version().primaryFile().sha512();
+            String fileName = entry.getValue().getFileName().toString();
 
-        tracking.put(tracked);
+            place(entry.getValue(), pluginsFolder().resolve(fileName), hash);
+
+            TrackedPlugin tracked = TrackedPlugin.of(one.version(), fileName, hash,
+                    one.channel(), by);
+
+            tracked.name(one.project().title());
+            tracked.slug(one.project().slug());
+            tracked.autoUpdate(defaults.autoUpdate());
+            tracked.explicit(one.explicit());
+            tracked.pendingLoad(!stillRunning(hash));
+
+            tracking.put(tracked);
+            installed.add(tracked);
+        }
+
         saveTracking();
+        return installed;
+    }
 
-        return tracked;
+    /**
+     * A build about to be installed.
+     *
+     * @param explicit false when it is only here because something else named it, which is what
+     *                 lets a later autoremove offer it once nothing needs it
+     */
+    public record Pending(ModrinthProject project, ModrinthVersion version, ReleaseChannel channel,
+                          boolean explicit) {
+    }
+
+    /**
+     * What a build needs, against what this server already has.
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param version the build being considered
+     * @return the resolution, with required dependencies followed through the whole graph
+     */
+    public DependencyResolver.Resolution dependenciesOf(ModrinthVersion version) {
+
+        DependencyResolver resolver = new DependencyResolver(
+                projectId -> newestCompatible(projectId, defaults().channel()),
+                projectId -> tracking.byProjectId(projectId) != null);
+
+        return resolver.resolve(version);
     }
 
     /**
