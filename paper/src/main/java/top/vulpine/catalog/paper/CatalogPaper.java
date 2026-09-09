@@ -44,7 +44,7 @@ import top.vulpine.catalog.trash.Removals;
 import top.vulpine.catalog.trash.TrashBin;
 import top.vulpine.catalog.trash.model.TrashEntry;
 import top.vulpine.catalog.update.AutoUpdatePolicy;
-import top.vulpine.catalog.update.UpdateChecker;
+import top.vulpine.catalog.update.Updates;
 import top.vulpine.catalog.update.model.ServerPlatform;
 import top.vulpine.catalog.update.model.ServerTarget;
 import top.vulpine.catalog.update.model.UpdateCandidate;
@@ -93,14 +93,13 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private Projects projects;
     private Removals removals;
     private Installer installer;
+    private Updates updates;
 
     /**
      * When this server came up.
      */
     private final Instant startedAt = Instant.now();
 
-    private volatile List<UpdateCandidate> lastCheck = List.of();
-    private volatile Instant checkedAt;
     private volatile int unmanaged;
 
     private enum Action implements LogAction {
@@ -163,6 +162,8 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         this.projects = new Projects(this, modrinth, tracking);
         this.removals = new Removals(this, trash, tracking, this::defaults, startedAt);
         this.installer = new Installer(this, downloader, tracking, removals, this::defaults);
+        this.updates = new Updates(this, modrinth, tracking, installer,
+                () -> configuration.tracking.defaults.soakMinutes);
 
         Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
                 .permissionForAnnotation(RequiresPermission.class, annotation ->
@@ -303,68 +304,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     }
 
     private void checkForUpdates() {
-
-        if (tracking.size() == 0) {
-            return;
-        }
-
-        List<UpdateCandidate> candidates;
-
-        try {
-            candidates = refreshUpdates();
-        } catch (Exception e) {
-            Logger.warn(Action.UPDATE, "Could not check for updates: " + rootMessage(e));
-            return;
-        }
-
-        Logger.debug(Action.UPDATE, candidates.size() + " update"
-                + (candidates.size() == 1 ? "" : "s") + " available.");
-
-        applyAutomatic(candidates);
-    }
-
-    /**
-     * Runs auto updates.
-     */
-    private void applyAutomatic(List<UpdateCandidate> candidates) {
-
-        AutoUpdatePolicy policy = new AutoUpdatePolicy(configuration.tracking.defaults.soakMinutes);
-        Instant now = Instant.now();
-        List<UpdateCandidate> ready = policy.readyToApply(candidates, now);
-
-        for (UpdateCandidate candidate : candidates) {
-
-            if (ready.contains(candidate)) {
-                continue;
-            }
-
-            TrackedPlugin waiting = candidate.plugin();
-
-            Logger.debug(Action.UPDATE, "Not updating " + waiting.displayName()
-                    + " on its own: " + (!waiting.autoUpdate() ? "auto-update is off"
-                            : waiting.isPinned() ? "it is held"
-                            : waiting.awaitingRestart() ? "it is already waiting for a restart"
-                            : policy.soaking(candidate, now)
-                                    ? "the build is still soaking, " + policy.soakMinutes(waiting)
-                                            + " minutes from " + candidate.version().datePublished()
-                            : "the policy declined it"));
-        }
-
-        for (UpdateCandidate candidate : ready) {
-
-            try {
-
-                stage(candidate);
-
-                Logger.info(Action.UPDATE, "Updated " + candidate.plugin().displayName()
-                        + " " + candidate.from() + " -> " + candidate.to()
-                        + ", applies on the next restart.");
-
-            } catch (Exception e) {
-                Logger.warn(Action.UPDATE, "Could not update " + candidate.plugin().displayName()
-                        + ": " + rootMessage(e));
-            }
-        }
+        updates.check();
     }
 
     /**
@@ -392,154 +332,11 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      */
     public List<UpdateCandidate> refreshUpdates() {
 
-        noticeStagedApplied();
-
-        ServerTarget target = target();
-        Logger.debug(Action.UPDATE, "Checking against " + target + ", asking for loaders "
-                + String.join(", ", target.loaders())
-                + " and game versions " + String.join(", ", target.gameVersions()) + ".");
-
-        for (TrackedPlugin tracked : tracking.all()) {
-            Logger.debug(Action.UPDATE, "  asking about " + state(tracked));
-        }
-
-        lastCheck = new UpdateChecker(modrinth, tracking).check(target);
-        checkedAt = Instant.now();
-
-        Set<String> offered = new HashSet<>();
-
-        for (UpdateCandidate candidate : lastCheck) {
-
-            offered.add(candidate.plugin().projectId());
-
-            Logger.debug(Action.UPDATE, "  Modrinth offers " + candidate.plugin().displayName()
-                    + " " + candidate.from() + " -> " + candidate.to()
-                    + (candidate.plugin().awaitingRestart()
-                            ? "; hidden from the list and skipped by auto-update, because it is"
-                                    + " already waiting for a restart"
-                            : ""));
-        }
-
-        for (TrackedPlugin tracked : tracking.all()) {
-
-            if (!offered.contains(tracked.projectId())) {
-                Logger.debug(Action.UPDATE, "  no newer build offered for " + tracked.displayName()
-                        + (tracked.isPinned() ? ", which is held" : ""));
-            }
-        }
-
-        return lastCheck;
-    }
-
-    /**
-     * Everything about a tracked plugin that decides whether it can be updated, in one line.
-     */
-    private static String state(TrackedPlugin tracked) {
-
-        String hash = tracked.sha512();
-
-        return tracked.displayName()
-                + " project=" + tracked.projectId()
-                + " version=" + tracked.versionNumber() + " (" + tracked.versionId() + ")"
-                + " published=" + tracked.datePublished()
-                + " channel=" + tracked.channel().apiName()
-                + " sha512=" + (hash == null ? "none" : hash.substring(0, Math.min(12, hash.length())))
-                + " auto=" + tracked.autoUpdate()
-                + " soak=" + tracked.soakMinutes()
-                + " held=" + tracked.isPinned()
-                + " pendingRestart=" + tracked.pendingRestart()
-                + " pendingLoad=" + tracked.pendingLoad();
-    }
-
-    /**
-     * Notices a staged build that something else already applied.
-     *
-     * <p>Paper consumes the update folder in {@code FileProviderSource#checkUpdate}, which runs for
-     * every plugin file it loads — not only during the startup scan. So a reload tool loading a
-     * single plugin applies whatever Catalog staged for it, there and then. That is a fine outcome,
-     * and Catalog has no say in it; what it must not do is keep insisting a restart is owed for a
-     * build that is already running.</p>
-     */
-    private void noticeStagedApplied() {
-
-        Map<String, TrackedPlugin> rehashed = new HashMap<>();
-        List<TrackedPlugin> abandoned = new ArrayList<>();
-
-        for (TrackedPlugin plugin : tracking.pendingRestart()) {
-
-            // Still sitting there waiting for a restart, which is the normal case.
-            if (isStaged(Removals.stagedName(plugin))) {
-                continue;
-            }
-
-            String hash = hashOf(pluginsFolder().resolve(plugin.fileName()));
-
-            if (hash == null || hash.equals(plugin.sha512())) {
-                // Gone from the update folder without the jar changing: somebody deleted it.
-                abandoned.add(plugin);
-            } else {
-                rehashed.put(hash, plugin);
-            }
-        }
-
-        if (rehashed.isEmpty() && abandoned.isEmpty()) {
-            return;
-        }
-
-        for (TrackedPlugin plugin : abandoned) {
-            plugin.pendingRestart(false);
-            plugin.stagedAs(null);
-            Logger.warn(Action.UPDATE, "The build staged for " + plugin.displayName()
-                    + " is gone from the update folder and was never applied.");
-        }
-
-        identifyApplied(rehashed);
-        saveTracking();
-    }
-
-    /**
-     * Re-identifies jars that changed underneath Catalog and records what they became.
-     */
-    private void identifyApplied(Map<String, TrackedPlugin> byHash) {
-
-        if (byHash.isEmpty()) {
-            return;
-        }
-
-        Map<String, ModrinthVersion> identified;
-
         try {
-            identified = modrinth.identify(byHash.keySet()).join();
-        } catch (Exception e) {
-            // The flags stay set and the next startup sorts it out from the hashes on disk.
-            Logger.debug(Action.UPDATE, "Could not identify applied builds: " + rootMessage(e));
-            return;
-        }
-
-        for (Map.Entry<String, TrackedPlugin> entry : byHash.entrySet()) {
-
-            TrackedPlugin plugin = entry.getValue();
-            ModrinthVersion became = identified.get(entry.getKey());
-
-            if (became == null || !plugin.projectId().equals(became.projectId())) {
-                continue;
-            }
-
-            plugin.moveTo(became, plugin.fileName(), entry.getKey());
-            plugin.pendingRestart(false);
-            plugin.stagedAs(null);
-
-            Logger.info(Action.UPDATE, plugin.displayName() + " is now "
-                    + became.versionNumber() + ", applied without a restart by something else.");
-        }
-    }
-
-    private static String hashOf(Path jar) {
-
-        try {
-            return Files.isRegularFile(jar) ? Hashing.sha512(jar) : null;
-        } catch (IOException e) {
-            return null;
+            return updates.refresh();
+        } catch (TrackingException e) {
+            Logger.error(Action.TRACK, e.getMessage());
+            return updates.open();
         }
     }
 
@@ -549,16 +346,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @return the open update candidates
      */
     public List<UpdateCandidate> updates() {
-
-        List<UpdateCandidate> open = new ArrayList<>();
-
-        for (UpdateCandidate candidate : lastCheck) {
-            if (!candidate.plugin().pendingRestart()) {
-                open.add(candidate);
-            }
-        }
-
-        return open;
+        return updates.open();
     }
 
     /**
@@ -567,14 +355,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @return project id to candidate
      */
     public Map<String, UpdateCandidate> updatesByProject() {
-
-        Map<String, UpdateCandidate> byProject = new HashMap<>();
-
-        for (UpdateCandidate candidate : updates()) {
-            byProject.put(candidate.plugin().projectId(), candidate);
-        }
-
-        return byProject;
+        return updates.byProject();
     }
 
     /**
