@@ -1591,6 +1591,40 @@ public final class Messages {
         return Component.text("No plugins tracked", MUTED);
     }
 
+    public static Component stillHeld(String name) {
+        return Component.text(name + " is held at its current version. Unhold it first.", DANGER);
+    }
+
+    public static Component noBuild(String title) {
+        return Component.text(title + " has no build for this server", DANGER);
+    }
+
+    public static Component noVersion(String title, String named) {
+        return Component.text("No build of " + title + " called " + named, DANGER);
+    }
+
+    public static Component nothingMissing() {
+        return Component.text("Nothing required is missing", DANGER);
+    }
+
+    public static Component unreachable(String reason) {
+        return Component.text("Could not reach Modrinth: " + reason, DANGER);
+    }
+
+    public static Component configFailed() {
+        return Component.text("Could not read config.yml, see the console. "
+                + "The settings already loaded are still in use.", DANGER);
+    }
+
+    public static Component badSoak() {
+        return Component.text("Say a number of minutes, something like 30m or 2h, "
+                + "or default to follow the config", DANGER);
+    }
+
+    public static Component stageFailed(String name, String reason) {
+        return Component.text(name + ": " + reason, DANGER);
+    }
+
     public static Component failed(String reason) {
         return Component.text(reason, DANGER);
     }

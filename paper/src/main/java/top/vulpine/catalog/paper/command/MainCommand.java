@@ -153,8 +153,7 @@ public final class MainCommand {
                 }
 
                 if (tracked != null && tracked.isPinned()) {
-                    send(sender, Messages.failed(tracked.displayName()
-                            + " is held at its current version. Unhold it first."));
+                    send(sender, Messages.stillHeld(tracked.displayName()));
                     return;
                 }
 
@@ -169,9 +168,9 @@ public final class MainCommand {
                 }
 
                 if (version == null) {
-                    send(sender, Messages.failed(named == null
-                            ? project.title() + " has no build for this server"
-                            : "No build of " + project.title() + " called " + named));
+                    send(sender, named == null
+                            ? Messages.noBuild(project.title())
+                            : Messages.noVersion(project.title(), named));
                     return;
                 }
 
@@ -267,7 +266,7 @@ public final class MainCommand {
                         installed, allowed, screen(data)));
 
             } catch (Exception e) {
-                send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
+                send(sender, Messages.unreachable(rootMessage(e)));
             }
         });
     }
@@ -330,8 +329,7 @@ public final class MainCommand {
 
         send(sender, plugin.loadConfiguration()
                 ? Messages.reloaded()
-                : Messages.failed("Could not read config.yml, see the console. "
-                        + "The settings already loaded are still in use."));
+                : Messages.configFailed());
     }
 
     @Subcommand("settings")
@@ -385,8 +383,7 @@ public final class MainCommand {
         Integer minutes = parseSoak(window);
 
         if (minutes == null) {
-            send(sender, Messages.failed("Say a number of minutes, something like 30m or 2h, "
-                    + "or default to follow the config"));
+            send(sender, Messages.badSoak());
             return;
         }
 
@@ -534,8 +531,8 @@ public final class MainCommand {
                     } catch (Exception e) {
                         // One plugin failing is not a reason to abandon the rest of the queue, and
                         // the reason is worth more after the list than buried above it.
-                        failures.add(Messages.failed(candidate.plugin().displayName()
-                                + ": " + rootMessage(e)));
+                        failures.add(Messages.stageFailed(candidate.plugin().displayName(),
+                                rootMessage(e)));
                     }
                 }
 
@@ -630,7 +627,7 @@ public final class MainCommand {
                 ModrinthVersion version = plugin.installTarget(project.id());
 
                 if (version == null) {
-                    send(sender, Messages.failed(project.title() + " has no build for this server"));
+                    send(sender, Messages.noBuild(project.title()));
                     return;
                 }
 
@@ -641,7 +638,7 @@ public final class MainCommand {
                     List<CatalogPaper.Pending> pending = pendingFor(resolution.missing());
 
                     if (pending.isEmpty()) {
-                        send(sender, Messages.failed("Nothing required is missing"));
+                        send(sender, Messages.nothingMissing());
                         return;
                     }
 
@@ -1119,7 +1116,7 @@ public final class MainCommand {
             try {
                 plugin.refreshUpdates();
             } catch (Exception e) {
-                send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
+                send(sender, Messages.unreachable(rootMessage(e)));
             }
         }
 
@@ -1177,7 +1174,7 @@ public final class MainCommand {
             send(sender, Messages.project(view.build()));
 
         } catch (Exception e) {
-            send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
+            send(sender, Messages.unreachable(rootMessage(e)));
         }
     }
 
@@ -1207,7 +1204,7 @@ public final class MainCommand {
             send(sender, Messages.search(query, results, page, trackedProjectIds()));
 
         } catch (Exception e) {
-            send(sender, Messages.failed("Could not reach Modrinth: " + rootMessage(e)));
+            send(sender, Messages.unreachable(rootMessage(e)));
         }
     }
 
