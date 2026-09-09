@@ -283,78 +283,30 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         }
     }
 
-    /**
-     * The updates still worth offering: what the last check found, minus anything already staged.
-     *
-     * @return the open update candidates
-     */
     public List<UpdateCandidate> updates() {
         return updates.open();
     }
 
-    /**
-     * The open updates keyed by project id, which is how the list annotates its rows.
-     *
-     * @return project id to candidate
-     */
     public Map<String, UpdateCandidate> updatesByProject() {
         return updates.byProject();
     }
 
-    /**
-     * The build an install would fetch for a project.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param idOrSlug the project to look at
-     * @return the build to offer, or null when nothing published runs here
-     */
     public ModrinthVersion installTarget(String idOrSlug) {
         return projects.installTarget(idOrSlug);
     }
 
-    /**
-     * The build an install would fetch: the newest stable one, or the newest of anything when the
-     * project has never published a stable build for this server.
-     *
-     * @param compatible what this server can run, newest first
-     * @return the build to offer, or null when the list is empty
-     */
     public static ModrinthVersion installTarget(List<ModrinthVersion> compatible) {
         return Projects.installTarget(compatible);
     }
 
-    /**
-     * Every build of a project this server could run, newest first, on any channel.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param idOrSlug the project to list
-     * @return the compatible versions, newest published first
-     */
     public List<ModrinthVersion> compatibleVersions(String idOrSlug) {
         return projects.compatibleVersions(idOrSlug);
     }
 
-    /**
-     * Downloads an update and puts it in the update folder.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param candidate the update to stage
-     */
     public void stage(UpdateCandidate candidate) {
         saving(() -> installer.stage(candidate));
     }
 
-    /**
-     * Downloads any build of an already-installed plugin and puts it in the update folder.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param plugin  the tracked plugin to replace
-     * @param version the build to put in its place
-     */
     public void stage(TrackedPlugin plugin, ModrinthVersion version) {
         saving(() -> installer.stage(plugin, version));
     }
@@ -409,14 +361,6 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
                           boolean explicit) {
     }
 
-    /**
-     * What a build depends on.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param version the build being considered
-     * @return the resolution, with required dependencies followed through the whole graph
-     */
     public DependencyResolver.Resolution dependenciesOf(ModrinthVersion version) {
         return projects.dependenciesOf(version);
     }
@@ -443,19 +387,10 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         }
     }
 
-    /**
-     * Everything currently in the trash, newest removal first.
-     */
     public List<TrashEntry> trashed() {
         return removals.list();
     }
 
-    /**
-     * One removal by the name it is filed under.
-     *
-     * @param storedAs the id carried by an undo button
-     * @return the entry, or null if it has already been restored or pruned
-     */
     public TrashEntry trashed(String storedAs) {
         return removals.find(storedAs);
     }
@@ -477,20 +412,10 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         }
     }
 
-    /**
-     * Deletes one removal permanently.
-     *
-     * @param entry what to delete
-     */
     public void discardTrashed(TrashEntry entry) {
         removals.discard(entry);
     }
 
-    /**
-     * Deletes every removal permanently.
-     *
-     * @return how many went
-     */
     public int emptyTrash() {
         return removals.empty();
     }
@@ -509,56 +434,26 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         }
     }
 
-    /**
-     * Deletes the jars this server would not let go of, once it has.
-     */
     private void finishRemovals() {
         removals.finish();
     }
 
-    /**
-     * Changes which builds a plugin will accept from now on.
-     *
-     * @param plugin  the plugin to change
-     * @param channel the least stable channel it should accept
-     */
     public void setChannel(TrackedPlugin plugin, ReleaseChannel channel) {
         saving(() -> settings.channel(plugin, channel));
     }
 
-    /**
-     * Decides whether Catalog may update this plugin without being asked.
-     *
-     * @param plugin the plugin to change
-     * @param on     true to let it update itself
-     */
     public void setAutoUpdate(TrackedPlugin plugin, boolean on) {
         saving(() -> settings.autoUpdate(plugin, on));
     }
 
-    /**
-     * Sets how long a build must have been public before this plugin will take it unattended.
-     *
-     * @param plugin  the plugin to change
-     * @param minutes the window, or {@link TrackedPlugin#INHERIT_SOAK} to follow the config
-     */
     public void setSoak(TrackedPlugin plugin, int minutes) {
         saving(() -> settings.soak(plugin, minutes));
     }
 
-    /**
-     * @return the soak window plugins fall back to when they follow the config
-     */
     public int defaultSoakMinutes() {
         return settings.defaultSoakMinutes();
     }
 
-    /**
-     * Freezes a plugin at the version it has now, or lets it move again.
-     *
-     * @param plugin the plugin to hold
-     * @param held   true to freeze it
-     */
     public void setHeld(TrackedPlugin plugin, boolean held) {
         saving(() -> settings.held(plugin, held));
     }
@@ -596,14 +491,6 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         return getServer().getMinecraftVersion();
     }
 
-    /**
-     * Every build a project has ever published, newest first, not filtered.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param idOrSlug the project to list
-     * @return every version, newest published first
-     */
     public List<ModrinthVersion> allVersions(String idOrSlug) {
         return projects.allVersions(idOrSlug);
     }
@@ -629,27 +516,10 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         void run() throws TrackingException;
     }
 
-    /**
-     * Searches Modrinth, narrowed to what this server could actually run.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param query the search text
-     * @param limit how many results to return
-     * @return one page of results
-     */
     public SearchResults search(String query, int limit, int offset) {
         return projects.search(query, limit, offset);
     }
 
-    /**
-     * Looks a project up by its id or slug.
-     *
-     * <p>Blocks, so it must be called off the main thread.</p>
-     *
-     * @param idOrSlug what to look for
-     * @return the project, or null if there is no such thing
-     */
     public ModrinthProject project(String idOrSlug) {
         return projects.project(idOrSlug);
     }
