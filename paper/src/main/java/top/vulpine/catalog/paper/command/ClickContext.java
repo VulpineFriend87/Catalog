@@ -28,8 +28,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * by typing the command directly.</p>
  *
  * <p>{@link ClickCommand} registers it, so the client is given it and sends it without asking
- * whether an unrecognised command was really meant. The listener below stays for the console and
- * for anything that reaches the server without passing through Lamp.</p>
+ * whether an unrecognised command was really meant.</p>
+ *
+ * <p>The screen cannot be scoped to the dispatch that stored it. {@link Bukkit#dispatchCommand}
+ * returns before the command it was given has run — measured, not assumed: the screen is still in
+ * the map when the call comes back, and the handler reads it afterwards. Clearing it there takes it
+ * out from under a command that has not started yet, and every button stops redrawing.</p>
+ *
+ * <p>So the note outlives the press by design, and the listener below is what stops one that nobody
+ * read from being picked up by whatever runs next. It is not tidy and it is not optional.</p>
  */
 public final class ClickContext implements Listener {
 
