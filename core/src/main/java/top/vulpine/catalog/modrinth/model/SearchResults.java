@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * A page of search results, with enough information to page through the rest.
+ * A page of search results.
  */
 @Getter
 @Accessors(fluent = true)

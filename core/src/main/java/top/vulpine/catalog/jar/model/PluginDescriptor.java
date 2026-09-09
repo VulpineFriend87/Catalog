@@ -30,7 +30,7 @@ public final class PluginDescriptor {
     private final int bytecodeMajor;
 
     /**
-     * An empty descriptor, for a jar that could not be read.
+     * An empty descriptor for a jar that could not be read.
      *
      * @return a descriptor with everything absent
      */
@@ -51,7 +51,7 @@ public final class PluginDescriptor {
     }
 
     /**
-     * Whether this jar declares a plugin Catalog can reason about at all.
+     * Whether this jar declares a plugin Catalog can completely reason about.
      *
      * @return true if a plugin name was found
      */
@@ -60,20 +60,20 @@ public final class PluginDescriptor {
     }
 
     /**
-     * Which descriptor file a jar was described by, which also says what platform it targets.
+     * Which descriptor file a jar was described by.
      */
     public enum Kind {
 
-        /** {@code plugin.yml} — a Bukkit-style plugin. */
+        /** {@code plugin.yml} */
         BUKKIT,
 
-        /** {@code paper-plugin.yml} — a plugin using Paper's own loader. */
+        /** {@code paper-plugin.yml} */
         PAPER,
 
-        /** {@code velocity-plugin.json} — a proxy plugin. */
+        /** {@code velocity-plugin.json} */
         VELOCITY,
 
-        /** No recognised descriptor; possibly a library rather than a plugin. */
+        /** No recognised descriptor. */
         NONE
 
     }

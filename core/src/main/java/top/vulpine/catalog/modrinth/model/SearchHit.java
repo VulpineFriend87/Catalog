@@ -7,9 +7,6 @@ import java.util.List;
 
 /**
  * One result of a project search.
- *
- * <p>Shaped differently from {@link ModrinthProject}: the id lives in {@code project_id} rather
- * than {@code id}, and the license is a plain identifier rather than an object.</p>
  */
 @Getter
 @Accessors(fluent = true)

@@ -7,9 +7,6 @@ import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 
 /**
  * The settings a plugin starts with when Catalog adopts or installs it.
- *
- * <p>Copied into each record rather than consulted later, so changing the server-wide default never
- * moves the ground under plugins that are already tracked.</p>
  */
 @Getter
 @Builder

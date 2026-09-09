@@ -26,44 +26,27 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /**
- * The Modrinth v2 API, as the rest of Catalog sees it.
- *
- * <p>This class is only the endpoint list: what can be asked, and how each answer is shaped.
- * Everything about sending a request — rate limiting, caching, back-off, threading — lives in
- * {@link ApiTransport}.</p>
- *
- * <p>The two bulk endpoints are what make Catalog viable: {@link #identify(Collection)} turns a
- * folder full of jars into exact project and version identities in one request, and
- * {@link #latest(Collection, List, List, Collection)} answers "is anything out of date" for the
- * whole server in one more.</p>
+ * The Modrinth v2 API client.
  */
 public final class ModrinthClient implements AutoCloseable {
 
     private static final String API = "https://api.modrinth.com/v2";
 
-    /**
-     * How many hashes to put in a single bulk request. Far above what any real server needs, but
-     * chunking means a very large install degrades gracefully instead of being rejected outright.
-     */
     private static final int BULK_LIMIT = 500;
 
-    private static final Type VERSION_MAP = new TypeToken<Map<String, ModrinthVersion>>() {
-    }.getType();
+    private static final Type VERSION_MAP = new TypeToken<Map<String, ModrinthVersion>>() {}.getType();
 
-    private static final Type VERSION_LIST = new TypeToken<List<ModrinthVersion>>() {
-    }.getType();
+    private static final Type VERSION_LIST = new TypeToken<List<ModrinthVersion>>() {}.getType();
 
-    private static final Type PROJECT_LIST = new TypeToken<List<ModrinthProject>>() {
-    }.getType();
+    private static final Type PROJECT_LIST = new TypeToken<List<ModrinthProject>>() {}.getType();
 
-    private static final Type MEMBER_LIST = new TypeToken<List<TeamMember>>() {
-    }.getType();
+    private static final Type MEMBER_LIST = new TypeToken<List<TeamMember>>() {}.getType();
 
     private final ApiTransport transport;
 
     /**
-     * @param userAgent        required by Modrinth; requests without one are refused
-     * @param token            a personal access token, or null for anonymous access
+     * @param userAgent        required by Modrinth
+     * @param token            Modrinth PAT, can be null for anonymous access
      * @param cacheDirectory   where to keep conditional-request responses, or null to disable
      * @param permitsPerMinute the request budget
      * @param threads          how many requests may be in flight at once
@@ -77,11 +60,7 @@ public final class ModrinthClient implements AutoCloseable {
     }
 
     /**
-     * Declared so the defaults live somewhere readable; Lombok fills in the rest of the builder
-     * around it.
-     *
-     * <p>250 requests a minute leaves headroom under Modrinth's 300, so a busy GUI session cannot
-     * get the server throttled in the middle of an install.</p>
+     * The values the builder starts with.
      */
     public static class ModrinthClientBuilder {
 
@@ -92,10 +71,6 @@ public final class ModrinthClient implements AutoCloseable {
 
     /**
      * Identifies files by their SHA-512 hashes.
-     *
-     * <p>This is how Catalog adopts an existing plugins folder: hash everything, ask once, and know
-     * exactly what each jar is. Hashes Modrinth does not recognise are simply absent from the
-     * result, which is not an error.</p>
      *
      * @param sha512Hashes the hashes to look up
      * @return a future of hash to the version that file belongs to
@@ -112,10 +87,6 @@ public final class ModrinthClient implements AutoCloseable {
 
     /**
      * Finds the newest version compatible with this server for each of the given files.
-     *
-     * <p>Modrinth filters by loader, game version and release channel server-side, so the answer is
-     * authoritative and costs one request no matter how many plugins are installed. A hash with no
-     * compatible newer version is absent from the result.</p>
      *
      * @param sha512Hashes the hashes of the currently installed files
      * @param loaders      the loaders to accept, e.g. paper, purpur, folia
@@ -173,9 +144,6 @@ public final class ModrinthClient implements AutoCloseable {
     /**
      * Fetches the team behind a project.
      *
-     * <p>Authorship lives on the team, not on the project, so this is the only way to say who made
-     * something.</p>
-     *
      * @param idOrSlug the project id or slug
      * @return a future of the team members
      */
@@ -203,7 +171,7 @@ public final class ModrinthClient implements AutoCloseable {
     }
 
     /**
-     * Fetches a single version, including its changelog.
+     * Fetches a single version.
      *
      * @param versionId the version id
      * @return a future of the version
@@ -296,7 +264,7 @@ public final class ModrinthClient implements AutoCloseable {
             return;
         }
 
-        query.append(query.length() == 0 ? "?" : "&")
+        query.append(query.isEmpty() ? "?" : "&")
                 .append(name)
                 .append("=")
                 .append(encode(array(values).toString()));

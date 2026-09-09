@@ -12,15 +12,9 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 
 /**
- * The single JSON policy for the whole core: one naming convention, one date format, everywhere.
+ * The single JSON policy for the whole core.
  *
- * <p>Used both to read Modrinth responses and to write Catalog's own state files. Sharing it means
- * a timestamp round-trips identically whether it came from the API or from disk, which matters
- * because publish dates are how Catalog decides what is newer.</p>
- *
- * <p>Deliberately limited to Gson 2.8 features. The runtime Gson is whichever one the platform
- * bundles — Paper 1.18.2 ships 2.8.9 — so records and any newer binding support are unavailable,
- * and every bound class is a plain class bound by field name.</p>
+ * <p>Deliberately limited to Gson 2.8 features. The runtime Gson is whichever one the server bundles.</p>
  */
 public final class Json {
 
@@ -34,7 +28,7 @@ public final class Json {
     }
 
     /**
-     * The shared, thread-safe Gson instance for Modrinth payloads.
+     * The shared Gson instance.
      *
      * @return the configured Gson
      */
@@ -45,8 +39,7 @@ public final class Json {
     /**
      * Reads the ISO-8601 timestamps Modrinth returns.
      *
-     * <p>Parsed as an offset date-time rather than through {@link Instant#parse}, because the API
-     * is not consistent about writing {@code Z} versus an explicit {@code +00:00}.</p>
+     * <p>Parsed as an offset date-time because the API is not consistent with writing {@code Z} versus an explicit {@code +00:00}.</p>
      */
     private static final class InstantAdapter extends TypeAdapter<Instant> {
 

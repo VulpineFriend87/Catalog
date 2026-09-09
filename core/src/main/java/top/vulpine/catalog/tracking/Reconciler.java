@@ -14,11 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Brings the tracking state in line with what is actually on disk.
- *
- * <p>This is what makes adoption automatic instead of a chore: an operator can add, remove, rename
- * or swap jars by hand between restarts, and Catalog works out what happened by comparing hashes
- * rather than asking to be told.</p>
+ * Brings the tracking state in line with what is actually on the disk.
  *
  * <p>Deliberately free of I/O. The caller does the scanning and the one bulk call to Modrinth and
  * passes both results in, which keeps every branch below testable without a network or a disk.</p>
@@ -38,10 +34,7 @@ public final class Reconciler {
     }
 
     /**
-     * @param adoptNewPlugins false to leave recognised but untracked jars alone, which is what an
-     *                        operator asks for by turning auto-tracking off. Plugins already
-     *                        tracked are still reconciled, since a jar deleted by hand has to be
-     *                        noticed either way.
+     * @param adoptNewPlugins false to leave recognized but untracked jars alone
      */
     public Reconciler(TrackingStore store, IgnoreList ignoreList, TrackingDefaults defaults,
                       boolean adoptNewPlugins) {
@@ -54,11 +47,10 @@ public final class Reconciler {
     /**
      * Reconciles the store against a scan, mutating the store in place.
      *
-     * <p>The caller is responsible for saving afterwards, so a run that changed nothing does not
-     * rewrite the file.</p>
+     * <p>The caller is responsible for saving afterward.</p>
      *
      * @param scan       what the plugins folder holds right now
-     * @param identified hash to Modrinth version, from a bulk lookup of every hash in the scan
+     * @param identified hash to a Modrinth version, from a bulk lookup of every hash in the scan
      * @return what changed
      */
     public ReconcileReport reconcile(ScanResult scan, Map<String, ModrinthVersion> identified) {
@@ -160,9 +152,7 @@ public final class Reconciler {
     /**
      * Works out what became of one tracked plugin.
      *
-     * <p>Matched by hash first and only then by file name, because the hash is the identity: a jar
-     * that moved to a different name is the same plugin, while a jar keeping its name with different
-     * contents is not.</p>
+     * <p>Matched by hash first and only then by file name.</p>
      */
     private Unsettled settle(TrackedPlugin tracked, ScanResult scan,
                              Map<String, ModrinthVersion> identified, Set<String> claimed,
@@ -177,15 +167,14 @@ public final class Reconciler {
                 changes.renamed.add(tracked);
             }
 
-            // Byte for byte what was here before a restart that was supposed to replace it. The
+            // Byte for byte what was here before a restart was supposed to replace it. The
             // server did not take the file from the update folder, and the staged build is still
             // waiting, so the flag stays set and somebody is told.
             if (tracked.pendingRestart()) {
                 changes.notApplied.add(tracked);
             }
 
-            // A fresh install is a different case entirely: the jar was always the right one, and
-            // reaching a startup at all is the whole of what it was waiting for.
+            // A fresh install is a different case entirely: the jar was always the right one.
             tracked.pendingLoad(false);
 
             claimed.add(sameContent.fileName());
@@ -202,10 +191,7 @@ public final class Reconciler {
 
         if (replacement != null && tracked.projectId().equals(replacement.projectId())) {
 
-            // A staged update becoming the jar on disk is the same event as somebody swapping it by
-            // hand — the difference is only that Catalog asked for this one. Without checking the
-            // flag first, applying an update reads as "replaced by hand" and the plugin stays
-            // marked staged forever, because nothing else ever clears it.
+            // A staged update becoming the jar on disk is the same event as somebody swapping it by hand.
             boolean wasStaged = tracked.pendingRestart();
 
             tracked.moveTo(replacement, sameName.fileName(), sameName.sha512());
@@ -218,7 +204,7 @@ public final class Reconciler {
             return null;
         }
 
-        // The file now holds something else entirely. The name is left unclaimed so whatever
+        // The file now holds something else entirely. The name is left unclaimed, so whatever
         // actually lives there can be adopted, and the plugin goes to the second round in case it
         // is still on disk somewhere under a name nobody has looked at yet.
         return new Unsettled(tracked, true);
@@ -229,7 +215,7 @@ public final class Reconciler {
      *
      * <p>Reached when neither the contents nor the file name led anywhere, which is what happens
      * when both changed at once — the jar was replaced and renamed in the same downtime. The
-     * Modrinth project id survives that, and needs no second opinion: matching it <em>is</em> the
+     * Modrinth project id survives that and needs no second opinion: matching it <em>is</em> the
      * proof that this is the same plugin, where a file name or a declared name would still have to
      * be checked against something.</p>
      *

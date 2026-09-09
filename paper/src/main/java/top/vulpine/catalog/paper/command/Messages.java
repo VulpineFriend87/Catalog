@@ -27,31 +27,17 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Every line Catalog says.
- *
- * <p>Built as components, never as MiniMessage strings. Titles and descriptions come from strangers
- * on the internet, and a description containing an apostrophe is enough to close a tag argument
- * early and spill the markup onto the screen. With components there is no string for anyone's text
- * to escape from.</p>
- *
- * <p>Flat by design: no rails, no rules, no boxes. Chat is narrow and the background is whatever the
- * player happens to be looking at, so structure comes from colour and indentation instead of from
- * characters that eat width. Grey is the darkest colour used; dark grey is unreadable against half
- * the game.</p>
- *
- * <p>Everything clickable says what it will do and then shows the command it runs, so nothing is a
- * mystery button. Anything true but rarely wanted — ids, versions, dates, the licence — lives in a
- * hover rather than on the page.</p>
+ * All chat messages the plugin sends.
  */
 public final class Messages {
 
     /** How many search results one page shows. */
     public static final int PAGE = 9;
 
-    /** Catalog's colour. Everything the plugin itself owns is this violet. */
+    /** Catalog's color. */
     private static final TextColor BRAND = TextColor.color(0xC08CFF);
 
-    /** Something is waiting to be applied. Warm, so it reads apart from the brand. */
+    /** Something waiting to be applied. */
     private static final TextColor PENDING = TextColor.color(0xF2C46B);
 
     /** Destructive. */
@@ -65,17 +51,10 @@ public final class Messages {
 
     private static final String INDENT = "  ";
 
-    private Messages() {
-    }
+    private Messages() {}
 
     // --- /catalog ---------------------------------------------------------------------------
 
-    /**
-     * The plugin's own card: what it is, and nothing else.
-     *
-     * <p>Says nothing about the server's plugins — that is {@code /catalog list} — and nothing
-     * about how to drive it, which is {@code /catalog help}.</p>
-     */
     public static List<Component> about(String version, String author) {
 
         List<Component> out = new ArrayList<>();
@@ -92,19 +71,13 @@ public final class Messages {
 
         out.add(Component.empty());
 
-        // The one pointer that has to be here, or nothing else is findable.
         out.add(entry("help", "", "Every command"));
 
         return out;
     }
 
-    /**
-     * The whole command surface.
-     *
-     * <p>Grouped by blank lines rather than headings — reading, then changing what is installed,
-     * then changing what a plugin does on its own. Labelling the groups would cost three more lines
-     * to say what the spacing already says.</p>
-     */
+    // --- /catalog help ----------------------------------------------------------------------
+
     public static List<Component> help() {
 
         List<Component> out = new ArrayList<>();
@@ -269,9 +242,6 @@ public final class Messages {
 
     /**
      * Which kind of restart a plugin is waiting for, if any.
-     *
-     * <p>Both mean "not in effect yet" and neither is worth a word on the row itself, but they are
-     * not the same event and the difference decides what to do if a restart does not fix it.</p>
      */
     private static Component waiting(TrackedPlugin plugin) {
 
@@ -290,10 +260,6 @@ public final class Messages {
 
     // --- /catalog info ----------------------------------------------------------------------
 
-    /**
-     * One Modrinth project, installed or not. This is where every action on a plugin lives, and
-     * where a search result lands.
-     */
     public static List<Component> project(ProjectView view) {
 
         ModrinthProject project = view.project();
@@ -368,9 +334,6 @@ public final class Messages {
         return Component.text("  installed", DONE);
     }
 
-    /**
-     * Everything the page deliberately leaves out: ids, the licence, versions and dates.
-     */
     private static Component identity(ProjectView view) {
 
         ModrinthProject project = view.project();
@@ -427,10 +390,6 @@ public final class Messages {
         return hover.build();
     }
 
-    /**
-     * The build this page is talking about: what the followed channel offers, or failing that what
-     * installing would fetch. They differ only for a project with no stable build for this server.
-     */
     private static ModrinthVersion offered(ProjectView view) {
         return view.latest() != null ? view.latest() : view.installTarget();
     }
@@ -446,9 +405,6 @@ public final class Messages {
                 .append(Component.text(" · ", MUTED));
     }
 
-    /**
-     * The loaders the project publishes for, with the ones this server can actually use picked out.
-     */
     private static Component loaders(ProjectView view) {
 
         List<String> declared = view.project().loaders();
@@ -551,10 +507,6 @@ public final class Messages {
         return buttons(row);
     }
 
-    /**
-     * A labelled line. The colon is doing real work: the values are multi-coloured, so without it
-     * the label runs straight into the first item.
-     */
     private static Component field(String label, Component value) {
 
         return line()
@@ -565,16 +517,8 @@ public final class Messages {
 
     // --- /catalog settings ------------------------------------------------------------------
 
-    /** The soak windows offered as one click each. Anything else can still be typed. */
     private static final int[] SOAK_PRESETS = {0, 30, 120, 360, 1440};
 
-    /**
-     * What a plugin does on its own, as four rows of choices.
-     *
-     * <p>Separate from the project page because these are settings rather than actions: nothing
-     * here happens now, it decides what happens later. Mixing them into a row of verbs is what made
-     * the channel picker feel wrong when it lived there.</p>
-     */
     public static List<Component> settings(TrackedPlugin plugin, int defaultSoak, String from) {
 
         String key = key(plugin);
@@ -587,11 +531,8 @@ public final class Messages {
                 .append(Component.text("  settings", MUTED))
                 .build());
 
-        // The installed build and the channel it follows, together: running a beta while following
-        // release means nothing will be offered until a release overtakes it, and that looks like
-        // nothing happening unless both are on screen.
         out.add(line()
-                .append(Component.text(INDENT + String.valueOf(plugin.versionNumber()), MUTED))
+                .append(Component.text(INDENT + plugin.versionNumber(), MUTED))
                 .append(Component.text(" · ", MUTED))
                 .append(channel(plugin.channel()))
                 .build());
@@ -684,12 +625,6 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * One option of a setting: the chosen one stands out and does nothing, the rest are clickable.
-     *
-     * <p>Channel, auto-update, soak and hold are the same kind of thing and are all built here, so
-     * none of them can end up carrying the screen while another does not.</p>
-     */
     private static Component choice(String label, String command, boolean selected,
                                     String description, String here) {
 
@@ -703,7 +638,7 @@ public final class Messages {
                 .append(Component.text("  ", MUTED));
     }
 
-    /** The value a setting currently holds: stands out, and does nothing when clicked. */
+    /** The value a setting currently holds. */
     private static Component chosen(String label) {
         return Component.text(label, BRAND).append(Component.text("  ", MUTED));
     }
@@ -716,9 +651,6 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * A soak window as something readable, since minutes stop meaning anything past an hour or two.
-     */
     static String soakLabel(int minutes) {
 
         if (minutes <= 0) {
@@ -735,10 +667,7 @@ public final class Messages {
     // --- /catalog versions ------------------------------------------------------------------
 
     /**
-     * The newest build of each channel, to pick one from.
-     *
-     * <p>One row per channel that has something, and never a history: the choice being made is how
-     * stable a build you are willing to run, and older builds of a channel are not part of it.</p>
+     * The newest build of each channel to pick one from.
      */
     public static List<Component> versions(ModrinthProject project, String gameVersion,
                                            Map<ReleaseChannel, ModrinthVersion> newest,
@@ -786,11 +715,7 @@ public final class Messages {
     }
 
     /**
-     * Every build a project has published, offered without any compatibility filter.
-     *
-     * <p>Behind a config switch and coloured like a warning, because almost everything on this
-     * screen will not load. It exists for the operator who knows something Modrinth's metadata does
-     * not — that a build works despite what it declares — and it does not pretend otherwise.</p>
+     * Every build a project has published unfiltered.
      */
     public static List<Component> everyVersion(ModrinthProject project, List<ModrinthVersion> versions,
                                                TrackedPlugin installed, String gameVersion, int page) {
@@ -927,9 +852,6 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * The channel, coloured by how much it is asking of you.
-     */
     private static Component channel(ReleaseChannel channel) {
 
         if (channel == null) {
@@ -1015,14 +937,8 @@ public final class Messages {
                 .build();
     }
 
-    // --- dependencies -----------------------------------------------------------------------
+    // --- /catalog dependencies -----------------------------------------------------------------------
 
-    /**
-     * Everything one build declares, and what this server has to say about each.
-     *
-     * <p>A row with nothing to decide carries no buttons. What is already here is a tick and a
-     * version; only what is missing is worth offering an action on.</p>
-     */
     public static List<Component> dependencies(ModrinthProject project, List<DependencyView> rows,
                                                boolean installed, boolean installable, String from) {
 
@@ -1071,13 +987,6 @@ public final class Messages {
         return out;
     }
 
-    /**
-     * What can be done from the dependency screen, which is never the same two visits running.
-     *
-     * <p>Four states and one line: a plugin that is not here yet can be installed with what it
-     * needs or without, one that is already here can only have the gaps filled, and either can have
-     * nothing outstanding at all.</p>
-     */
     private static Component dependencyActions(ModrinthProject project, boolean installed,
                                                boolean installable, int missing, boolean reachable,
                                                String here, String from) {
@@ -1133,7 +1042,7 @@ public final class Messages {
 
         if (row.installed()) {
             return line
-                    .append(Component.text("\u2714 ", DONE))
+                    .append(Component.text("✔ ", DONE))
                     .append(Component.text(row.name(), TEXT))
                     .append(Component.text(kind, MUTED))
                     .append(Component.text(row.version() == null ? "" : "  " + row.version(), MUTED))
@@ -1160,13 +1069,6 @@ public final class Messages {
 
     /**
      * The command that reopens the screen something was launched from.
-     *
-     * <p>Every Back and every Cancel goes through here, so a screen reachable from three places
-     * returns to whichever one it was actually opened from without any of them knowing about the
-     * others. A screen added later is one case in this method and nothing else.</p>
-     *
-     * <p>Redrawing the previous screen is also what disarms a pending confirmation, so cancelling
-     * and then pressing the same button again asks a second time rather than going through.</p>
      *
      * @param from     the screen token a payload carried, or null when there was none
      * @param fallback where to go when nothing was carried
@@ -1217,7 +1119,7 @@ public final class Messages {
     private static final int BIN = 10;
 
     /**
-     * What has been removed and can still be put back.
+     * What has been removed and can still be restored.
      *
      * <p>Ordered by when it was removed rather than by name: the thing somebody wants back is
      * almost always the last thing they got rid of.</p>
@@ -1310,23 +1212,10 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * The command that puts one removal back.
-     *
-     * <p>Keyed on the name the jar is filed under, which is unique per removal — so an undo offered
-     * ten minutes and three removals ago still means the one it was offered for, and can never put
-     * back somebody else's plugin.</p>
-     */
     private static String restoreCommand(TrashEntry entry, String here) {
         return from("/catalog trash restore " + entry.storedAs(), here);
     }
 
-    /**
-     * Asked before emptying the bin, which is the one action here that cannot be undone.
-     *
-     * <p>Deleting a single removal is not asked about: it was already removed once deliberately,
-     * and the row says what it is. Deleting all of them at once is a different size of mistake.</p>
-     */
     public static List<Component> confirmEmpty(int count) {
 
         List<Component> out = new ArrayList<>();
@@ -1357,13 +1246,6 @@ public final class Messages {
 
     // --- confirmations and outcomes ---------------------------------------------------------
 
-    /**
-     * Asked before replacing a jar that already works.
-     *
-     * <p>A rollback says so in its own words. Going backwards is a legitimate thing to want and
-     * Catalog will do it, but it is not the same act as taking an update and should not read like
-     * one — and the files a plugin has already written are not coming back with it.</p>
-     */
     public static List<Component> confirmSwitch(TrackedPlugin plugin, ModrinthVersion version,
                                                 boolean older, String from) {
 
@@ -1395,8 +1277,6 @@ public final class Messages {
                                 + " " + version.id(), from),
                         PENDING, older ? "Roll back now" : "Switch now"))
                 .append(Component.space())
-                // Back to the picker rather than to wherever the payload points: a switch is only
-                // ever chosen from there, and the payload is aimed at where to land afterwards.
                 .append(button("Cancel", "/catalog versions " + key(plugin), MUTED,
                         "Leave it as it is"))
                 .build());
@@ -1419,10 +1299,6 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * Said when someone asks to install something they already have, which is nearly always a
-     * request to change build rather than a mistake.
-     */
     public static Component alreadyInstalled(TrackedPlugin plugin) {
         return line()
                 .append(Component.text(plugin.displayName(), TEXT))
@@ -1432,9 +1308,6 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * What went in when a plugin arrived with the projects it requires.
-     */
     public static Component installedWith(String name, String version, int dependencies) {
         return line()
                 .append(Component.text(name + " " + version, TEXT))
@@ -1460,17 +1333,6 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * What happened, and the way back.
-     *
-     * <p>Undo instead of a confirmation asked beforehand: removing a plugin does not take effect
-     * until a restart, so there is a whole window in which the decision costs nothing to reverse.
-     * The button carries the removal it belongs to, so an old one left further up the chat still
-     * undoes its own removal rather than the most recent.</p>
-     *
-     * <p>It also carries the screen the removal was made on, so undoing redraws that screen with
-     * the plugin back on it. A removal typed by hand carries none and redraws nothing.</p>
-     */
     public static Component removed(String name, boolean deleted, TrashEntry entry, String from) {
 
         TextComponent.Builder out = line()
@@ -1493,9 +1355,6 @@ public final class Messages {
                 .build();
     }
 
-    /**
-     * Why an undo did nothing: the removal it points at is not there any more.
-     */
     public static Component nothingToRestore() {
         return Component.text("That removal is not in the trash any more", MUTED);
     }
@@ -1623,15 +1482,8 @@ public final class Messages {
         return Component.text(reason, DANGER);
     }
 
-    // --- plumbing ---------------------------------------------------------------------------
+    // --- utils ---------------------------------------------------------------------------
 
-    /**
-     * A row of buttons, one space between each, however many there turn out to be.
-     *
-     * <p>Spacing belongs to the row rather than to the buttons in it. A button that is only
-     * sometimes offered used to carry its own trailing space, so leaving it out left the gap where
-     * it would have been.</p>
-     */
     private static Component buttons(List<Component> row) {
 
         TextComponent.Builder out = line().append(Component.text(INDENT));
@@ -1648,11 +1500,6 @@ public final class Messages {
         return out.build();
     }
 
-    /**
-     * A clickable label wrapped in brackets, so it reads as a button rather than as prose.
-     *
-     * <p>A command ending in a space is offered for the player to complete rather than run.</p>
-     */
     private static Component button(String label, String command, TextColor colour, String description) {
 
         boolean complete = !command.endsWith(" ");
@@ -1673,12 +1520,6 @@ public final class Messages {
                 .hoverEvent(HoverEvent.showText(explain(description, command)));
     }
 
-    /**
-     * What a click will do, and only then how it does it.
-     *
-     * <p>The payload that tells Catalog which screen the button was on is left out: it is not part
-     * of the command anyone would type, and showing it would only invite someone to.</p>
-     */
     private static Component explain(String description, String command) {
 
         return Component.text(description, TEXT)
@@ -1695,18 +1536,11 @@ public final class Messages {
 
     /**
      * Tags a command as the confirmation of one already asked about.
-     *
-     * <p>What makes it a confirmation is this payload, not the fact that the command has been run
-     * before — so pressing the button that asked cannot double as the answer.</p>
      */
     private static String confirming(String command, String screen) {
         return from(command, ClickContext.CONFIRM + (screen == null ? "" : screen));
     }
 
-    /**
-     * Starts a line with no styling of its own, so nothing a child sets is inherited by its
-     * siblings. Bold titles next to unbolded counts depend on it.
-     */
     private static TextComponent.Builder line() {
         return Component.text();
     }

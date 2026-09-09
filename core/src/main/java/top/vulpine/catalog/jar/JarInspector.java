@@ -27,10 +27,6 @@ public final class JarInspector {
 
     /**
      * How many class files to sample when the main class is unknown.
-     *
-     * <p>Reading eight bytes is cheap, opening a stream per entry is not, and a shaded jar can hold
-     * thousands of classes. The sample only has to be large enough to catch a jar compiled for a
-     * newer Java than the server runs.</p>
      */
     private static final int CLASS_SAMPLE_LIMIT = 50;
 
@@ -42,9 +38,7 @@ public final class JarInspector {
     /**
      * Inspects a jar.
      *
-     * <p>Never throws for a malformed or unreadable jar: an unreadable file simply yields
-     * {@link PluginDescriptor#unknown()}, because a jar Catalog cannot describe is still a jar it must leave
-     * alone rather than fail over.</p>
+     * <p>Never throws for a malformed or unreadable jar: an unreadable file simply yields {@link PluginDescriptor#unknown()}.</p>
      *
      * @param jar the file to inspect
      * @return what the jar declares
@@ -70,7 +64,7 @@ public final class JarInspector {
         }
     }
 
-    // --- Descriptors -----------------------------------------------------------------------------
+    // Descriptors
 
     private static Declared readDescriptor(ZipFile zip) {
 
@@ -109,12 +103,6 @@ public final class JarInspector {
 
     /**
      * Pulls the handful of top-level scalars Catalog needs out of a plugin descriptor.
-     *
-     * <p>Deliberately not a YAML parser. SnakeYAML crosses a major version boundary across the Paper
-     * releases Catalog supports — 1.18.2 ships 1.30 while modern Paper ships 2.x — and binding the
-     * jar index to that would inherit the incompatibility on every server. The four keys needed here
-     * are always flat scalars at column zero, so they can be read directly, and anything this reader
-     * does not understand is reported as absent rather than guessed at.</p>
      */
     private static Declared readYamlDescriptor(ZipFile zip, ZipEntry entry, PluginDescriptor.Kind kind) {
 
@@ -145,9 +133,7 @@ public final class JarInspector {
                 String key = line.substring(0, colon).trim();
                 String value = unquote(stripComment(line.substring(colon + 1).trim()));
 
-                // First occurrence wins. A jar that shades a library which ships its own
-                // plugin.yml can end up with both concatenated, and the host plugin is the one
-                // whose descriptor comes first.
+                // First occurrence wins
                 if (!value.isEmpty()) {
                     values.putIfAbsent(key, value);
                 }
@@ -174,7 +160,7 @@ public final class JarInspector {
 
             JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
 
-            // The id is the identity Velocity enforces uniqueness on; name is only a display label.
+            // The id is the identity Velocity enforces uniqueness on
             String name = string(json, "id");
 
             if (name == null) {
@@ -203,7 +189,7 @@ public final class JarInspector {
         return value.isBlank() ? null : value;
     }
 
-    // --- Bytecode --------------------------------------------------------------------------------
+    // Bytecode
 
     /**
      * Finds the highest class file version in the jar, which is the lowest Java the server must run.
@@ -237,7 +223,7 @@ public final class JarInspector {
                 continue;
             }
 
-            // Multi-release entries only load on JVMs new enough to ask for them, so a high class
+            // Multi-release entries only load on JVMs new enough to ask for them, so a high-class
             // version under here says nothing about whether the jar runs on this server.
             if (name.startsWith("META-INF/versions/")) {
                 continue;
@@ -266,12 +252,8 @@ public final class JarInspector {
         }
     }
 
-    // --- Text helpers ----------------------------------------------------------------------------
+    // Text helpers
 
-    /**
-     * Drops a trailing comment, but only when the hash is clearly separated, so that a value such as
-     * {@code prefix: "#1 server"} survives.
-     */
     private static String stripComment(String value) {
 
         if (value.startsWith("\"") || value.startsWith("'")) {

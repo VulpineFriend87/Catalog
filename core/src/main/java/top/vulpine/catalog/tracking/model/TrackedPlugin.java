@@ -13,21 +13,13 @@ import java.util.Map;
 /**
  * One plugin Catalog manages, and everything it remembers about it.
  *
- * <p>The settings are independent switches rather than a single mode, because they answer different
- * questions: {@link #autoUpdate()} decides whether Catalog acts on its own, {@link #channel()}
- * decides which builds it will even consider, and {@link #pinnedVersionId()} freezes it outright.
- * Notification is not here at all — that is a server-wide feature, not a property of a plugin.</p>
- *
- * <p>Serialised to {@code tracked.json}. Losing that file is recoverable: hashes re-identify every
- * jar from scratch. What it would lose is the settings below, which is why the store writes it
- * atomically.</p>
+ * <p>Serialized to {@code tracked.json}.</p>
  */
 @Getter
 @Setter
 @Accessors(fluent = true)
 public final class TrackedPlugin {
 
-    /** Sentinel for {@link #soakMinutes()} meaning "use the value from config". */
     public static final int INHERIT_SOAK = -1;
 
     private String projectId;
@@ -49,22 +41,11 @@ public final class TrackedPlugin {
 
     /**
      * What the staged build is called inside the update folder, while one is waiting.
-     *
-     * <p>Not the same as {@link #fileName()} any more: a build is staged under the name its author
-     * published it as, and Paper renames the installed jar to match when it applies it. Until that
-     * restart the two names differ, and this is the only record of where the staged file actually
-     * is. Null when nothing is staged.</p>
      */
     private String stagedAs;
 
     /**
-     * Set when Catalog wrote this jar straight into the plugins folder, and cleared by the first
-     * startup that sees it.
-     *
-     * <p>Deliberately not {@link #pendingRestart}, which means something narrower: a replacement is
-     * waiting in the update folder and may fail to be taken. A freshly installed jar is already
-     * exactly where it belongs and cannot fail to apply — it has simply not been loaded yet. Both
-     * need a restart, and only one of them can go wrong.</p>
+     * Set when Catalog wrote this jar straight into the plugins folder and cleared by the first startup that sees it.
      */
     private boolean pendingLoad;
 
@@ -72,11 +53,6 @@ public final class TrackedPlugin {
 
     private ReleaseChannel channel = ReleaseChannel.RELEASE;
 
-    /**
-     * Off by default, deliberately. Catalog adopts a whole plugins folder on first boot; adopting
-     * and then queueing forty unrequested updates would be the intrusiveness this project exists to
-     * avoid.
-     */
     private boolean autoUpdate;
 
     private int soakMinutes = INHERIT_SOAK;
@@ -84,7 +60,7 @@ public final class TrackedPlugin {
     /** Non-null freezes this plugin to exactly that version, against manual updates too. */
     private String pinnedVersionId;
 
-    /** File name to destination directory, for versions that ship more than the plugin jar. */
+    /** File name to destination directory for versions that ship more than the plugin jar. */
     private Map<String, String> extraFiles = new LinkedHashMap<>();
 
     private String installedBy;
@@ -92,7 +68,7 @@ public final class TrackedPlugin {
 
     /**
      * False when this was pulled in to satisfy someone else's requirement, which is what lets
-     * {@code autoremove} offer it once nothing needs it any more.
+     * {@code autoremove} offer it once nothing needs it anymore.
      */
     private boolean explicit = true;
 

@@ -45,22 +45,6 @@ public enum ServerPlatform {
         this.tiers = Collections.unmodifiableList(ladder);
     }
 
-    /**
-     * The loaders to ask about, one rung at a time, most specific first.
-     *
-     * <p>Asking for several at once is wrong when a project publishes a separate build per platform.
-     * FastAsyncWorldEdit ships {@code -Paper} and {@code -Bukkit} jars as two versions seconds
-     * apart; taking whichever is newest by date would swap a Paper build for a Bukkit one and call
-     * it an update. The same applies one rung higher: a plugin built against the Purpur API and
-     * also published for Paper must resolve to the Purpur build on a Purpur server, whichever was
-     * uploaded last.</p>
-     *
-     * <p>So each platform gets its own rung, and a wider one is only asked about the plugins the
-     * narrower ones did not answer for. That costs a few more requests, all of them small, and is
-     * the difference between the right build and a compatible one.</p>
-     *
-     * @return the loaders to try, in order of preference
-     */
     public List<List<String>> loaderTiers() {
         return tiers;
     }
@@ -84,10 +68,7 @@ public enum ServerPlatform {
     }
 
     /**
-     * Whether a version declares this exact platform rather than merely one it is compatible with.
-     *
-     * <p>Used as a label, never as a filter. On Folia it is worth telling the operator that a build
-     * does not claim support, without pretending the update does not exist.</p>
+     * Whether a version declares this exact platform rather than one it is compatible with.
      *
      * @param declared the loaders a Modrinth version declares
      * @return true if the exact platform is named

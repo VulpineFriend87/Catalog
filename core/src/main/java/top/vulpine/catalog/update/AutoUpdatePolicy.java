@@ -12,13 +12,7 @@ import java.util.List;
 /**
  * Decides which available updates Catalog is allowed to install without being asked.
  *
- * <p>Two gates, and a candidate has to pass both. The plugin must have {@code auto_update} turned
- * on, which is off by default and always a deliberate choice. And the build must have been public
- * long enough to have soaked — the window exists because the release an author hotfixes twenty
- * minutes later is the one nobody wants to have installed automatically.</p>
- *
- * <p>Nothing here touches the disk or the network: it answers a question, and the caller decides
- * what to do with the answer. That is what makes the rule testable without a server.</p>
+ * <p>Nothing here touches the disk or the network, so it's testable without a server.</p>
  */
 public final class AutoUpdatePolicy {
 

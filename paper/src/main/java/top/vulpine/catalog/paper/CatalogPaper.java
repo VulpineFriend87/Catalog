@@ -68,11 +68,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Catalog on Paper, Purpur and Folia.
- *
- * <p>Wires the platform to the core and gets out of the way: the plugins folder is scanned, every
- * hash is identified against Modrinth in one request, and the result is reconciled with what
- * Catalog remembered. All of it off the main thread.</p>
+ * Catalog for Paper, Purpur, and Folia.
  */
 @Getter
 public final class CatalogPaper extends JavaPlugin {
@@ -99,11 +95,7 @@ public final class CatalogPaper extends JavaPlugin {
     private final Set<Path> deleteAtShutdown = ConcurrentHashMap.newKeySet();
 
     /**
-     * When this server came up, which is what tells a restored plugin whether it needs a restart.
-     *
-     * <p>Catalog never unloads anything, so a plugin removed during this session is still running
-     * and putting its jar back changes nothing the server has to be told about. One removed before
-     * this session started has been gone since the restart that started it, and does.</p>
+     * When this server came up.
      */
     private final Instant startedAt = Instant.now();
 
@@ -186,19 +178,6 @@ public final class CatalogPaper extends JavaPlugin {
         Logger.close();
     }
 
-    /**
-     * Reads the config and applies the log level it asks for.
-     *
-     * @return false if the config could not be read
-     */
-    /**
-     * Applies the configured log level, and keeps a trace file for as long as it is DEBUG.
-     *
-     * <p>Debug output is worth keeping and painful to read in a console that is also carrying a
-     * whole server, so while it is on it is written to {@code logs/} as well. Only while it is on:
-     * a server running normally never grows the file. Rebuilt rather than just re-levelled, so
-     * turning debug on with {@code /catalog reload} starts the file there and then.</p>
-     */
     private void applyLogging() {
 
         Logger.builder()
@@ -227,15 +206,6 @@ public final class CatalogPaper extends JavaPlugin {
         return true;
     }
 
-    /**
-     * Loads the tracking state.
-     *
-     * <p>A failure here disables the plugin rather than starting from an empty state. Tracking is
-     * what tells Catalog which jars it is responsible for, and carrying on without it would risk
-     * acting on the wrong file.</p>
-     *
-     * @return false if the state could not be read
-     */
     private boolean loadState() {
 
         Path data = getDataFolder().toPath().resolve("data");
@@ -257,13 +227,6 @@ public final class CatalogPaper extends JavaPlugin {
         return true;
     }
 
-    /**
-     * Scans the plugins folder, identifies everything against Modrinth and reconciles the result.
-     *
-     * <p>Runs off the main thread, and blocking on the lookup here is deliberate: this method is
-     * already on an async thread and reading it in a straight line is worth more than chaining
-     * callbacks.</p>
-     */
     private void index() {
 
         downloader.clean();
@@ -319,13 +282,6 @@ public final class CatalogPaper extends JavaPlugin {
         checkForUpdates();
     }
 
-    /**
-     * Asks Modrinth what is out of date, so the answer is ready before anyone asks for it.
-     *
-     * <p>Kept out of the console on purpose. Startup already scrolls past, and a list of updates
-     * printed there is read once and then ignored forever — {@code /catalog list} is where it
-     * belongs, current at the moment it is asked for. Only a failure is worth saying out loud.</p>
-     */
     private void checkForUpdates() {
 
         if (tracking.size() == 0) {
@@ -348,11 +304,7 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
-     * Stages the updates that were allowed to happen without being asked.
-     *
-     * <p>The only part of Catalog that acts on its own, so it is also the only part that says so
-     * without being asked: an operator who comes back to a changed server is owed an explanation in
-     * the log for every file that changed.</p>
+     * Runs auto updates.
      */
     private void applyAutomatic(List<UpdateCandidate> candidates) {
 
@@ -396,11 +348,7 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
-     * Asks again on a timer, so a server left running for a fortnight is not working from what it
-     * learned at boot.
-     *
-     * <p>Auto-updating plugins depend on this loop coming round: a build inside its soak window is
-     * refused now and wanted later, and without another check later never arrives.</p>
+     * Asks again on a timer.
      */
     private void scheduleUpdateChecks() {
 
@@ -417,9 +365,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Asks Modrinth what is out of date and remembers the answer.
-     *
-     * <p>Kept here rather than in the command so the startup check and {@code /catalog check} share
-     * one path, and so the list command can annotate without going near the network.</p>
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
@@ -468,10 +413,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Everything about a tracked plugin that decides whether it can be updated, in one line.
-     *
-     * <p>Written out because these are the only things that can make an update Modrinth is willing
-     * to serve fail to reach the list or the auto-updater, and none of them is visible from the
-     * outside.</p>
      */
     private static String state(TrackedPlugin tracked) {
 
@@ -491,16 +432,13 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
-     * Notices a staged build that something else already applied, mid-session.
+     * Notices a staged build that something else already applied.
      *
      * <p>Paper consumes the update folder in {@code FileProviderSource#checkUpdate}, which runs for
      * every plugin file it loads — not only during the startup scan. So a reload tool loading a
-     * single plugin applies whatever Catalog staged for it, there and then. That is a fine outcome
+     * single plugin applies whatever Catalog staged for it, there and then. That is a fine outcome,
      * and Catalog has no say in it; what it must not do is keep insisting a restart is owed for a
      * build that is already running.</p>
-     *
-     * <p>Cheap because it only looks at plugins actually marked staged, which is almost always
-     * none. Blocks, so it must be called off the main thread.</p>
      */
     private void noticeStagedApplied() {
 
@@ -646,9 +584,6 @@ public final class CatalogPaper extends JavaPlugin {
      * The build an install would fetch: the newest stable one, or the newest of anything when the
      * project has never published a stable build for this server.
      *
-     * <p>A project with only betas is still installable, and every screen that offers it has to
-     * agree about that or one says there is no build while another installs it.</p>
-     *
      * @param compatible what this server can run, newest first
      * @return the build to offer, or null when the list is empty
      */
@@ -665,14 +600,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Every build of a project this server could run, newest first, on any channel.
-     *
-     * <p>Deliberately unfiltered by channel. Which builds an operator is willing to run is their
-     * decision to make in front of the list, not one to make silently on their behalf — a project
-     * whose only build for this server is a beta is not the same thing as a project with no build
-     * at all, and saying so was the bug this replaced.</p>
-     *
-     * <p>The loader ladder still applies: the first rung that answers wins, so a build for this
-     * exact server software is never passed over for one meant for its parent.</p>
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
@@ -706,19 +633,6 @@ public final class CatalogPaper extends JavaPlugin {
     /**
      * Downloads an update and puts it in the update folder.
      *
-     * <p>Staged under the name its author published it as, not the name the old jar happens to
-     * have. Paper finds it either way — it reads the plugin name out of the descriptor and searches
-     * the update folder for a match, on every version from 1.18.2 to 26.2 — and then renames the
-     * installed jar to the staged file's name. So the file in {@code plugins/} ends up called what
-     * the author called it, instead of carrying a version number that stopped being true.</p>
-     *
-     * <p>That rename is only survivable because reconciliation can now find a plugin by its project
-     * id: after this restart both the contents and the file name have changed, and those were the
-     * only two things it used to match on.</p>
-     *
-     * <p>Nothing is loaded or unloaded here. The swap happens during the next startup, before any
-     * plugin is enabled, which is the only moment it is safe.</p>
-     *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
      * @param candidate the update to stage
@@ -729,10 +643,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Downloads any build of an already-installed plugin and puts it in the update folder.
-     *
-     * <p>Not only newer ones. Choosing a specific build is how someone walks back from a release
-     * that broke their server, and refusing to go backwards would leave them doing it by hand —
-     * which is the manual jar-swapping this plugin exists to replace.</p>
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
@@ -762,10 +672,6 @@ public final class CatalogPaper extends JavaPlugin {
     /**
      * Downloads a plugin that is not installed and puts it in the plugins folder.
      *
-     * <p>Written straight into place rather than through the update folder: there is nothing to
-     * replace, so there is no file to be locked and no match to satisfy. It still only loads at the
-     * next startup, because Catalog never enables a plugin on a running server.</p>
-     *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
      * @param project the project being installed
@@ -781,11 +687,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Installs several builds together, or none of them.
-     *
-     * <p>Every jar is downloaded and checked before any of them is written to the plugins folder.
-     * A set installed halfway is a server that starts and then fails to load something, which is
-     * the outcome asking about dependencies exists to prevent — so a failure anywhere leaves the
-     * plugins folder exactly as it was.</p>
      *
      * @param pending what to install, in the order it should be recorded
      * @param by      who asked
@@ -839,7 +740,7 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
-     * What a build needs, against what this server already has.
+     * What a build depends on.
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
@@ -857,12 +758,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Puts a downloaded build into the plugins folder.
-     *
-     * <p>Something being there already is normally the end of it — Catalog does not write over a
-     * jar it was not asked to touch. There is one exception, and it is a build Catalog itself left
-     * behind: a removal this server would not carry out leaves the jar in place until shutdown, so
-     * installing that same build again is not a write at all. The bytes wanted are the bytes on
-     * disk, and all that is needed is to call the deletion off.</p>
      *
      * <p>The hash is what makes that safe. A <em>different</em> build sharing the file name is a
      * genuine collision and still refused, because replacing a jar the server has open is what the
@@ -898,10 +793,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Moves a plugin's jar to the trash and stops tracking it.
-     *
-     * <p>The jar is copied before it is deleted, so a delete this JVM is not allowed to perform
-     * costs nothing: on Windows the server holds every loaded jar open, and the removal is finished
-     * on shutdown instead.</p>
      *
      * @param plugin the plugin to remove
      * @param by     who asked
@@ -1015,14 +906,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Whether a build that has just been written to the plugins folder is already loaded.
-     *
-     * <p>It is exactly when the same file was taken out of this server since it came up. Removing a
-     * plugin never unloads it, so putting the same bytes back — through the trash or by installing
-     * the build again — leaves the server running code it was already running, and there is nothing
-     * for a restart to do.</p>
-     *
-     * <p>Matched on the hash rather than on the project, because installing a <em>different</em>
-     * build of a plugin that is still loaded genuinely does need a restart.</p>
      */
     private boolean stillRunning(String sha512) {
 
@@ -1118,9 +1001,6 @@ public final class CatalogPaper extends JavaPlugin {
     /**
      * Changes which builds a plugin will accept from now on.
      *
-     * <p>Per plugin rather than global, because the reason for running a beta is always about one
-     * specific plugin and never about the server.</p>
-     *
      * @param plugin  the plugin to change
      * @param channel the least stable channel it should accept
      */
@@ -1161,9 +1041,6 @@ public final class CatalogPaper extends JavaPlugin {
     /**
      * Freezes a plugin at the version it has now, or lets it move again.
      *
-     * <p>Resolved to the concrete version rather than stored as "current", so the hold cannot
-     * quietly drift if the jar is swapped by hand.</p>
-     *
      * @param plugin the plugin to hold
      * @param held   true to freeze it
      */
@@ -1190,10 +1067,6 @@ public final class CatalogPaper extends JavaPlugin {
     /**
      * The jar Catalog is running from.
      *
-     * <p>Used to keep its own entry out of reach of its own remove button. Updating itself is fine
-     * — the swap happens at startup, while it is not running — but removing itself would take away
-     * the only thing that could put it back, and nothing in game could undo it.</p>
-     *
      * @return the file name of Catalog's own jar
      */
     public String ownFileName() {
@@ -1216,10 +1089,7 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
-     * Every build a project has ever published, newest first, filtered by nothing at all.
-     *
-     * <p>Only reachable when the operator has turned incompatible installs on. Most of what comes
-     * back will not load here, which is the entire point of the switch being off by default.</p>
+     * Every build a project has ever published, newest first, not filtered.
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
@@ -1251,9 +1121,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Searches Modrinth, narrowed to what this server could actually run.
-     *
-     * <p>Filtering by loader and game version at the source is what stops the results being a list
-     * of things that would not load here.</p>
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
@@ -1299,10 +1166,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Describes this server the way Modrinth needs to be asked.
-     *
-     * <p>The Minecraft version has to be the exact one: a project can publish a single release as a
-     * dozen Modrinth versions, each pinned to a few game versions, and asking loosely is how you end
-     * up being offered a build that will not load.</p>
      */
     private ServerTarget target() {
 
@@ -1338,10 +1201,6 @@ public final class CatalogPaper extends JavaPlugin {
 
     /**
      * Fills in the human names of tracked plugins that only have a project id.
-     *
-     * <p>Identification answers with versions, which carry a project id but no title, so a freshly
-     * adopted plugin has nothing readable to call itself. One bulk request fixes every one of them,
-     * and the names are then kept in the state file so this only happens once.</p>
      *
      * @return true if anything was named, so the caller knows to save
      */

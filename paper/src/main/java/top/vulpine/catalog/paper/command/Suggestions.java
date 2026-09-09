@@ -25,8 +25,7 @@ import java.util.function.Predicate;
  */
 public final class Suggestions {
 
-    private Suggestions() {
-    }
+    private Suggestions() {}
 
     /** Every managed plugin. */
     public static final class Tracked implements SuggestionProvider<BukkitCommandActor> {
@@ -116,14 +115,6 @@ public final class Suggestions {
 
     /**
      * What to offer for a plugin argument: the name the plugin is listed under.
-     *
-     * <p>Names with a space are offered quoted, because Lamp reads a quoted argument as one value —
-     * {@code readString} stops at the closing quote — so {@code "Axiom Paper Plugin"} arrives whole
-     * and unquoted. Suggesting the slug instead would complete to something the list never showed
-     * you.</p>
-     *
-     * <p>A name containing a quote of its own cannot be quoted this way, and falls back to the slug
-     * rather than producing an argument that will not parse.</p>
      */
     private static List<String> names(Predicate<TrackedPlugin> filter) {
 

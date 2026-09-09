@@ -21,18 +21,7 @@ import java.util.stream.Stream;
 /**
  * Where removed jars go instead of being deleted.
  *
- * <p>The order matters and is not negotiable: the jar is copied into the bin <em>first</em>, and
- * only then is the original deleted. Reading a file is always permitted, even one the JVM has open,
- * so the copy cannot fail for the reason the delete might — and if the delete does fail, nothing
- * has been lost.</p>
- *
- * <p>A failed delete is a normal outcome on Windows, where the running server holds the jar open.
- * It is reported rather than retried, so the caller can arrange for it to happen at shutdown.</p>
- *
- * <p>Every removal is stored under its own name, {@code <millis>-<file>}, so removing the same
- * plugin twice keeps both copies and each one can be put back independently. That name is the only
- * identity a restore needs, which is what lets a button offered ten minutes ago still mean the
- * removal it was offered for.</p>
+ * <p>A failed delete is a normal outcome on Windows, where the running server holds the jar open.</p>
  */
 public final class TrashBin {
 
@@ -77,8 +66,6 @@ public final class TrashBin {
         long millis = nextStamp();
         Path stored;
 
-        // The copy is what claims the name, so nothing can slip between asking whether a name is
-        // free and taking it, however the stamp was chosen.
         while (true) {
 
             stored = directory.resolve(millis + "-" + fileName);
@@ -114,15 +101,6 @@ public final class TrashBin {
 
     /**
      * The stamp to file the next removal under, always past every one already there.
-     *
-     * <p>A millisecond is not fine enough to tell two removals apart: a server can easily bin two
-     * plugins inside one, and then nothing about their timestamps says which went first. Since the
-     * stamp is both the name and the order the trash is shown in, it has to be the removal that is
-     * unique rather than the moment — so a stamp already spoken for is stepped past.</p>
-     *
-     * <p>Borrowing a millisecond that has not happened yet costs nothing. These are only ever
-     * compared to each other, and being seconds fast would take thousands of removals in one
-     * sitting.</p>
      */
     private long nextStamp() {
 
@@ -169,10 +147,6 @@ public final class TrashBin {
     /**
      * Everything currently in the bin, newest removal first.
      *
-     * <p>The jars are what is listed, not the sidecars: a jar whose metadata failed to write is
-     * still a jar somebody may want back, and it can be described well enough from its own name to
-     * be worth offering.</p>
-     *
      * @return the entries, or an empty list if the bin has never been used
      */
     public List<TrashEntry> list() {
@@ -217,9 +191,6 @@ public final class TrashBin {
 
     /**
      * Puts a jar back where it came from and drops it from the bin.
-     *
-     * <p>The copy happens before the bin is cleaned up, for the same reason removal copies before
-     * deleting: an interrupted restore should leave the file recoverable rather than gone.</p>
      *
      * @param entry  what to restore
      * @param target where the jar should end up, which is the plugins folder
@@ -285,9 +256,6 @@ public final class TrashBin {
     /**
      * Deletes everything removed longer ago than the retention window.
      *
-     * <p>Run at startup rather than on a timer: the bin only grows when somebody removes a plugin,
-     * and nothing about an old entry becomes urgent between two restarts.</p>
-     *
      * @param retention how long to keep a removal, or zero to keep everything forever
      * @param now       the moment to measure against
      * @return how many entries were deleted
@@ -314,11 +282,6 @@ public final class TrashBin {
 
     /**
      * Reads an entry's metadata, falling back to what the stored name alone can say.
-     *
-     * <p>The sidecar is written on a best-effort basis, so it can legitimately be missing. The name
-     * still carries the removal time and the original file name, which is everything a restore
-     * needs — only the Modrinth identity is lost, and that is recovered by the next startup scan
-     * anyway.</p>
      */
     private TrashEntry read(Path stored) {
 

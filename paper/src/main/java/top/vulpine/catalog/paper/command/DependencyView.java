@@ -3,11 +3,7 @@ package top.vulpine.catalog.paper.command;
 import top.vulpine.catalog.modrinth.model.DependencyType;
 
 /**
- * One project a build declares, gathered before a line is drawn.
- *
- * <p>Names and slugs come from Modrinth in one bulk request, so a screen listing five dependencies
- * costs one lookup rather than five. Anything that could not be fetched keeps its project id as its
- * name, which is still enough to act on.</p>
+ * One project a build declares.
  */
 public record DependencyView(String name, String slug, String version, boolean installed,
                              DependencyType type, boolean available) {

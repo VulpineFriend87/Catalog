@@ -10,9 +10,6 @@ import java.util.stream.Collectors;
 
 /**
  * One published version of a Modrinth project.
- *
- * <p>This is the unit Catalog compares. {@link #id()} is the identity and {@link #datePublished()}
- * the ordering — version numbers are display strings and are never parsed or compared.</p>
  */
 @Getter
 @Accessors(fluent = true)
@@ -34,9 +31,6 @@ public final class ModrinthVersion {
     /**
      * The plugin jar itself.
      *
-     * <p>Modrinth marks one file per version as primary. A handful of older versions mark none, in
-     * which case the first file is used, matching what the website offers for download.</p>
-     *
      * @return the primary file, or null if the version carries no files at all
      */
     public VersionFile primaryFile() {
@@ -52,10 +46,7 @@ public final class ModrinthVersion {
     }
 
     /**
-     * Every file other than the primary one — extensions, addons, resource packs.
-     *
-     * <p>These are the "supplementary resources" Catalog asks the operator to place, and never
-     * installs on its own.</p>
+     * Every file other than the primary one.
      *
      * @return the non-primary files, never null
      */

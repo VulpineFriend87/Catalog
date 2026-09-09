@@ -6,7 +6,7 @@ import lombok.experimental.Accessors;
 import java.util.List;
 
 /**
- * A Modrinth project, as returned by the project endpoints.
+ * A Modrinth project.
  *
  * <p>Search results come back as {@link SearchHit} instead, which carries a smaller and slightly
  * differently shaped set of fields.</p>

@@ -10,10 +10,6 @@ import java.util.HexFormat;
 
 /**
  * SHA-512 hashing of files.
- *
- * <p>SHA-512 rather than SHA-1 because it is what Catalog sends to Modrinth, and using one algorithm
- * end to end means a hash read from the API and a hash computed from disk are directly comparable
- * with no conversion step to get wrong.</p>
  */
 public final class Hashing {
 

@@ -16,21 +16,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Asks Modrinth what, if anything, is out of date.
+ * Asks Modrinth what is out of date.
  *
- * <p>Plugins are grouped by the channel they follow and each group costs one request, so a whole
- * server is answered in at most three no matter how many plugins are installed. Modrinth applies
- * the game version, loader and channel filters itself, which is what makes the answer trustworthy:
- * Catalog never decides compatibility from a version string.</p>
+ * <p>Plugins are grouped by the channel they follow and each group is one request, so a whole
+ * server is answered in at most three no matter how many plugins are installed.</p>
  */
 public final class UpdateChecker {
 
-    /**
-     * The one question this checker asks of Modrinth.
-     *
-     * <p>Narrowed to an interface so every rule below — grouping by channel, skipping pins, deciding
-     * what counts as newer — can be tested without a network.</p>
-     */
     @FunctionalInterface
     public interface Lookup {
 
@@ -80,9 +72,6 @@ public final class UpdateChecker {
 
     /**
      * Splits the tracked plugins by channel, skipping the ones that cannot produce an update.
-     *
-     * <p>A pinned plugin is left out entirely rather than checked and discarded: the operator froze
-     * it deliberately, and asking about it would only cost a slot in a request.</p>
      */
     private Map<ReleaseChannel, List<TrackedPlugin>> groupByChannel() {
 
@@ -134,10 +123,6 @@ public final class UpdateChecker {
 
     /**
      * Asks for each loader group in turn, narrowing to the plugins still unanswered.
-     *
-     * <p>Once a group answers for a plugin, that plugin is done: a wider group could only offer a
-     * build for a platform less specific than the one already found, which would be a sideways move
-     * dressed up as an update.</p>
      */
     private Map<String, ModrinthVersion> askByTier(Collection<String> hashes, ReleaseChannel channel,
                                                    ServerTarget target) {
@@ -166,15 +151,7 @@ public final class UpdateChecker {
     }
 
     /**
-     * Whether a version Modrinth offered is genuinely an upgrade.
-     *
-     * <p>Identity is the version id and order is the publish date. Version numbers are display
-     * strings chosen by authors and are never compared — that is the mistake which produces updates
-     * that do not exist.</p>
-     *
-     * <p>The date check is not redundant with the id check. Narrowing to one game version can make
-     * the newest <em>compatible</em> build older than what is installed: a server on an older
-     * Minecraft version whose plugin was updated by hand would otherwise be offered a downgrade.</p>
+     * Whether a version Modrinth offered is an upgrade.
      */
     private static boolean isNewer(TrackedPlugin plugin, ModrinthVersion version) {
 

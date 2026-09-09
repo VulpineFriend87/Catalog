@@ -12,33 +12,16 @@ import java.util.function.Predicate;
 
 /**
  * Works out what else has to be installed for a build to run.
- *
- * <p>Only what the author declared is used. Modrinth lets a dependency name an exact version, and
- * in practice nobody does — every required dependency published today points at a whole project.
- * So Catalog can say a project is missing and never that the installed one is the wrong build:
- * deciding that would mean inventing a rule the author did not write down.</p>
- *
- * <p>Required dependencies are followed through the whole graph and returned flat. Which of them
- * was reached through which is not a fact anyone acts on — the question being answered is what is
- * about to be written into the plugins folder.</p>
- *
- * <p>Optional dependencies are read from the root only. They are never installed on their own, so
- * what they in turn require is not this server's problem.</p>
  */
 public final class DependencyResolver {
 
     /**
      * How deep the graph is allowed to go before the answer is refused.
-     *
-     * <p>Real graphs are one level: of thirty-two plugins on a live server, seven declared a
-     * required dependency and none of those declared one of their own. This exists so a graph that
-     * is not real fails instead of walking Modrinth.</p>
      */
     private static final int MAX_DEPTH = 10;
 
     /**
-     * The one question the resolver asks of Modrinth, narrowed to an interface so every rule below
-     * can be tested without a network.
+     * This is an interface so every rule below can be tested without a network.
      */
     @FunctionalInterface
     public interface Versions {

@@ -6,11 +6,7 @@ import java.util.Deque;
 /**
  * A sliding-window limiter that keeps Catalog inside Modrinth's published request budget.
  *
- * <p>The documented allowance is 300 requests per minute per IP. Catalog stays well under it by
- * design — a full server check is a single bulk request — but a busy GUI session browsing projects
- * can add up, and being throttled mid-install is worse than waiting a moment.</p>
- *
- * <p>{@link #acquire()} blocks, so it must only ever be called from the client's own executor.</p>
+ * <p>The documented allowance is 300 requests per minute per IP.</p>
  */
 public final class RateLimiter {
 
@@ -19,7 +15,7 @@ public final class RateLimiter {
     private final int permits;
     private final Deque<Long> window = new ArrayDeque<>();
 
-    /** Set when the API answers 429, to honour its own back-off instead of guessing. */
+    /** Set when the API answers 429. */
     private long blockedUntil;
 
     public RateLimiter(int permitsPerMinute) {
@@ -56,9 +52,9 @@ public final class RateLimiter {
     }
 
     /**
-     * Applies a back-off requested by the API itself.
+     * Applies a back-off requested by the API.
      *
-     * @param seconds how long Modrinth asked us to wait
+     * @param seconds how long Modrinth asked to wait
      */
     public synchronized void backOff(long seconds) {
         blockedUntil = Math.max(blockedUntil, System.currentTimeMillis() + (seconds * 1000L));

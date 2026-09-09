@@ -44,10 +44,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The {@code /catalog} command.
- *
- * <p>Anything that can be answered from memory is, and anything that cannot runs off the main
- * thread. The plugin list refreshes its updates on every call rather than showing a cached number
- * with an age next to it: a manager that reports stale counts is a manager nobody trusts.</p>
  */
 @Command({"catalog", "ctlg", "cata", "ctl", "clg"})
 public final class MainCommand {
@@ -56,22 +52,19 @@ public final class MainCommand {
     private static final Duration CONFIRM_WINDOW = Duration.ofSeconds(30);
 
     /**
-     * How many words an argument that carries a flag may be.
+     * Word cap on a free-form argument that shares a command with a flag.
      *
-     * <p>Lamp wants a flag to be the last parameter and a greedy parameter to be the last
-     * parameter, so free-form text and a flag cannot both be greedy. A bounded list is the way out:
-     * a size cap makes it non-greedy at registration, while parsing still consumes every remaining
-     * word — and the flag is lifted out of the input before that happens, so it is never mistaken
-     * for one. The cap is only there to be far past anything anyone would type.</p>
+     * <p>Lamp gives the last parameter the rest of the input, and flags have to be last, so a query
+     * and {@code --page} cannot both be greedy. A capped list is non-greedy at registration and
+     * still consumes every remaining word at parse time.</p>
      */
     private static final int MAX_WORDS = 12;
 
     private final CatalogPaper plugin;
 
-    /** Pending removals, by sender name. Console counts as one sender, which is correct. */
     private final Map<String, Pending> confirmations = new ConcurrentHashMap<>();
 
-    /** Which screen the button that ran this command was on, if it was a button at all. */
+    /** Which screen the button that ran this command was on. */
     private final ClickContext context;
 
     public MainCommand(CatalogPaper plugin, ClickContext context) {
@@ -127,8 +120,6 @@ public final class MainCommand {
 
         String data = context.take(sender);
 
-        // The version argument is last and not single, so it is greedy: a payload can ride on the
-        // end of it, and this is the fallback for the rare command the listener never saw.
         String named = wanted == null || ClickContext.strip(wanted).isEmpty()
                 ? null : ClickContext.strip(wanted);
 
@@ -145,8 +136,6 @@ public final class MainCommand {
 
                 TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
 
-                // Naming a build of something already installed is a request to switch to it,
-                // which is the only way back from a release that broke the server.
                 if (tracked != null && named == null) {
                     send(sender, Messages.alreadyInstalled(tracked));
                     return;
@@ -160,8 +149,6 @@ public final class MainCommand {
                 List<ModrinthVersion> compatible = plugin.compatibleVersions(project.id());
                 ModrinthVersion version = choose(compatible, named);
 
-                // A build named outright, that this server is not declared compatible with. Only
-                // reachable from the unfiltered list, which only exists when it is switched on.
                 if (version == null && named != null
                         && plugin.getConfiguration().allowIncompatibleInstalls) {
                     version = choose(plugin.allVersions(project.id()), named);
@@ -174,15 +161,11 @@ public final class MainCommand {
                     return;
                 }
 
-                // The channel to follow from now on is the one just chosen. Anything stricter would
-                // leave a plugin installed on beta never seeing another update.
                 ReleaseChannel follow = version.versionType() == null
                         ? defaultChannel() : version.versionType();
 
                 if (tracked != null) {
 
-                    // Replacing a jar that already works is worth a second press. A fresh install
-                    // is not: there is nothing yet to lose.
                     if (!confirmed(sender, "switch:" + tracked.projectId() + ":" + version.id(), data)) {
                         send(sender, Messages.confirmSwitch(tracked, version,
                                 isOlder(version, tracked), screen(data)));
@@ -272,11 +255,7 @@ public final class MainCommand {
     }
 
     /**
-     * The newest build of each channel exactly, which is the choice the picker offers.
-     *
-     * <p>Matched on the channel a build was published as, not on which channels would accept it.
-     * A subscriber to beta also accepts releases, but "the newest beta" and "the newest build a
-     * beta subscriber would take" are different things, and only the first is a choice.</p>
+     * The newest build of each channel.
      *
      * @param compatible the compatible builds, newest first
      * @return the newest of each channel, channels with none absent
@@ -296,7 +275,7 @@ public final class MainCommand {
     }
 
     /**
-     * Finds the build someone named, by version id or by the number they can actually see.
+     * Finds the build someone named.
      *
      * @param wanted the id or version number, or null to take what installing would default to
      */
@@ -316,11 +295,9 @@ public final class MainCommand {
     }
 
     /**
-     * Rereads config.yml.
+     * Reloads config.yml.
      *
-     * <p>Only the settings are reloaded, never the tracking state: that is the record of what
-     * Catalog is responsible for, and rebuilding it from disk while the server runs would risk
-     * acting on a version of the truth nobody asked for.</p>
+     * <p>Only the settings are reloaded and not the tracking state.</p>
      */
     @Subcommand("reload")
     @Description("Reload the configuration")
@@ -393,7 +370,7 @@ public final class MainCommand {
     }
 
     /**
-     * Reads a soak window the way someone would write one.
+     * Reads a soak window.
      *
      * @param window minutes, or a value suffixed with m or h, or "default" to follow the config
      * @return the window in minutes, {@link TrackedPlugin#INHERIT_SOAK} for the default, or null if
@@ -421,18 +398,7 @@ public final class MainCommand {
     }
 
     /**
-     * Settings are only ever offered from the settings screen, and none of these commands can carry
-     * a payload — each has an argument after the plugin name, so the client refuses to parse
-     * anything trailing. Falling back to that screen is the same reasoning install uses.
-     */
-    /**
      * Reports what an action did, and redraws the screen it was taken on.
-     *
-     * <p>Only a button carries a screen. A command typed by hand answers in one line and draws
-     * nothing — repainting a whole screen because someone set a value is not what a command line
-     * does, and it buries the answer they asked for.</p>
-     *
-     * <p>Every command that changes something ends here, so none of them can decide otherwise.</p>
      *
      * @param data    what the button carried, or null when the command was typed
      * @param outcome the one line saying what happened
@@ -552,13 +518,6 @@ public final class MainCommand {
         });
     }
 
-    /**
-     * Removes a plugin, and offers the way back rather than asking first.
-     *
-     * <p>Nothing is unloaded until a restart, so a removal is reversible for as long as it takes to
-     * read the line saying it happened. A confirmation would spend a click on every removal to save
-     * one on the rare mistaken one; undo spends it only when there was a mistake.</p>
-     */
     @Subcommand("uninstall")
     @Description("Moves a plugin to the trash")
     @RequiresPermission("command.uninstall")
@@ -572,7 +531,6 @@ public final class MainCommand {
             return;
         }
 
-        // Blocked here as well as hidden from the buttons: the command can still be typed.
         if (plugin.isSelf(tracked)) {
             send(sender, Messages.cannotRemoveSelf(tracked.displayName()));
             return;
@@ -597,13 +555,6 @@ public final class MainCommand {
         });
     }
 
-    /**
-     * What a build declares, and a way to act on each of it.
-     *
-     * <p>Deliberately not a wizard: nothing here remembers that an install was interrupted to come
-     * and look. Every button does one thing, so there is no stack of half-finished intentions to
-     * unwind.</p>
-     */
     @Subcommand("dependencies")
     @Description("What a plugin declares it needs")
     @RequiresPermission("command.info")
@@ -657,11 +608,7 @@ public final class MainCommand {
     }
 
     /**
-     * Draws what a build declares, whether it was asked for or run into on the way to installing.
-     *
-     * <p>The same screen either way. A blocked install used to get a list of its own that showed
-     * the same projects without letting anyone act on them, which meant the one thing you might
-     * want — a particular build of the dependency — was the one thing it could not offer.</p>
+     * Draws the dependency screen.
      */
     private void showDependencies(CommandSender sender, ModrinthProject project,
                                   ModrinthVersion version, DependencyResolver.Resolution resolution,
@@ -679,7 +626,7 @@ public final class MainCommand {
     }
 
     /**
-     * Rows for projects the author said must not be here, which are only listed when they are.
+     * Rows for projects the author marked as incompatible.
      */
     private List<DependencyView> conflicts(List<String> projectIds) {
 
@@ -699,7 +646,7 @@ public final class MainCommand {
     }
 
     /**
-     * Turns resolved requirements into rows, naming every project in one request.
+     * Turns resolved requirements into rows.
      */
     private List<DependencyView> views(List<DependencyResolver.Requirement> requirements) {
 
@@ -728,7 +675,7 @@ public final class MainCommand {
     }
 
     /**
-     * What to install for each missing requirement, skipping any this server cannot run.
+     * What to install for each missing requirement.
      */
     private List<CatalogPaper.Pending> pendingFor(List<DependencyResolver.Requirement> missing) {
 
@@ -783,7 +730,7 @@ public final class MainCommand {
     }
 
     /**
-     * Which answer to the dependency question a payload carries, or null when it is not an answer.
+     * Which answer to the dependency question a payload carries.
      */
     private static String intent(String data) {
 
@@ -812,11 +759,7 @@ public final class MainCommand {
     }
 
     /**
-     * Puts one removal back.
-     *
-     * <p>Addressed by the name the jar is filed under, which is unique per removal, so an undo
-     * button further up the chat still means the removal it was offered for. A name typed by hand
-     * resolves to the most recent removal of that plugin instead.</p>
+     * Restores a trashed plugin.
      */
     @Subcommand("trash restore")
     @Description("Put a removed plugin back")
@@ -849,11 +792,7 @@ public final class MainCommand {
     }
 
     /**
-     * Deletes a removal permanently, or all of them.
-     *
-     * <p>{@code all} is asked about and a single removal is not: that one was already removed once
-     * on purpose, while emptying the bin is a different size of mistake. The argument is last and
-     * not single, so it is greedy and the confirmation payload can ride on the end of it.</p>
+     * Deletes a trash entry permanently (or all of them).
      */
     @Subcommand("trash delete")
     @Description("Delete a removal permanently")
@@ -920,10 +859,7 @@ public final class MainCommand {
     }
 
     /**
-     * Finds a removal by its stored name first, and only then by what it is called.
-     *
-     * <p>That order is what keeps buttons exact and typing convenient: a button always carries the
-     * stored name, and only a person types "luckperms" and means the last one of those.</p>
+     * Finds a trashed plugin by file name and plugin name.
      */
     private TrashEntry resolveTrashed(String query) {
 
@@ -978,17 +914,10 @@ public final class MainCommand {
         done(sender, context.take(sender), Messages.held(tracked.displayName(), held));
     }
 
-    // --- shared work ------------------------------------------------------------------------
+    // --- shared ------------------------------------------------------------------------
 
     /**
-     * Draws the screen the button was on again, and only then says what happened.
-     *
-     * <p>A confirmation on its own leaves the screen above it lying: the button that was just
-     * pressed is still offering to do the thing it already did. Redrawing puts the truth at the
-     * bottom of the chat, where the eye already is, and the outcome lands under it.</p>
-     *
-     * <p>A typed command carries no payload and gets only the outcome, which is right — there is no
-     * screen to put back, and nobody who types a one-line command wants a page in return.</p>
+     * Draws the screen the button was on again, and then states the action taken.ì
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
@@ -1019,7 +948,7 @@ public final class MainCommand {
     }
 
     /**
-     * Renders one plugin's settings. Answers from memory, so it does not block.
+     * Renders one plugin's settings.
      */
     private void showSettings(CommandSender sender, TrackedPlugin tracked, String from) {
         abandonConfirmation(sender);
@@ -1031,7 +960,7 @@ public final class MainCommand {
     }
 
     /**
-     * Forgets a removal that was waiting to be confirmed.
+     * Forgets a removal waiting to be confirmed.
      *
      * <p>Called whenever a screen is drawn, which is what makes Cancel actually cancel: the button
      * navigates away, and without this the confirmation would still be armed, so pressing the same
@@ -1043,14 +972,6 @@ public final class MainCommand {
 
     /**
      * Whether to go ahead, or to ask first.
-     *
-     * <p>A click says outright which it is, because the confirmation button carries a payload the
-     * button that asked does not. Pressing the same remove or version button twice therefore asks
-     * twice, instead of quietly carrying the action out — which is what happened while confirming
-     * meant nothing more than running the same command again.</p>
-     *
-     * <p>A typed command has no payload to carry, so there it still means exactly that: the same
-     * command a second time inside the window. Console cannot click, and needs a way through.</p>
      *
      * @param action identifies precisely what is being confirmed
      * @param data   the payload the command arrived with, or null if it was typed
@@ -1074,7 +995,7 @@ public final class MainCommand {
     }
 
     /**
-     * The screen a payload points at, with any confirmation marker peeled off.
+     * The screen a payload points at.
      */
     private static String screen(String data) {
 
@@ -1097,7 +1018,9 @@ public final class MainCommand {
     }
 
     /**
-     * Renders the plugin list. Blocks, so it must be called off the main thread.
+     * Renders the plugin list.
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
      *
      * @param refresh whether to ask Modrinth again first, which is wasted after an action that
      *                already knows what changed
@@ -1126,10 +1049,6 @@ public final class MainCommand {
 
     /**
      * Builds and sends the project page.
-     *
-     * <p>Runs on an async thread and asks Modrinth up to three times: the project, its newest
-     * compatible build, and the names of what that build requires. Everything is gathered before
-     * anything is drawn, so a half-answered page is never shown.</p>
      */
     private void showProject(CommandSender sender, String query) {
 
@@ -1148,8 +1067,6 @@ public final class MainCommand {
 
             ReleaseChannel channel = tracked != null ? tracked.channel() : defaultChannel();
 
-            // One request answers all three questions: what the followed channel offers, what
-            // installing would fetch, and how many builds a picker would have to show.
             List<ModrinthVersion> compatible = compatibleOrEmpty(project.id());
             ModrinthVersion latest = newestOn(compatible, channel);
 
@@ -1183,7 +1100,9 @@ public final class MainCommand {
     }
 
     /**
-     * Renders a page of search results. Blocks, so it must be called off the main thread.
+     * Renders a page of search results.
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
      */
     private void showSearch(CommandSender sender, String query, int page) {
 
@@ -1209,7 +1128,7 @@ public final class MainCommand {
     }
 
     /**
-     * The update on offer for a plugin, checking again if the last answer did not mention it.
+     * The update offered for a plugin checked again if the cache doesn't have it.
      */
     private UpdateCandidate candidateFor(TrackedPlugin tracked) {
 
@@ -1223,9 +1142,6 @@ public final class MainCommand {
         return plugin.updatesByProject().get(tracked.projectId());
     }
 
-    /**
-     * Turns the required dependencies of a build into names, in one request.
-     */
     private List<ProjectView.Requirement> requirements(ModrinthVersion version) {
         return declared(version, DependencyType.REQUIRED);
     }
@@ -1234,12 +1150,6 @@ public final class MainCommand {
         return declared(version, DependencyType.OPTIONAL);
     }
 
-    /**
-     * The projects a build names, for the summary rows on its page.
-     *
-     * <p>Names only, with whether each is here. Anything that can be acted on lives on the
-     * dependency screen, so this stays a sentence rather than becoming a second set of controls.</p>
-     */
     private List<ProjectView.Requirement> declared(ModrinthVersion version, DependencyType type) {
 
         if (version == null) {
@@ -1270,7 +1180,6 @@ public final class MainCommand {
 
         } catch (Exception e) {
 
-            // Names are a nicety; which ones are missing is the part that matters.
             for (String id : ids) {
                 requirements.add(new ProjectView.Requirement(id, installed.contains(id)));
             }
@@ -1293,8 +1202,6 @@ public final class MainCommand {
 
     /**
      * Who to credit for a project.
-     *
-     * <p>A missing answer is not worth failing a page over, so it simply goes unsaid.</p>
      */
     private String author(String projectId) {
 
@@ -1326,26 +1233,7 @@ public final class MainCommand {
     }
 
     /**
-     * What installing without naming a version should fetch.
-     *
-     * <p>The newest stable build, because that is what almost everyone wants and nobody should be
-     * handed an alpha by accident. When a project has never published one for this server the
-     * newest of whatever exists is offered instead, and the button says so — refusing outright and
-     * calling it "no build for this server" is a lie about a project that plainly has one.</p>
-     */
-
-    /**
-     * Whether a build is genuinely newer than what is installed.
-     *
-     * <p>A different id is not enough. Narrowing to one game version can make the newest compatible
-     * build an older one, and offering that is how an operator gets talked into a downgrade.</p>
-     */
-    /**
-     * Whether a build was published before the one installed, which makes choosing it a rollback.
-     *
-     * <p>By publish date, never by reading the version numbers: those are display strings their
-     * authors chose, and deciding a rollback from one is how a manager talks somebody into the
-     * opposite of what they asked for.</p>
+     * Whether a build is older than what is installed.
      */
     private static boolean isOlder(ModrinthVersion version, TrackedPlugin tracked) {
 
@@ -1353,6 +1241,9 @@ public final class MainCommand {
                 && version.datePublished().isBefore(tracked.datePublished());
     }
 
+    /**
+     * Whether a build is newer than what is installed.
+     */
     private static boolean isNewer(ModrinthVersion latest, TrackedPlugin tracked) {
 
         if (latest == null || tracked == null || tracked.pinnedVersionId() != null) {
@@ -1383,21 +1274,9 @@ public final class MainCommand {
     }
 
     /**
-     * Finds a tracked plugin the way a person would name it.
+     * A project found by slug or id.
      *
-     * <p>An exact match on the display name, slug or project id wins; otherwise the first whose
-     * name starts with what was typed, so partial names work.</p>
-     */
-    /**
-     * The project a name, slug or id refers to, however it was written.
-     *
-     * <p>Tracked plugins answer first and without a request, which is what makes the display names
-     * offered by tab completion work as arguments. Then Modrinth's project endpoint, which takes a
-     * slug or an id and nothing else. A name that is neither only reaches its search, so the
-     * closest match stands in for the exact one.</p>
-     *
-     * <p>Every command that takes a plugin goes through here, so they all accept the same things.
-     * Blocks, so it must be called off the main thread.</p>
+     * <p>Blocks, so it must be called off the main thread.</p>
      *
      * @param query what was typed or clicked, payload and all
      * @return the project, or null when nothing matched
@@ -1411,6 +1290,12 @@ public final class MainCommand {
         return project != null ? project : firstSearchHit(wanted);
     }
 
+    /**
+     * Finds a tracked plugin.
+     *
+     * <p>An exact match on the display name, slug or project id wins; otherwise the first whose
+     * name starts with what was typed, so partial names work.</p>
+     */
     private TrackedPlugin resolve(String query) {
 
         String wanted = ClickContext.strip(query).toLowerCase(Locale.ROOT);
@@ -1449,10 +1334,6 @@ public final class MainCommand {
         return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
-    /**
-     * Sends a block of lines with an empty one above it, so consecutive messages do not read as one
-     * wall of text in a busy chat.
-     */
     private static void send(CommandSender sender, List<Component> lines) {
 
         sender.sendMessage(Component.empty());

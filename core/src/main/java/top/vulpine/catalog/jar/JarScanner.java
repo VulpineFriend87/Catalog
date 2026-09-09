@@ -18,10 +18,6 @@ import java.util.stream.Stream;
 
 /**
  * Walks the plugins folder and turns it into a list of hashed, inspected jars.
- *
- * <p>The listing is deliberately shallow. Everything Catalog keeps lives in {@code plugins/Catalog/}
- * and the update folder is {@code plugins/update/}; neither is a plugin, and neither should be
- * hashed, so not recursing is both cheaper and safer than filtering afterwards.</p>
  */
 public final class JarScanner {
 
@@ -42,10 +38,6 @@ public final class JarScanner {
 
     /**
      * Scans the folder, reusing hashes for files that have not changed.
-     *
-     * <p>Hashing a full plugins folder is not free, and almost nothing changes between restarts, so
-     * a jar whose size and modification time match a previous scan keeps its recorded hash and
-     * descriptor.</p>
      *
      * @param previous the result of an earlier scan, may be empty
      * @return what was found
@@ -85,8 +77,7 @@ public final class JarScanner {
             try {
                 hash = Hashing.sha512(file);
             } catch (IOException e) {
-                // A jar that cannot be read is reported rather than skipped: on Windows this is
-                // usually a lock, and the operator needs to know why it is missing from the index.
+                // A jar that cannot be read is reported: on Windows this is usually a lock
                 unreadable.add(new InstalledJar(file, size, lastModified, null, PluginDescriptor.unknown()));
                 continue;
             }

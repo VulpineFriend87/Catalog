@@ -8,11 +8,7 @@ import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import java.time.Instant;
 
 /**
- * What was removed, written next to the jar in the trash so it can be put back.
- *
- * <p>Everything needed to restore is recorded here rather than looked up later, because by the
- * time someone wants a plugin back the version they had may no longer be the newest, and on
- * Modrinth it may not be listed at all.</p>
+ * What was removed.
  */
 @Getter
 @Builder

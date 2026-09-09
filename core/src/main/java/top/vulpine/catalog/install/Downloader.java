@@ -82,8 +82,7 @@ public final class Downloader {
     /**
      * Empties the staging directory.
      *
-     * <p>Called on startup: anything still in here is the remains of a download that was
-     * interrupted, and keeping it would only risk it being mistaken for a finished one.</p>
+     * <p>Anything still in here is the remains of a download that was interrupted.</p>
      */
     public void clean() {
 
@@ -97,9 +96,7 @@ public final class Downloader {
                 Files.deleteIfExists(entry);
             }
 
-        } catch (IOException ignored) {
-            // Leftovers are harmless on their own; the next download overwrites its own file.
-        }
+        } catch (IOException ignored) {}
     }
 
     private static void verify(Path file, VersionFile expected) {
@@ -126,17 +123,13 @@ public final class Downloader {
 
     /**
      * Refuses a jar compiled for a newer Java than this server runs.
-     *
-     * <p>A jar that is too new does not fail politely: the server throws
-     * {@code UnsupportedClassVersionError} at boot and the plugin is simply absent. Catching it
-     * here turns that into a sentence someone can act on.</p>
      */
     private static void verifyRunnable(Path file, int javaFeature) {
 
         PluginDescriptor descriptor = JarInspector.inspect(file);
         int major = descriptor.bytecodeMajor();
 
-        // Zero means nothing readable was found, which is not evidence of a problem.
+        // Zero means nothing readable was found
         if (major <= 0) {
             return;
         }

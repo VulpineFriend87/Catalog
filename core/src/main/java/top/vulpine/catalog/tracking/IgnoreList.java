@@ -16,9 +16,6 @@ import java.util.Set;
 /**
  * The projects and files the automatic scan must leave alone.
  *
- * <p>Untracking a plugin has to be remembered, otherwise the scan simply adopts it again on the
- * next boot and the operator's decision is undone by the feature that is supposed to be helpful.</p>
- *
  * <p>Both a project id and a hash are recorded. The project id survives updates, so the plugin
  * stays ignored as new versions appear; the hash catches a jar that Modrinth cannot identify at
  * all, which has no project id to remember.</p>
@@ -35,13 +32,6 @@ public final class IgnoreList {
         this.file = file;
     }
 
-    /**
-     * Loads the list, treating a missing or unreadable file as empty.
-     *
-     * <p>Unlike the tracking store, failing soft is right here: the worst case is that a plugin the
-     * operator untracked gets offered again, which is visible and easily undone. Refusing to start
-     * over it would be out of proportion.</p>
-     */
     public void load() {
 
         if (!Files.isRegularFile(file)) {

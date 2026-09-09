@@ -63,7 +63,7 @@ public final class TeamMember {
             }
         }
 
-        return best == null ? null : best.displayName();
+        return best.displayName();
     }
 
     @Getter

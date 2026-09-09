@@ -20,14 +20,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Reads and writes {@code tracked.json}, the record of every plugin Catalog manages.
+ * Reads and writes {@code tracked.json}.
  *
- * <p>This file is also the lockfile: it holds the project id, version id, hash and file name of
- * everything installed, which is enough to reproduce the same set of plugins somewhere else.</p>
- *
- * <p>Kept in memory as a map keyed by project id, since that is the identity Modrinth guarantees is
- * unique. File names are not unique enough to key on — an operator can rename a jar at any
- * moment.</p>
+ * <p>Kept in memory as a map keyed by project id. File names are not unique enough to key on.</p>
  */
 public final class TrackingStore {
 
@@ -43,11 +38,6 @@ public final class TrackingStore {
 
     /**
      * Loads the file into memory, replacing anything already held.
-     *
-     * <p>A missing file is normal — it is what a first run looks like — and yields an empty store.
-     * A file that exists but cannot be parsed is <em>not</em> treated as empty: that would silently
-     * discard every per-plugin setting the operator configured. It is moved aside and reported, so
-     * the caller can tell them where it went.</p>
      *
      * @throws TrackingException if the file exists but cannot be read or parsed
      */
@@ -99,8 +89,7 @@ public final class TrackingStore {
      * Writes the store to disk.
      *
      * <p>Written to a temporary file and moved into place. A crash midway through would otherwise
-     * leave truncated JSON, which the next load would refuse — losing the settings for every
-     * tracked plugin over one bad moment.</p>
+     * leave truncated JSON, which the next load would refuse.</p>
      *
      * @throws TrackingException if the file cannot be written
      */

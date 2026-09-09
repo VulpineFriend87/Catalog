@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The outcome of one pass over the plugins folder.
+ * The outcome of one scan.
  */
 @Getter
 @Accessors(fluent = true)

@@ -11,11 +11,10 @@ import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import java.util.List;
 
 /**
- * Everything the info page shows about one project, gathered before a single line is drawn.
+ * Everything the info page shows about one project.
  *
  * <p>It exists so that {@link Messages} never has to reach for the network or the tracking store
- * halfway through building a message: the page is rendered from a value that is already complete,
- * or it is not rendered at all.</p>
+ * halfway through building a message: the page is rendered from a value that is already complete.</p>
  */
 @Getter
 @Builder
@@ -36,32 +35,33 @@ public final class ProjectView {
      */
     private final ModrinthVersion installTarget;
 
-    /** Null when the project is not installed here. */
+    /** Null when the project is not installed. */
     private final TrackedPlugin installed;
 
-    /** True when this page is Catalog's own, which may be updated but never removed from here. */
+    /** True when this page is Catalog's own, which may be updated but never removed. */
     private final boolean self;
 
     private final boolean updateAvailable;
 
-    /** The loaders this server can use, so the project's list can show which ones apply. */
+    /** The loaders this server can use. */
     @Singular
     private final List<String> platformLoaders;
 
+    /** Required dependencies. */
     @Singular
     private final List<Requirement> requirements;
 
-    /** What the build can use but does not need, which is never installed on its own. */
+    /** Optional dependencies. */
     @Singular
     private final List<Requirement> optionals;
 
-    /** Whether the build declares anything at all, and so has a dependency screen worth opening. */
+    /** Whether the build declares any type of dependency. */
     public boolean declaresAnything() {
         return !requirements.isEmpty() || !optionals.isEmpty();
     }
 
     /**
-     * A project the latest build declares it needs.
+     * A project the latest build declares as a dependency.
      *
      * @param name      the project's title, or its id when the title could not be fetched
      * @param installed whether this server already has it

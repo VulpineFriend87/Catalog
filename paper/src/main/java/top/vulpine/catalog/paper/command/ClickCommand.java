@@ -7,11 +7,6 @@ import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 /**
  * The command every button in chat actually runs.
  *
- * <p>Registered through Lamp like the rest of the command surface, so the client is given it in its
- * copy of the command tree and sends it without asking whether an unrecognised command was really
- * meant. Its one argument is last and not single, so it is greedy and swallows the screen and the
- * real command whole.</p>
- *
  * <p>It carries no permission of its own. What it dispatches runs as whoever pressed the button and
  * is checked like any other command, so this can never be a way around one.</p>
  */

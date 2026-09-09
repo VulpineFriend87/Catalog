@@ -22,16 +22,11 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Everything about <em>how</em> a Modrinth request is sent, kept apart from <em>which</em> requests
- * exist.
+ * Everything about how a request is sent.
  *
- * <p>Rate limiting, conditional requests, back-off, threading and JSON decoding all live here.
- * They change for reasons that have nothing to do with the API surface, which is why they no longer
- * sit alongside the endpoint list in
- * {@link top.vulpine.catalog.modrinth.ModrinthClient}.</p>
+ * <p>Rate limiting, conditional requests, back-off, threading, and JSON decoding all live here.</p>
  *
- * <p>Every method returns a future and every request runs on this transport's own executor, so no
- * call can reach the server main thread.</p>
+ * <p>Every method returns a future, and every request runs on this transport's own executor.</p>
  */
 public final class ApiTransport implements AutoCloseable {
 
@@ -101,7 +96,7 @@ public final class ApiTransport implements AutoCloseable {
             HttpResponse<String> response = send(request, url);
 
             if (response.statusCode() == 304 && cached != null) {
-                return Json.gson().<T>fromJson(cached.body(), type);
+                return Json.gson().fromJson(cached.body(), type);
             }
 
             if (cache != null) {
@@ -109,7 +104,7 @@ public final class ApiTransport implements AutoCloseable {
                         .ifPresent(etag -> cache.store(url, etag, response.body()));
             }
 
-            return Json.gson().<T>fromJson(response.body(), type);
+            return Json.gson().fromJson(response.body(), type);
 
         }, executor);
     }
@@ -137,7 +132,7 @@ public final class ApiTransport implements AutoCloseable {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8));
 
-            return Json.gson().<T>fromJson(send(request, url).body(), type);
+            return Json.gson().fromJson(send(request, url).body(), type);
 
         }, executor);
     }
@@ -195,11 +190,8 @@ public final class ApiTransport implements AutoCloseable {
     }
 
     /**
-     * Sends a prepared request, honouring the rate limiter and retrying once if Modrinth asks us to
+     * Sends a prepared request, honoring the rate limiter and retrying once if Modrinth asks to
      * slow down.
-     *
-     * <p>Exactly one retry, on purpose. If the second attempt is throttled too, the problem is real
-     * and belongs in front of the operator rather than buried in a loop.</p>
      */
     private HttpResponse<String> send(HttpRequest.Builder builder, String url) {
 

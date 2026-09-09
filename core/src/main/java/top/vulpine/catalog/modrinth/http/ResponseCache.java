@@ -14,8 +14,7 @@ import java.util.HexFormat;
  * An on-disk store of ETags and response bodies for GET requests.
  *
  * <p>Lets a repeated check cost a {@code 304 Not Modified} instead of a full body, which matters
- * for the version listings the GUI hits repeatedly. Purely an optimisation: every operation fails
- * quietly, and a cache miss is always safe.</p>
+ * for the version listings the GUI hits repeatedly. Purely an optimization.</p>
  */
 public final class ResponseCache {
 

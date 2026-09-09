@@ -1,8 +1,7 @@
 package top.vulpine.catalog.modrinth;
 
 /**
- * Thrown when the Modrinth API cannot be reached, answers with an error status, or returns a body
- * that cannot be read.
+ * Thrown when the Modrinth API cannot be reached, answers with an error status, or returns a body that cannot be read.
  */
 public class ModrinthException extends RuntimeException {
 
