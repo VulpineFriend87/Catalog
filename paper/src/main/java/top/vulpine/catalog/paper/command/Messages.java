@@ -964,7 +964,7 @@ public final class Messages {
         }
 
         for (SearchHit hit : results.hits()) {
-            out.add(hit(hit, installedProjects.contains(hit.projectId()), null));
+            out.add(hit(hit, installedProjects.contains(hit.projectId())));
         }
 
         int pages = Math.max((results.totalHits() + PAGE - 1) / PAGE, 1);
@@ -991,7 +991,7 @@ public final class Messages {
         return out;
     }
 
-    private static Component hit(SearchHit result, boolean installed, String here) {
+    private static Component hit(SearchHit result, boolean installed) {
 
         Component hover = Component.text(result.title(), TEXT)
                 .append(Component.newline())
@@ -1010,7 +1010,7 @@ public final class Messages {
                 .append(Component.text(result.title(), TEXT))
                 .append(Component.text("  " + compact(result.downloads()), MUTED))
                 .append(installed ? Component.text("  installed", DONE) : Component.empty())
-                .clickEvent(ClickEvent.runCommand(from("/catalog info " + result.slug(), here)))
+                .clickEvent(ClickEvent.runCommand(from("/catalog info " + result.slug(), null)))
                 .hoverEvent(HoverEvent.showText(hover))
                 .build();
     }
