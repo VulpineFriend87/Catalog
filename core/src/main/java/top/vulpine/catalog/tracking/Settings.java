@@ -7,7 +7,7 @@ import top.vulpine.catalog.tracking.model.TrackingDefaults;
 import java.util.function.Supplier;
 
 /**
- * What a plugin does on its own.
+ * The settings of a tracked plugin.
  */
 public final class Settings {
 
