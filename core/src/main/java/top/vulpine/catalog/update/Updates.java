@@ -28,7 +28,7 @@ import java.util.Set;
 import java.util.function.IntSupplier;
 
 /**
- * What is out of date, and what to do about it unattended.
+ * What is out of date, and what to install automatically.
  *
  * <p>Every method blocks, so none may be called on the server main thread.</p>
  */

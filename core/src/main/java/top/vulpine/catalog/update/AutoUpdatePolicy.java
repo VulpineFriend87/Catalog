@@ -10,7 +10,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Decides which available updates Catalog is allowed to install without being asked.
+ * Decides which available updates Catalog is allowed to install automatically.
  *
  * <p>Nothing here touches the disk or the network, so it's testable without a server.</p>
  */
@@ -26,7 +26,7 @@ public final class AutoUpdatePolicy {
     }
 
     /**
-     * The updates that should be applied right now, without asking.
+     * The updates that should be applied automatically right now.
      *
      * @param candidates what the check found
      * @param now        the moment to judge the soak window against
@@ -58,7 +58,7 @@ public final class AutoUpdatePolicy {
     }
 
     /**
-     * Whether a build is still too new to install unattended.
+     * Whether a build is still too new to install automatically.
      *
      * @param candidate the update on offer
      * @param now       the moment to judge against

@@ -31,7 +31,7 @@ public final class Settings {
     }
 
     /**
-     * Decides whether Catalog may update this plugin without being asked.
+     * Decides whether Catalog may update this plugin automatically.
      *
      * @param plugin the plugin to change
      * @param on     true to let it update itself
@@ -42,7 +42,8 @@ public final class Settings {
     }
 
     /**
-     * Sets how long a build must have been public before this plugin will take it unattended.
+     * Sets how long a build must have been public before this plugin installs it
+     * automatically.
      *
      * @param plugin  the plugin to change
      * @param minutes the window, or {@link TrackedPlugin#INHERIT_SOAK} to follow the config
