@@ -14,6 +14,7 @@ import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 import top.vulpine.catalog.hash.Hashing;
 import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.install.Downloader;
+import top.vulpine.catalog.install.Installer;
 import top.vulpine.catalog.install.InstallException;
 import top.vulpine.catalog.jar.JarScanner;
 import top.vulpine.catalog.jar.model.InstalledJar;
@@ -39,6 +40,7 @@ import top.vulpine.catalog.tracking.TrackingStore;
 import top.vulpine.catalog.tracking.model.ReconcileReport;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
+import top.vulpine.catalog.trash.Removals;
 import top.vulpine.catalog.trash.TrashBin;
 import top.vulpine.catalog.trash.model.TrashEntry;
 import top.vulpine.catalog.update.AutoUpdatePolicy;
@@ -89,15 +91,8 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private TrashBin trash;
     private Settings settings;
     private Projects projects;
-
-    /**
-     * Jars this server would not let us delete, to be removed once it has let go of them.
-     *
-     * <p>A set drained by a shutdown hook rather than {@link java.io.File#deleteOnExit()}, because
-     * a removal can be undone and {@code deleteOnExit} cannot be called off: an undone removal
-     * would still lose the file at the next shutdown.</p>
-     */
-    private final Set<Path> deleteAtShutdown = ConcurrentHashMap.newKeySet();
+    private Removals removals;
+    private Installer installer;
 
     /**
      * When this server came up.
@@ -166,6 +161,8 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         this.trash = new TrashBin(data.resolve("trash"));
         this.settings = new Settings(tracking, this::defaults);
         this.projects = new Projects(this, modrinth, tracking);
+        this.removals = new Removals(this, trash, tracking, this::defaults, startedAt);
+        this.installer = new Installer(this, downloader, tracking, removals, this::defaults);
 
         Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
                 .permissionForAnnotation(RequiresPermission.class, annotation ->
@@ -471,7 +468,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         for (TrackedPlugin plugin : tracking.pendingRestart()) {
 
             // Still sitting there waiting for a restart, which is the normal case.
-            if (isStaged(stagedName(plugin))) {
+            if (isStaged(Removals.stagedName(plugin))) {
                 continue;
             }
 
@@ -535,16 +532,6 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
             Logger.info(Action.UPDATE, plugin.displayName() + " is now "
                     + became.versionNumber() + ", applied without a restart by something else.");
         }
-    }
-
-    /**
-     * Where a staged build is sitting in the update folder.
-     *
-     * <p>Falls back to the installed name for records written before builds were staged under the
-     * name their author published, so an update queued by an older version is still found.</p>
-     */
-    private static String stagedName(TrackedPlugin plugin) {
-        return plugin.stagedAs() != null ? plugin.stagedAs() : plugin.fileName();
     }
 
     private static String hashOf(Path jar) {
@@ -633,7 +620,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @param candidate the update to stage
      */
     public void stage(UpdateCandidate candidate) {
-        stage(candidate.plugin(), candidate.version());
+        saving(() -> installer.stage(candidate));
     }
 
     /**
@@ -645,17 +632,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @param version the build to put in its place
      */
     public void stage(TrackedPlugin plugin, ModrinthVersion version) {
-
-        Path staged = downloader.fetch(version, Runtime.version().feature());
-
-        // The downloader already writes it under the file name Modrinth publishes it as.
-        String published = staged.getFileName().toString();
-
-        applyAtRestart(staged, published);
-
-        plugin.stagedAs(published);
-        plugin.pendingRestart(true);
-        saveTracking();
+        saving(() -> installer.stage(plugin, version));
     }
 
     /**
@@ -684,38 +661,18 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      */
     public List<TrackedPlugin> install(List<Pending> pending, String by) {
 
-        Map<Pending, Path> staged = new LinkedHashMap<>();
+        List<Installer.Pending> work = new ArrayList<>();
 
         for (Pending one : pending) {
-            staged.put(one, downloader.fetch(one.version(), Runtime.version().feature()));
+            work.add(new Installer.Pending(one.project(), one.version(), one.channel(),
+                    one.explicit()));
         }
 
-        TrackingDefaults defaults = defaults();
-        List<TrackedPlugin> installed = new ArrayList<>();
-
-        for (Map.Entry<Pending, Path> entry : staged.entrySet()) {
-
-            Pending one = entry.getKey();
-            String hash = one.version().primaryFile().sha512();
-            String fileName = entry.getValue().getFileName().toString();
-
-            place(entry.getValue(), pluginsFolder().resolve(fileName), hash);
-
-            TrackedPlugin tracked = TrackedPlugin.of(one.version(), fileName, hash,
-                    one.channel(), by);
-
-            tracked.name(one.project().title());
-            tracked.slug(one.project().slug());
-            tracked.autoUpdate(defaults.autoUpdate());
-            tracked.explicit(one.explicit());
-            tracked.pendingLoad(!stillRunning(hash));
-
-            tracking.put(tracked);
-            installed.add(tracked);
+        try {
+            return installer.install(work, by);
+        } catch (TrackingException e) {
+            throw new InstallException(e.getMessage(), e);
         }
-
-        saveTracking();
-        return installed;
     }
 
     /**
@@ -741,41 +698,6 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     }
 
     /**
-     * Puts a downloaded build into the plugins folder.
-     *
-     * <p>The hash is what makes that safe. A <em>different</em> build sharing the file name is a
-     * genuine collision and still refused, because replacing a jar the server has open is what the
-     * update folder exists for.</p>
-     */
-    private void place(Path staged, Path target, String sha512) {
-
-        if (Files.exists(target)) {
-
-            boolean sameBuild = sha512 != null && sha512.equalsIgnoreCase(hashOf(target));
-
-            if (!sameBuild || !deleteAtShutdown.remove(target)) {
-                throw new InstallException(target.getFileName()
-                        + " already exists in the plugins folder.");
-            }
-
-            try {
-                Files.deleteIfExists(staged);
-            } catch (IOException ignored) {
-                // Staging is emptied on startup, so a download left behind costs one file until then.
-            }
-
-            return;
-        }
-
-        try {
-            Files.move(staged, target);
-        } catch (IOException e) {
-            throw new InstallException("Could not write " + target.getFileName() + ": "
-                    + e.getMessage(), e);
-        }
-    }
-
-    /**
      * Moves a plugin's jar to the trash and stops tracking it.
      *
      * @param plugin the plugin to remove
@@ -785,31 +707,23 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      */
     public TrashBin.Result uninstall(TrackedPlugin plugin, String by) {
 
-        Path jar = pluginsFolder().resolve(plugin.fileName());
-        TrashBin.Result result = null;
-
-        if (Files.isRegularFile(jar)) {
-
-            result = trash.bin(jar, plugin, by);
-
-            if (!result.deleted()) {
-                deleteAtShutdown.add(jar);
-            }
+        if (!removals.cancelStagedFor(plugin)) {
+            Logger.warn(Action.UPDATE, "A staged update for " + plugin.displayName()
+                    + " is still in the update folder and should be deleted by hand.");
         }
 
-        discardStagedUpdate(plugin);
-
-        tracking.remove(plugin.projectId());
-        saveTracking();
-
-        return result;
+        try {
+            return removals.uninstall(plugin, by);
+        } catch (TrackingException e) {
+            throw new InstallException(e.getMessage(), e);
+        }
     }
 
     /**
      * Everything currently in the trash, newest removal first.
      */
     public List<TrashEntry> trashed() {
-        return trash.list();
+        return removals.list();
     }
 
     /**
@@ -819,7 +733,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @return the entry, or null if it has already been restored or pruned
      */
     public TrashEntry trashed(String storedAs) {
-        return trash.find(storedAs);
+        return removals.find(storedAs);
     }
 
     /**
@@ -832,87 +746,11 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      */
     public TrackedPlugin restore(TrashEntry entry, String by) {
 
-        if (entry.projectId() != null && tracking.byProjectId(entry.projectId()) != null) {
-            throw new InstallException(entry.displayName() + " is already installed.");
+        try {
+            return removals.restore(entry, by);
+        } catch (TrackingException e) {
+            throw new InstallException(e.getMessage(), e);
         }
-
-        Path target = pluginsFolder().resolve(entry.fileName());
-
-        // A removal this server would not carry out left the jar exactly where it belongs, so
-        // undoing that one is a matter of calling the deletion off rather than copying anything.
-        if (deleteAtShutdown.remove(target)) {
-            trash.discard(entry);
-        } else {
-            trash.restore(entry, target);
-        }
-
-        return track(entry, by);
-    }
-
-    /**
-     * Rebuilds the tracking record a restored plugin had, from what was written down when it was
-     * removed rather than from Modrinth: the version it was on may no longer be the newest, and by
-     * now may not even be listed.
-     *
-     * <p>Whether a restart is owed follows from when the removal happened, not from asking the
-     * server what is loaded: nothing is ever unloaded without one. A removal from this session left
-     * the plugin running, so the jar is back before anything noticed it had gone. An older one did
-     * not survive the restart in between.</p>
-     */
-    private TrackedPlugin track(TrashEntry entry, String by) {
-
-        if (entry.projectId() == null) {
-            return null;
-        }
-
-        TrackingDefaults defaults = defaults();
-
-        TrackedPlugin tracked = new TrackedPlugin();
-
-        tracked.projectId(entry.projectId());
-        tracked.slug(entry.slug());
-        tracked.name(entry.name());
-        tracked.versionId(entry.versionId());
-        tracked.versionNumber(entry.versionNumber());
-        tracked.fileName(entry.fileName());
-        tracked.sha512(entry.sha512());
-        tracked.channel(entry.channel() == null ? defaults.channel() : entry.channel());
-        tracked.autoUpdate(defaults.autoUpdate());
-        tracked.installedBy(by);
-        tracked.installedAt(Instant.now());
-        tracked.pendingLoad(!removedWhileRunning(entry.removedAt()));
-
-        tracking.put(tracked);
-        saveTracking();
-
-        return tracked;
-    }
-
-    /**
-     * Whether a build that has just been written to the plugins folder is already loaded.
-     */
-    private boolean stillRunning(String sha512) {
-
-        if (sha512 == null) {
-            return false;
-        }
-
-        for (TrashEntry entry : trash.list()) {
-
-            if (sha512.equalsIgnoreCase(entry.sha512()) && removedWhileRunning(entry.removedAt())) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Whether a removal happened while this server has been up, which is what decides if the plugin
-     * it took away is still loaded. Nothing is ever unloaded without a restart, so it is.
-     */
-    private boolean removedWhileRunning(Instant removedAt) {
-        return removedAt != null && !removedAt.isBefore(startedAt);
     }
 
     /**
@@ -921,7 +759,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @param entry what to delete
      */
     public void discardTrashed(TrashEntry entry) {
-        trash.discard(entry);
+        removals.discard(entry);
     }
 
     /**
@@ -930,7 +768,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @return how many went
      */
     public int emptyTrash() {
-        return trash.empty();
+        return removals.empty();
     }
 
     /**
@@ -939,12 +777,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private void pruneTrash() {
 
         int days = configuration.trash.retentionDays;
-
-        if (days <= 0) {
-            return;
-        }
-
-        int dropped = trash.prune(Duration.ofDays(days), Instant.now());
+        int dropped = removals.prune(days);
 
         if (dropped > 0) {
             Logger.debug(Action.SETUP, "Emptied " + dropped + " removals older than "
@@ -956,27 +789,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * Deletes the jars this server would not let go of, once it has.
      */
     private void finishRemovals() {
-
-        for (Path jar : deleteAtShutdown) {
-
-            try {
-                Files.deleteIfExists(jar);
-            } catch (IOException ignored) {
-                // There is no longer anywhere to report this to.
-            }
-        }
-    }
-
-    /**
-     * Drops an update waiting in the update folder for a plugin that is being removed, so the
-     * restart does not put the jar back.
-     */
-    private void discardStagedUpdate(TrackedPlugin plugin) {
-
-        if (!cancelStaged(stagedName(plugin))) {
-            Logger.warn(Action.UPDATE, "A staged update for " + plugin.displayName()
-                    + " is still in the update folder and should be deleted by hand.");
-        }
+        removals.finish();
     }
 
     /**
