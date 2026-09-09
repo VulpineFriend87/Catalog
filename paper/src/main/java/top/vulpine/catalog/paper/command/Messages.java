@@ -1468,8 +1468,11 @@ public final class Messages {
      * until a restart, so there is a whole window in which the decision costs nothing to reverse.
      * The button carries the removal it belongs to, so an old one left further up the chat still
      * undoes its own removal rather than the most recent.</p>
+     *
+     * <p>It also carries the screen the removal was made on, so undoing redraws that screen with
+     * the plugin back on it. A removal typed by hand carries none and redraws nothing.</p>
      */
-    public static Component removed(String name, boolean deleted, TrashEntry entry) {
+    public static Component removed(String name, boolean deleted, TrashEntry entry, String from) {
 
         TextComponent.Builder out = line()
                 .append(Component.text(name, TEXT))
@@ -1477,7 +1480,7 @@ public final class Messages {
                         : " moved to trash, file is locked and goes on shutdown", MUTED));
 
         if (entry != null) {
-            out.append(Component.space()).append(button("Undo", restoreCommand(entry, null), BRAND,
+            out.append(Component.space()).append(button("Undo", restoreCommand(entry, from), BRAND,
                     "Put " + name + " back"));
         }
 

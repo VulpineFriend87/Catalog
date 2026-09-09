@@ -592,7 +592,7 @@ public final class MainCommand {
 
                 redraw(sender, screen(data));
                 send(sender, Messages.removed(name, result == null || result.deleted(),
-                        result == null ? null : result.entry()));
+                        result == null ? null : result.entry(), screen(data)));
 
             } catch (Exception e) {
                 send(sender, Messages.failed(rootMessage(e)));
