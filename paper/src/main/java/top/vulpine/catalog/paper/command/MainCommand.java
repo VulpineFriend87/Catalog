@@ -79,7 +79,7 @@ public final class MainCommand {
         this.context = context;
     }
 
-    @Description("What Catalog is")
+    @Description("Information about Catalog")
     @RequiresPermission("command.about")
     public void about(CommandSender sender) {
 
@@ -333,7 +333,7 @@ public final class MainCommand {
     }
 
     @Subcommand("settings")
-    @Description("What a plugin does on its own")
+    @Description("View the settings menu for a plugin")
     @RequiresPermission("command.settings")
     public void settings(CommandSender sender,
                          @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
@@ -349,7 +349,7 @@ public final class MainCommand {
     }
 
     @Subcommand("auto")
-    @Description("Whether a plugin updates itself")
+    @Description("Whether a plugin updates itself automatically")
     @RequiresPermission("command.settings")
     public void auto(CommandSender sender,
                      @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
@@ -367,7 +367,7 @@ public final class MainCommand {
     }
 
     @Subcommand("soak")
-    @Description("How long a build must be public before this plugin takes it")
+    @Description("How long a build must be public before this plugin automatically installs it")
     @RequiresPermission("command.settings")
     public void soak(CommandSender sender,
                      @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
@@ -560,7 +560,7 @@ public final class MainCommand {
      * one on the rare mistaken one; undo spends it only when there was a mistake.</p>
      */
     @Subcommand("uninstall")
-    @Description("Move a plugin to the trash")
+    @Description("Moves a plugin to the trash")
     @RequiresPermission("command.uninstall")
     public void uninstall(CommandSender sender,
                           @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
@@ -799,7 +799,7 @@ public final class MainCommand {
     }
 
     @Subcommand("trash")
-    @Description("Plugins you have removed")
+    @Description("Show plugins you have removed")
     @RequiresPermission("command.trash")
     public void trash(CommandSender sender, @Flag("page") @Default("1") int page) {
         plugin.getScheduler().runAsync(task -> showTrash(sender, Math.max(page, 1)));
