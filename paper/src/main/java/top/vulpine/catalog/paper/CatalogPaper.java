@@ -33,6 +33,7 @@ import top.vulpine.catalog.paper.config.Config;
 import top.vulpine.catalog.paper.util.PermissionChecker;
 import top.vulpine.catalog.platform.Platform;
 import top.vulpine.catalog.tracking.IgnoreList;
+import top.vulpine.catalog.tracking.Library;
 import top.vulpine.catalog.tracking.Reconciler;
 import top.vulpine.catalog.tracking.Settings;
 import top.vulpine.catalog.tracking.TrackingException;
@@ -94,13 +95,13 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private Removals removals;
     private Installer installer;
     private Updates updates;
+    private Library library;
 
     /**
      * When this server came up.
      */
     private final Instant startedAt = Instant.now();
 
-    private volatile int unmanaged;
 
     private enum Action implements LogAction {
         CONFIG, SETUP, SCAN, TRACK, UPDATE
@@ -164,6 +165,8 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         this.installer = new Installer(this, downloader, tracking, removals, this::defaults);
         this.updates = new Updates(this, modrinth, tracking, installer,
                 () -> configuration.tracking.defaults.soakMinutes);
+        this.library = new Library(this, modrinth, tracking, ignored, this::defaults,
+                () -> configuration.tracking.autoTrack);
 
         Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
                 .permissionForAnnotation(RequiresPermission.class, annotation ->
@@ -252,55 +255,9 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
         downloader.clean();
 
-        long started = System.currentTimeMillis();
-        ScanResult scan = new JarScanner(pluginsFolder()).scan();
-
-        List<String> hashes = new ArrayList<>();
-
-        for (InstalledJar jar : scan.jars()) {
-            if (jar.sha512() != null) {
-                hashes.add(jar.sha512());
-            }
+        if (library.index()) {
+            checkForUpdates();
         }
-
-        Logger.debug(Action.SCAN, "Hashed " + hashes.size() + " jars in "
-                + (System.currentTimeMillis() - started) + "ms.");
-
-        for (InstalledJar jar : scan.unreadable()) {
-            Logger.warn(Action.SCAN, "Could not read " + jar.fileName()
-                    + ", so it is not indexed. On Windows this usually means the file is locked.");
-        }
-
-        Map<String, ModrinthVersion> identified;
-
-        try {
-            identified = modrinth.identify(hashes).join();
-        } catch (Exception e) {
-            // Without an answer every tracked plugin would look unidentifiable, and reconciling on
-            // that would untrack the entire server over a network blip.
-            Logger.warn(Action.SCAN, "Could not reach Modrinth, so nothing was reconciled: "
-                    + rootMessage(e));
-            return;
-        }
-
-        Reconciler reconciler = new Reconciler(tracking, ignored, defaults(),
-                configuration.tracking.autoTrack);
-
-        ReconcileReport report = reconciler.reconcile(scan, identified);
-        boolean named = nameTrackedPlugins();
-
-        if (report.hasChanges() || named) {
-            try {
-                tracking.save();
-            } catch (TrackingException e) {
-                Logger.error(Action.TRACK, e.getMessage());
-            }
-        }
-
-        unmanaged = report.unknown().size();
-
-        describe(report, scan);
-        checkForUpdates();
     }
 
     private void checkForUpdates() {
@@ -744,104 +701,6 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         }
     }
 
-    /**
-     * Fills in the human names of tracked plugins that only have a project id.
-     *
-     * @return true if anything was named, so the caller knows to save
-     */
-    private boolean nameTrackedPlugins() {
-
-        List<String> missing = new ArrayList<>();
-
-        for (TrackedPlugin plugin : tracking.all()) {
-            if (plugin.name() == null && plugin.projectId() != null) {
-                missing.add(plugin.projectId());
-            }
-        }
-
-        if (missing.isEmpty()) {
-            return false;
-        }
-
-        try {
-
-            for (ModrinthProject project : modrinth.projects(missing).join()) {
-
-                TrackedPlugin plugin = tracking.byProjectId(project.id());
-
-                if (plugin != null) {
-                    plugin.name(project.title());
-                    plugin.slug(project.slug());
-                }
-            }
-
-            return true;
-
-        } catch (Exception e) {
-            // Names are cosmetic; project ids still identify everything correctly without them.
-            Logger.debug(Action.TRACK, "Could not fetch project names: " + rootMessage(e));
-            return false;
-        }
-    }
-
-    /**
-     * Says what the scan found, at the volume each outcome deserves.
-     */
-    private void describe(ReconcileReport report, ScanResult scan) {
-
-        Logger.info(Action.SCAN, "Indexed " + scan.jars().size() + " jars, tracking "
-                + tracking.size() + " plugins.");
-
-        if (!report.adopted().isEmpty()) {
-            Logger.info(Action.TRACK, "Adopted " + report.adopted().size()
-                    + " plugins: " + names(report.adopted()));
-        }
-
-        if (!report.applied().isEmpty()) {
-            Logger.info(Action.UPDATE, "Updates applied on this start: " + names(report.applied()));
-        }
-
-        for (TrackedPlugin plugin : report.notApplied()) {
-            Logger.warn(Action.UPDATE, plugin.displayName() + " is still "
-                    + plugin.versionNumber() + ": the staged build was not taken from "
-                    + stagingName()
-                    + ". It is still there and will be tried again on the next start.");
-        }
-
-        if (!report.moved().isEmpty()) {
-            Logger.info(Action.TRACK, "Replaced by hand since last start: " + names(report.moved()));
-        }
-
-        if (!report.renamed().isEmpty()) {
-            Logger.debug(Action.TRACK, "Renamed by hand since last start: " + names(report.renamed()));
-        }
-
-        if (!report.removed().isEmpty()) {
-            Logger.info(Action.TRACK, "No longer installed, so no longer tracked: "
-                    + names(report.removed()));
-        }
-
-        if (!report.unknown().isEmpty()) {
-            Logger.debug(Action.TRACK, report.unknown().size()
-                    + " jars are not on Modrinth and will be left alone.");
-        }
-
-        if (!report.notAdopted().isEmpty()) {
-            Logger.info(Action.TRACK, report.notAdopted().size()
-                    + " recognised plugins were not adopted because auto_track is off.");
-        }
-
-        for (TrackedPlugin plugin : report.orphaned()) {
-            Logger.warn(Action.TRACK, plugin.displayName()
-                    + " was replaced with a different plugin, so Catalog stopped tracking it.");
-        }
-
-        for (InstalledJar jar : report.conflicting()) {
-            Logger.warn(Action.TRACK, jar.fileName()
-                    + " is a second jar for a project that is already tracked.");
-        }
-    }
-
     private TrackingDefaults defaults() {
 
         Config.Tracking.Defaults configured = configuration.tracking.defaults;
@@ -898,31 +757,6 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         } catch (IOException e) {
             return false;
         }
-    }
-
-    private static String names(List<TrackedPlugin> plugins) {
-
-        List<String> names = new ArrayList<>();
-
-        for (TrackedPlugin plugin : plugins) {
-            names.add(plugin.displayName());
-        }
-
-        return String.join(", ", names);
-    }
-
-    /**
-     * The message worth showing, since a failed future wraps the real cause.
-     */
-    private static String rootMessage(Throwable error) {
-
-        Throwable cause = error;
-
-        while (cause.getCause() != null && cause.getMessage() == null) {
-            cause = cause.getCause();
-        }
-
-        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
     private static boolean hasPaperApi() {
