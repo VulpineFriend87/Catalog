@@ -6,9 +6,11 @@ description = "Platform-agnostic core of Catalog: Modrinth client, jar index, tr
 
 dependencies {
     compileOnly(libs.gson)
+    compileOnly(libs.commons)
 
     testImplementation(libs.junit)
     testImplementation(libs.gson)
+    testImplementation(libs.commons)
     testRuntimeOnly(libs.junit.launcher)
 }
 
