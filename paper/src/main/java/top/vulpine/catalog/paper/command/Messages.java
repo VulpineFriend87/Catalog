@@ -1131,19 +1131,21 @@ public final class Messages {
                     .build();
         }
 
+        boolean optional = row.type() == DependencyType.OPTIONAL;
+        String kind = optional ? "  optional" : "  required";
+
         if (row.installed()) {
             return line
                     .append(Component.text("\u2714 ", DONE))
                     .append(Component.text(row.name(), TEXT))
+                    .append(Component.text(kind, MUTED))
                     .append(Component.text(row.version() == null ? "" : "  " + row.version(), MUTED))
                     .build();
         }
 
-        boolean optional = row.type() == DependencyType.OPTIONAL;
-
         line.append(Component.text("  "))
                 .append(Component.text(row.name(), optional ? MUTED : PENDING))
-                .append(Component.text(optional ? "  optional" : "  required", MUTED))
+                .append(Component.text(kind, MUTED))
                 .append(Component.space());
 
         if (!row.available()) {
