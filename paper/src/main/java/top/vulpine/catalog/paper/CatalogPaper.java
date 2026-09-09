@@ -150,7 +150,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         this.removals = new Removals(this, trash, tracking, this::defaults, startedAt);
         this.installer = new Installer(this, downloader, tracking, removals, this::defaults);
         this.updates = new Updates(this, modrinth, tracking, installer,
-                () -> configuration.tracking.defaults.soakMinutes);
+                () -> configuration.tracking.defaults.soakMinutes, projects::dependenciesOf);
         this.library = new Library(this, modrinth, tracking, ignored, this::defaults,
                 () -> configuration.tracking.autoTrack);
 
@@ -289,6 +289,10 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
     public Map<String, UpdateCandidate> updatesByProject() {
         return updates.byProject();
+    }
+
+    public List<DependencyResolver.Requirement> missingFor(ModrinthVersion version) {
+        return updates.missingFor(version);
     }
 
     public ModrinthVersion installTarget(String idOrSlug) {

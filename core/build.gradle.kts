@@ -11,6 +11,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.gson)
     testImplementation(libs.commons)
+    testRuntimeOnly(libs.paper)
     testRuntimeOnly(libs.junit.launcher)
 }
 

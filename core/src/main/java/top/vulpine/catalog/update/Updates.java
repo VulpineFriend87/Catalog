@@ -3,6 +3,7 @@ package top.vulpine.catalog.update;
 import top.vulpine.catalog.CatalogAction;
 import top.vulpine.catalog.Errors;
 import top.vulpine.catalog.hash.Hashing;
+import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.install.Installer;
 import top.vulpine.catalog.modrinth.ModrinthClient;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
@@ -25,6 +26,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.IntSupplier;
 
 /**
@@ -39,17 +42,57 @@ public final class Updates {
     private final TrackingStore tracking;
     private final Installer installer;
     private final IntSupplier defaultSoakMinutes;
+    private final Function<ModrinthVersion, DependencyResolver.Resolution> dependencies;
 
     private volatile List<UpdateCandidate> lastCheck = List.of();
     private volatile Instant checkedAt;
 
+    /**
+     * Updates held back because the new build needs something that is not installed, by project id.
+     */
+    private final Map<String, List<DependencyResolver.Requirement>> blocked = new ConcurrentHashMap<>();
+
+    /**
+     * Version ids already reported as blocked, so a check every few hours does not repeat itself.
+     */
+    private final Set<String> reported = ConcurrentHashMap.newKeySet();
+
     public Updates(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
-                   Installer installer, IntSupplier defaultSoakMinutes) {
+                   Installer installer, IntSupplier defaultSoakMinutes,
+                   Function<ModrinthVersion, DependencyResolver.Resolution> dependencies) {
         this.platform = platform;
         this.modrinth = modrinth;
         this.tracking = tracking;
         this.installer = installer;
         this.defaultSoakMinutes = defaultSoakMinutes;
+        this.dependencies = dependencies;
+    }
+
+    /**
+     * What each held-back update is waiting for.
+     *
+     * @return project id to the required dependencies that are not installed
+     */
+    public Map<String, List<DependencyResolver.Requirement>> blocked() {
+        return Map.copyOf(blocked);
+    }
+
+    /**
+     * The required dependencies a build needs that this server does not have.
+     *
+     * @param version the build being considered
+     * @return what is missing, empty when the build can be installed as it is
+     */
+    public List<DependencyResolver.Requirement> missingFor(ModrinthVersion version) {
+
+        try {
+            return dependencies.apply(version).missing();
+        } catch (Exception e) {
+            // An answer nobody can get is not evidence of a missing dependency.
+            Logger.debug(CatalogAction.UPDATE, "Could not resolve dependencies for "
+                    + version.versionNumber() + ": " + Errors.rootMessage(e));
+            return List.of();
+        }
     }
 
     /**
@@ -158,6 +201,15 @@ public final class Updates {
 
         for (UpdateCandidate candidate : ready) {
 
+            List<DependencyResolver.Requirement> missing = missingFor(candidate.version());
+
+            if (!missing.isEmpty()) {
+                hold(candidate, missing);
+                continue;
+            }
+
+            blocked.remove(candidate.plugin().projectId());
+
             try {
 
                 installer.stage(candidate);
@@ -171,6 +223,27 @@ public final class Updates {
                         + candidate.plugin().displayName() + ": " + Errors.rootMessage(e));
             }
         }
+    }
+
+    /**
+     * Keeps an update back because the build needs something this server does not have.
+     *
+     * <p>Installing it would leave a plugin that cannot load. The update stays on offer, so
+     * {@code /catalog list} still shows it and pressing Update walks through what it needs.</p>
+     */
+    private void hold(UpdateCandidate candidate, List<DependencyResolver.Requirement> missing) {
+
+        blocked.put(candidate.plugin().projectId(), missing);
+
+        if (!reported.add(candidate.version().id())) {
+            return;
+        }
+
+        Logger.warn(CatalogAction.UPDATE, "Not updating " + candidate.plugin().displayName()
+                + " to " + candidate.to() + " automatically: it needs " + missing.size()
+                + " plugin" + (missing.size() == 1 ? "" : "s")
+                + " that are not installed. Use /catalog update "
+                + candidate.plugin().displayName() + " to install them.");
     }
 
     /**
