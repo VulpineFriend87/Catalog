@@ -304,7 +304,7 @@ public final class MainCommand {
     private static ModrinthVersion choose(List<ModrinthVersion> compatible, String wanted) {
 
         if (wanted == null) {
-            return installTarget(compatible);
+            return CatalogPaper.installTarget(compatible);
         }
 
         for (ModrinthVersion version : compatible) {
@@ -627,7 +627,7 @@ public final class MainCommand {
                     return;
                 }
 
-                ModrinthVersion version = plugin.newestCompatible(project.id(), defaultChannel());
+                ModrinthVersion version = plugin.installTarget(project.id());
 
                 if (version == null) {
                     send(sender, Messages.failed(project.title() + " has no build for this server"));
@@ -1160,7 +1160,7 @@ public final class MainCommand {
                     .project(project)
                     .author(author(project.id()))
                     .latest(latest)
-                    .installTarget(installTarget(compatible))
+                    .installTarget(CatalogPaper.installTarget(compatible))
                     .installed(tracked)
                     .self(plugin.isSelf(tracked))
                     .updateAvailable(isNewer(latest, tracked))
@@ -1336,11 +1336,6 @@ public final class MainCommand {
      * newest of whatever exists is offered instead, and the button says so — refusing outright and
      * calling it "no build for this server" is a lie about a project that plainly has one.</p>
      */
-    private static ModrinthVersion installTarget(List<ModrinthVersion> versions) {
-
-        ModrinthVersion stable = newestOn(versions, ReleaseChannel.RELEASE);
-        return stable != null ? stable : versions.isEmpty() ? null : versions.get(0);
-    }
 
     /**
      * Whether a build is genuinely newer than what is installed.

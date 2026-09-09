@@ -631,27 +631,36 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     /**
-     * The newest build of a project this server could actually run.
-     *
-     * <p>Walks the same loader ladder the update check uses, so a plugin published only for an
-     * older platform is still found, and a build for this exact server software always wins over a
-     * newer one meant for its parent.</p>
+     * The build an install would fetch for a project.
      *
      * <p>Blocks, so it must be called off the main thread.</p>
      *
      * @param idOrSlug the project to look at
-     * @param channel  the least stable channel to accept
-     * @return the version, or null if the project publishes nothing for this server
+     * @return the build to offer, or null when nothing published runs here
      */
-    public ModrinthVersion newestCompatible(String idOrSlug, ReleaseChannel channel) {
+    public ModrinthVersion installTarget(String idOrSlug) {
+        return installTarget(compatibleVersions(idOrSlug));
+    }
 
-        for (ModrinthVersion version : compatibleVersions(idOrSlug)) {
-            if (version.versionType() == null || channel.accepts(version.versionType())) {
+    /**
+     * The build an install would fetch: the newest stable one, or the newest of anything when the
+     * project has never published a stable build for this server.
+     *
+     * <p>A project with only betas is still installable, and every screen that offers it has to
+     * agree about that or one says there is no build while another installs it.</p>
+     *
+     * @param compatible what this server can run, newest first
+     * @return the build to offer, or null when the list is empty
+     */
+    public static ModrinthVersion installTarget(List<ModrinthVersion> compatible) {
+
+        for (ModrinthVersion version : compatible) {
+            if (version.versionType() == ReleaseChannel.RELEASE) {
                 return version;
             }
         }
 
-        return null;
+        return compatible.isEmpty() ? null : compatible.get(0);
     }
 
     /**
@@ -840,7 +849,7 @@ public final class CatalogPaper extends JavaPlugin {
     public DependencyResolver.Resolution dependenciesOf(ModrinthVersion version) {
 
         DependencyResolver resolver = new DependencyResolver(
-                projectId -> newestCompatible(projectId, defaults().channel()),
+                this::installTarget,
                 projectId -> tracking.byProjectId(projectId) != null);
 
         return resolver.resolve(version);
