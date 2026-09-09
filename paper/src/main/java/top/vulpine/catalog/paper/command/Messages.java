@@ -117,23 +117,23 @@ public final class Messages {
         out.add(Component.empty());
 
         out.add(entry("list", "", "Managed plugins"));
-        out.add(entry("info", "<plugin>", "Full details, installed or not"));
-        out.add(entry("search", "<query>", "Find plugins on Modrinth"));
+        out.add(entry("info", "<plugin>", "Details about a plugin"));
+        out.add(entry("search", "<query>", "Search plugins on Modrinth"));
         out.add(entry("versions", "<plugin>", "Newest build of each channel"));
 
         out.add(Component.empty());
 
-        out.add(entry("install", "<slug> [version]", "Add a plugin"));
-        out.add(entry("update", "<plugin|all>", "Download and stage updates"));
+        out.add(entry("install", "<slug> [version]", "Install a plugin"));
+        out.add(entry("update", "<plugin|all>", "Update a plugin"));
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
-        out.add(entry("trash", "", "Put back something you removed"));
+        out.add(entry("trash", "", "Restore a trashed plugin"));
 
         out.add(Component.empty());
 
-        out.add(entry("settings", "<plugin>", "What a plugin does on its own"));
+        out.add(entry("settings", "<plugin>", "Open settings for a plugin"));
         out.add(entry("channel", "<plugin> <channel>", "Which builds to follow"));
-        out.add(entry("auto", "<plugin> <on|off>", "Update without asking"));
-        out.add(entry("soak", "<plugin> <window>", "How long a build must be public first"));
+        out.add(entry("auto", "<plugin> <on|off>", "Enable/disable auto-updates"));
+        out.add(entry("soak", "<plugin> <window>", "Change soak time for a plugin"));
         out.add(entry("hold", "<plugin>", "Freeze a plugin at its version"));
         out.add(entry("unhold", "<plugin>", "Allow updates again"));
 
@@ -202,12 +202,12 @@ public final class Messages {
 
         if (!updates.isEmpty()) {
             footer.append(button("Update all", from("/catalog update all", ClickContext.LIST),
-                    BRAND, "Stage every update")).append(Component.space());
+                    BRAND, "Update all plugins")).append(Component.space());
         }
 
         footer.append(button("Search", "/catalog search ", MUTED, "Search Modrinth"))
                 .append(Component.space())
-                .append(button("Trash", "/catalog trash", MUTED, "Plugins you have removed"));
+                .append(button("Trash", "/catalog trash", MUTED, "Show trashed plugins"));
 
         out.add(footer.build());
 
@@ -513,17 +513,14 @@ public final class Messages {
             }
 
             row.add(button("Install", from("/catalog install " + key, here), BRAND,
-                    target.versionType() == ReleaseChannel.RELEASE
-                            ? "Install " + target.versionNumber()
-                            : "Install " + target.versionNumber() + ", the newest build there is — "
-                                    + "this project has no stable release for this server"));
+                    "Install " + target.versionNumber()));
 
             row.add(button("Versions", from("/catalog versions " + key, here), MUTED,
                     "Choose a build: the newest release, beta and alpha for this server"));
 
             if (view.declaresAnything()) {
                 row.add(button("Dependencies", from("/catalog dependencies " + key, here), MUTED,
-                        "What this plugin declares"));
+                        "Show dependencies"));
             }
 
             return buttons(row);
@@ -540,11 +537,11 @@ public final class Messages {
 
         if (view.declaresAnything()) {
             row.add(button("Dependencies", from("/catalog dependencies " + key, here), MUTED,
-                    "What this plugin declares"));
+                    "Show dependencies"));
         }
 
         row.add(button("Settings", "/catalog settings " + key, MUTED,
-                "Channel, auto-update and whether it is held"));
+                "Open the settings page"));
 
         row.add(view.self()
                 ? Component.text("cannot remove itself", MUTED)
@@ -641,9 +638,9 @@ public final class Messages {
 
         return Component.text()
                 .append(choice("on", "/catalog auto " + key + " on", plugin.autoUpdate(),
-                        "Install updates without asking, once they have soaked", here))
+                        "Install updates automatically", here))
                 .append(choice("off", "/catalog auto " + key + " off", !plugin.autoUpdate(),
-                        "Only update when you say so", here))
+                        "Only update manually", here))
                 .build();
     }
 
@@ -780,7 +777,7 @@ public final class Messages {
         if (offerEverything) {
             footer.append(Component.space())
                     .append(button("All versions", "/catalog versions " + project.slug() + " --all",
-                            PENDING, "Every build ever published, compatible or not"));
+                            PENDING, "Every build ever published"));
         }
 
         out.add(footer.build());
@@ -838,7 +835,7 @@ public final class Messages {
         }
 
         footer.append(button("Back", "/catalog versions " + project.slug(), MUTED,
-                "Back to the builds that run here"));
+                "Back to the builds that run on this server"));
 
         out.add(footer.build());
 
@@ -874,7 +871,7 @@ public final class Messages {
                 .append(Component.newline())
                 .append(Component.text(current ? "Already installed"
                         : runs ? (installed == null ? "Install this build" : "Switch to this build")
-                        : "Use it anyway — this build does not declare " + gameVersion, TEXT));
+                        : "Use it anyway. This build does not declare " + gameVersion, TEXT));
 
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
@@ -1263,12 +1260,12 @@ public final class Messages {
                 .append(Component.text(" of " + pages + "  ", MUTED));
 
         if (shown > 1) {
-            footer.append(button("Newer", "/catalog trash --page " + (shown - 1), MUTED,
+            footer.append(button("Newer »", "/catalog trash --page " + (shown - 1), MUTED,
                     "Page " + (shown - 1))).append(Component.space());
         }
 
         if (shown < pages) {
-            footer.append(button("Older", "/catalog trash --page " + (shown + 1), MUTED,
+            footer.append(button("« Older", "/catalog trash --page " + (shown + 1), MUTED,
                     "Page " + (shown + 1))).append(Component.space());
         }
 
@@ -1479,7 +1476,7 @@ public final class Messages {
         TextComponent.Builder out = line()
                 .append(Component.text(name, TEXT))
                 .append(Component.text(deleted ? " moved to trash, unloads on restart"
-                        : " moved to trash, file is locked and goes on shutdown", MUTED));
+                        : " moved to trash, file is removed on restart", MUTED));
 
         if (entry != null) {
             out.append(Component.space()).append(button("Undo", restoreCommand(entry, from), BRAND,
@@ -1533,8 +1530,8 @@ public final class Messages {
     public static Component autoSet(String name, boolean on) {
         return line()
                 .append(Component.text(name, TEXT))
-                .append(Component.text(on ? " updates itself once builds have soaked"
-                        : " only updates when you say so", MUTED))
+                .append(Component.text(on ? " automatically updates itself"
+                        : " only updates manually", MUTED))
                 .build();
     }
 
@@ -1546,8 +1543,7 @@ public final class Messages {
                 .append(Component.text(name, TEXT))
                 .append(Component.text(" waits ", MUTED))
                 .append(Component.text(soakLabel(inherits ? defaultSoak : minutes), BRAND))
-                .append(Component.text(inherits ? " before updating itself, following the config"
-                        : " before updating itself", MUTED))
+                .append(Component.text(" before updating itself", MUTED))
                 .build();
     }
 
@@ -1612,13 +1608,11 @@ public final class Messages {
     }
 
     public static Component configFailed() {
-        return Component.text("Could not read config.yml, see the console. "
-                + "The settings already loaded are still in use.", DANGER);
+        return Component.text("Could not read config.yml, check the console for errors.", DANGER);
     }
 
     public static Component badSoak() {
-        return Component.text("Say a number of minutes, something like 30m or 2h, "
-                + "or default to follow the config", DANGER);
+        return Component.text("Invalid soak time. Valid examples: 30m, 2h, 12h", DANGER);
     }
 
     public static Component stageFailed(String name, String reason) {
