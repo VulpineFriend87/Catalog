@@ -1,12 +1,8 @@
 package top.vulpine.catalog.paper.command;
 
-import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.server.ServerCommandEvent;
+import revxrsal.commands.Lamp;
+import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 
 import java.util.Locale;
 import java.util.Map;
@@ -30,15 +26,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>{@link ClickCommand} registers it, so the client is given it and sends it without asking
  * whether an unrecognised command was really meant.</p>
  *
- * <p>The screen cannot be scoped to the dispatch that stored it. {@link Bukkit#dispatchCommand}
- * returns before the command it was given has run — measured, not assumed: the screen is still in
- * the map when the call comes back, and the handler reads it afterwards. Clearing it there takes it
- * out from under a command that has not started yet, and every button stops redrawing.</p>
- *
- * <p>So the note outlives the press by design, and the listener below is what stops one that nobody
- * read from being picked up by whatever runs next. It is not tidy and it is not optional.</p>
+ * <p>The command is handed straight to the tree rather than out through Bukkit and back. That is
+ * what gives the screen a lifetime: Lamp runs the command inline, so it has been read by the time
+ * the call returns and can be cleared here. Bukkit's own dispatch returns before the command has
+ * run, which would leave a screen nobody claimed sitting there for whatever executed next to pick
+ * up. Both were measured rather than assumed.</p>
  */
-public final class ClickContext implements Listener {
+public final class ClickContext {
 
     /** What every button actually runs. */
     public static final String CLICK = "/catalog-do ";
@@ -78,31 +72,13 @@ public final class ClickContext implements Listener {
 
     private final Map<String, String> pending = new ConcurrentHashMap<>();
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
-        forget(event.getPlayer(), event.getMessage());
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onConsoleCommand(ServerCommandEvent event) {
-        forget(event.getSender(), "/" + event.getCommand());
-    }
-
     /**
-     * Forgets a screen nobody claimed.
-     *
-     * <p>A handler can return before taking its screen — an unknown plugin name is enough — and one
-     * left behind would then be read by whatever ran next, redrawing a screen that command was never
-     * launched from. A command typed by hand therefore clears whatever is held.</p>
-     *
-     * <p>The wrapper does not match here: it is {@code /catalog-do}, not {@code /catalog}, so a
-     * press never clears the screen it is in the middle of delivering.</p>
+     * Set once the tree exists, because the commands it holds are built with this in hand.
      */
-    private void forget(CommandSender sender, String message) {
+    private Lamp<BukkitCommandActor> lamp;
 
-        if (isCatalog(message)) {
-            pending.remove(sender.getName());
-        }
+    public void dispatcher(Lamp<BukkitCommandActor> lamp) {
+        this.lamp = lamp;
     }
 
     /**
@@ -110,8 +86,9 @@ public final class ClickContext implements Listener {
      *
      * @param arguments everything after the wrapper: a screen, a space, then the real command
      */
-    public void press(CommandSender sender, String arguments) {
+    public void press(BukkitCommandActor actor, String arguments) {
 
+        CommandSender sender = actor.sender();
         String rest = arguments.trim();
         int space = rest.indexOf(' ');
 
@@ -128,15 +105,23 @@ public final class ClickContext implements Listener {
             return;
         }
 
+        String name = sender.getName();
+
         if (NOWHERE.equals(screen)) {
-            pending.remove(sender.getName());
+            pending.remove(name);
         } else {
-            pending.put(sender.getName(), screen);
+            pending.put(name, screen);
         }
 
-        // Dispatching does not fire these events again, so the screen just stored survives into the
-        // handler rather than being cleared by the command it was stored for.
-        Bukkit.dispatchCommand(sender, command.substring(1));
+        // Straight to the tree rather than out through Bukkit and back. Bukkit's dispatch returns
+        // before the command it was given has run, which leaves the screen with no lifetime anyone
+        // can reason about; Lamp runs it inline, so it is read before this method returns and can
+        // be cleared here.
+        try {
+            lamp.dispatch(actor, command.substring(1));
+        } finally {
+            pending.remove(name);
+        }
     }
 
     private static boolean isCatalog(String message) {

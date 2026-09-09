@@ -158,9 +158,9 @@ public final class CatalogPaper extends JavaPlugin {
                 .build();
 
         ClickContext clicks = new ClickContext();
-        getServer().getPluginManager().registerEvents(clicks, this);
 
         lamp.register(new MainCommand(this, clicks), new ClickCommand(clicks));
+        clicks.dispatcher(lamp);
 
         Logger.debug(Action.SETUP, "Initializing metrics...");
         new Metrics(this, PLUGIN_ID);

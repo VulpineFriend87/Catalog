@@ -1,8 +1,8 @@
 package top.vulpine.catalog.paper.command;
 
-import org.bukkit.command.CommandSender;
 import revxrsal.commands.annotation.Command;
 import revxrsal.commands.annotation.Named;
+import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 
 /**
  * The command every button in chat actually runs.
@@ -24,8 +24,8 @@ public final class ClickCommand {
     }
 
     @Command("catalog-do")
-    public void press(CommandSender sender, @Named("press") String press) {
-        context.press(sender, press);
+    public void press(BukkitCommandActor actor, @Named("press") String press) {
+        context.press(actor, press);
     }
 
 }
