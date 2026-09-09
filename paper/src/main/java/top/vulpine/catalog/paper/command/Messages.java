@@ -544,7 +544,7 @@ public final class Messages {
                 "Open the settings page"));
 
         row.add(view.self()
-                ? Component.text("cannot remove itself", MUTED)
+                ? Component.empty()
                 : button("Remove", from("/catalog uninstall " + key, here), DANGER,
                         "Move to the trash"));
 
