@@ -19,6 +19,7 @@ import top.vulpine.catalog.jar.JarScanner;
 import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.jar.model.ScanResult;
 import top.vulpine.catalog.modrinth.ModrinthClient;
+import top.vulpine.catalog.modrinth.Projects;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
@@ -29,6 +30,7 @@ import top.vulpine.catalog.paper.command.MainCommand;
 import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.paper.config.Config;
 import top.vulpine.catalog.paper.util.PermissionChecker;
+import top.vulpine.catalog.platform.Platform;
 import top.vulpine.catalog.tracking.IgnoreList;
 import top.vulpine.catalog.tracking.Reconciler;
 import top.vulpine.catalog.tracking.Settings;
@@ -72,7 +74,7 @@ import java.util.concurrent.TimeUnit;
  * Catalog for Paper, Purpur, and Folia.
  */
 @Getter
-public final class CatalogPaper extends JavaPlugin {
+public final class CatalogPaper extends JavaPlugin implements Platform {
 
     private static final String MODRINTH = "https://modrinth.com/plugin/catalog";
 
@@ -86,6 +88,7 @@ public final class CatalogPaper extends JavaPlugin {
     private Downloader downloader;
     private TrashBin trash;
     private Settings settings;
+    private Projects projects;
 
     /**
      * Jars this server would not let us delete, to be removed once it has let go of them.
@@ -162,6 +165,7 @@ public final class CatalogPaper extends JavaPlugin {
         this.downloader = new Downloader(modrinth, data.resolve("staging"));
         this.trash = new TrashBin(data.resolve("trash"));
         this.settings = new Settings(tracking, this::defaults);
+        this.projects = new Projects(this, modrinth, tracking);
 
         Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
                 .permissionForAnnotation(RequiresPermission.class, annotation ->
@@ -461,14 +465,13 @@ public final class CatalogPaper extends JavaPlugin {
      */
     private void noticeStagedApplied() {
 
-        Path updates = getServer().getUpdateFolderFile().toPath();
         Map<String, TrackedPlugin> rehashed = new HashMap<>();
         List<TrackedPlugin> abandoned = new ArrayList<>();
 
         for (TrackedPlugin plugin : tracking.pendingRestart()) {
 
             // Still sitting there waiting for a restart, which is the normal case.
-            if (Files.exists(updates.resolve(stagedName(plugin)))) {
+            if (isStaged(stagedName(plugin))) {
                 continue;
             }
 
@@ -596,7 +599,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @return the build to offer, or null when nothing published runs here
      */
     public ModrinthVersion installTarget(String idOrSlug) {
-        return installTarget(compatibleVersions(idOrSlug));
+        return projects.installTarget(idOrSlug);
     }
 
     /**
@@ -607,14 +610,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @return the build to offer, or null when the list is empty
      */
     public static ModrinthVersion installTarget(List<ModrinthVersion> compatible) {
-
-        for (ModrinthVersion version : compatible) {
-            if (version.versionType() == ReleaseChannel.RELEASE) {
-                return version;
-            }
-        }
-
-        return compatible.isEmpty() ? null : compatible.get(0);
+        return Projects.installTarget(compatible);
     }
 
     /**
@@ -626,27 +622,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @return the compatible versions, newest published first
      */
     public List<ModrinthVersion> compatibleVersions(String idOrSlug) {
-
-        ServerTarget target = target();
-
-        for (List<String> tier : target.platform().loaderTiers()) {
-
-            List<ModrinthVersion> versions;
-
-            try {
-                versions = modrinth.versions(idOrSlug, tier, target.gameVersions()).join();
-            } catch (Exception e) {
-                throw new InstallException("Could not reach Modrinth: " + rootMessage(e), e);
-            }
-
-            if (!versions.isEmpty()) {
-                List<ModrinthVersion> sorted = new ArrayList<>(versions);
-                sorted.sort(Comparator.comparing(ModrinthVersion::datePublished).reversed());
-                return sorted;
-            }
-        }
-
-        return List.of();
+        return projects.compatibleVersions(idOrSlug);
     }
 
     /**
@@ -671,17 +647,11 @@ public final class CatalogPaper extends JavaPlugin {
     public void stage(TrackedPlugin plugin, ModrinthVersion version) {
 
         Path staged = downloader.fetch(version, Runtime.version().feature());
-        Path folder = getServer().getUpdateFolderFile().toPath();
 
         // The downloader already writes it under the file name Modrinth publishes it as.
         String published = staged.getFileName().toString();
 
-        try {
-            Files.createDirectories(folder);
-            Files.move(staged, folder.resolve(published), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            throw new InstallException("Could not stage the build: " + e.getMessage(), e);
-        }
+        applyAtRestart(staged, published);
 
         plugin.stagedAs(published);
         plugin.pendingRestart(true);
@@ -767,12 +737,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @return the resolution, with required dependencies followed through the whole graph
      */
     public DependencyResolver.Resolution dependenciesOf(ModrinthVersion version) {
-
-        DependencyResolver resolver = new DependencyResolver(
-                this::installTarget,
-                projectId -> tracking.byProjectId(projectId) != null);
-
-        return resolver.resolve(version);
+        return projects.dependenciesOf(version);
     }
 
     /**
@@ -1008,10 +973,7 @@ public final class CatalogPaper extends JavaPlugin {
      */
     private void discardStagedUpdate(TrackedPlugin plugin) {
 
-        try {
-            Files.deleteIfExists(getServer().getUpdateFolderFile().toPath()
-                    .resolve(stagedName(plugin)));
-        } catch (IOException e) {
+        if (!cancelStaged(stagedName(plugin))) {
             Logger.warn(Action.UPDATE, "A staged update for " + plugin.displayName()
                     + " is still in the update folder and should be deleted by hand.");
         }
@@ -1106,17 +1068,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @return every version, newest published first
      */
     public List<ModrinthVersion> allVersions(String idOrSlug) {
-
-        List<ModrinthVersion> versions;
-
-        try {
-            versions = new ArrayList<>(modrinth.versions(idOrSlug, null, null).join());
-        } catch (Exception e) {
-            throw new InstallException("Could not reach Modrinth: " + rootMessage(e), e);
-        }
-
-        versions.sort(Comparator.comparing(ModrinthVersion::datePublished).reversed());
-        return versions;
+        return projects.allVersions(idOrSlug);
     }
 
     private void saveTracking() {
@@ -1150,22 +1102,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @return one page of results
      */
     public SearchResults search(String query, int limit, int offset) {
-
-        ServerTarget target = target();
-        List<List<String>> facets = new ArrayList<>();
-
-        facets.add(List.of("project_type:plugin"));
-
-        List<String> loaders = new ArrayList<>();
-
-        for (String loader : target.loaders()) {
-            loaders.add("categories:" + loader);
-        }
-
-        facets.add(loaders);
-        facets.add(List.of("versions:" + target.gameVersion()));
-
-        return modrinth.search(query, facets, limit, offset).join();
+        return projects.search(query, limit, offset);
     }
 
     /**
@@ -1177,18 +1114,11 @@ public final class CatalogPaper extends JavaPlugin {
      * @return the project, or null if there is no such thing
      */
     public ModrinthProject project(String idOrSlug) {
-
-        try {
-            return modrinth.project(idOrSlug).join();
-        } catch (Exception e) {
-            return null;
-        }
+        return projects.project(idOrSlug);
     }
 
-    /**
-     * Describes this server the way Modrinth needs to be asked.
-     */
-    private ServerTarget target() {
+    @Override
+    public ServerTarget target() {
 
         return ServerTarget.builder()
                 .platform(detectPlatform())
@@ -1280,7 +1210,7 @@ public final class CatalogPaper extends JavaPlugin {
         for (TrackedPlugin plugin : report.notApplied()) {
             Logger.warn(Action.UPDATE, plugin.displayName() + " is still "
                     + plugin.versionNumber() + ": the staged build was not taken from "
-                    + getServer().getUpdateFolderFile().getName()
+                    + stagingName()
                     + ". It is still there and will be tried again on the next start.");
         }
 
@@ -1340,6 +1270,40 @@ public final class CatalogPaper extends JavaPlugin {
 
     public PlatformScheduler getScheduler() {
         return foliaLib.getScheduler();
+    }
+
+    @Override
+    public String stagingName() {
+        return getServer().getUpdateFolderFile().getName();
+    }
+
+    @Override
+    public void applyAtRestart(Path staged, String fileName) {
+
+        Path folder = getServer().getUpdateFolderFile().toPath();
+
+        try {
+            Files.createDirectories(folder);
+            Files.move(staged, folder.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new InstallException("Could not stage the build: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public boolean isStaged(String fileName) {
+        return Files.exists(getServer().getUpdateFolderFile().toPath().resolve(fileName));
+    }
+
+    @Override
+    public boolean cancelStaged(String fileName) {
+
+        try {
+            Files.deleteIfExists(getServer().getUpdateFolderFile().toPath().resolve(fileName));
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private static String names(List<TrackedPlugin> plugins) {
