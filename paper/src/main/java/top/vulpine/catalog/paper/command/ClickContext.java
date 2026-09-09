@@ -127,7 +127,7 @@ public final class ClickContext {
     private static boolean isCatalog(String message) {
 
         String lower = message.toLowerCase(Locale.ROOT);
-        return lower.startsWith("/catalog ") || lower.startsWith("/ctlg ");
+        return lower.startsWith("/catalog ");
     }
 
     /**

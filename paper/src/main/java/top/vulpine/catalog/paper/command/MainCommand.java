@@ -49,7 +49,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * thread. The plugin list refreshes its updates on every call rather than showing a cached number
  * with an age next to it: a manager that reports stale counts is a manager nobody trusts.</p>
  */
-@Command({"catalog", "ctlg"})
+@Command({"catalog", "ctlg", "cata", "ctl", "clg"})
 public final class MainCommand {
 
     /** How long a removal stays confirmable before it has to be asked for again. */
