@@ -91,7 +91,7 @@ public final class MainCommand {
 
     @Subcommand("help")
     @Description("Every command")
-    @RequiresPermission("command.about")
+    @RequiresPermission("command.help")
     public void help(CommandSender sender) {
         send(sender, Messages.help());
     }
