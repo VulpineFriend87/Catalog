@@ -31,6 +31,7 @@ import top.vulpine.catalog.paper.config.Config;
 import top.vulpine.catalog.paper.util.PermissionChecker;
 import top.vulpine.catalog.tracking.IgnoreList;
 import top.vulpine.catalog.tracking.Reconciler;
+import top.vulpine.catalog.tracking.Settings;
 import top.vulpine.catalog.tracking.TrackingException;
 import top.vulpine.catalog.tracking.TrackingStore;
 import top.vulpine.catalog.tracking.model.ReconcileReport;
@@ -84,6 +85,7 @@ public final class CatalogPaper extends JavaPlugin {
     private IgnoreList ignored;
     private Downloader downloader;
     private TrashBin trash;
+    private Settings settings;
 
     /**
      * Jars this server would not let us delete, to be removed once it has let go of them.
@@ -159,6 +161,7 @@ public final class CatalogPaper extends JavaPlugin {
         Path data = getDataFolder().toPath();
         this.downloader = new Downloader(modrinth, data.resolve("staging"));
         this.trash = new TrashBin(data.resolve("trash"));
+        this.settings = new Settings(tracking, this::defaults);
 
         Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
                 .permissionForAnnotation(RequiresPermission.class, annotation ->
@@ -1021,8 +1024,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @param channel the least stable channel it should accept
      */
     public void setChannel(TrackedPlugin plugin, ReleaseChannel channel) {
-        plugin.channel(channel);
-        saveTracking();
+        saving(() -> settings.channel(plugin, channel));
     }
 
     /**
@@ -1032,8 +1034,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @param on     true to let it update itself
      */
     public void setAutoUpdate(TrackedPlugin plugin, boolean on) {
-        plugin.autoUpdate(on);
-        saveTracking();
+        saving(() -> settings.autoUpdate(plugin, on));
     }
 
     /**
@@ -1043,15 +1044,14 @@ public final class CatalogPaper extends JavaPlugin {
      * @param minutes the window, or {@link TrackedPlugin#INHERIT_SOAK} to follow the config
      */
     public void setSoak(TrackedPlugin plugin, int minutes) {
-        plugin.soakMinutes(minutes == TrackedPlugin.INHERIT_SOAK ? minutes : Math.max(minutes, 0));
-        saveTracking();
+        saving(() -> settings.soak(plugin, minutes));
     }
 
     /**
      * @return the soak window plugins fall back to when they follow the config
      */
     public int defaultSoakMinutes() {
-        return configuration.tracking.defaults.soakMinutes;
+        return settings.defaultSoakMinutes();
     }
 
     /**
@@ -1061,14 +1061,7 @@ public final class CatalogPaper extends JavaPlugin {
      * @param held   true to freeze it
      */
     public void setHeld(TrackedPlugin plugin, boolean held) {
-
-        if (held) {
-            plugin.pinToCurrent();
-        } else {
-            plugin.pinnedVersionId(null);
-        }
-
-        saveTracking();
+        saving(() -> settings.held(plugin, held));
     }
 
     /**
@@ -1127,12 +1120,24 @@ public final class CatalogPaper extends JavaPlugin {
     }
 
     private void saveTracking() {
+        saving(() -> tracking.save());
+    }
+
+    /**
+     * Runs core work that writes the tracking file, reporting a failure rather than throwing it.
+     */
+    private void saving(Save work) {
 
         try {
-            tracking.save();
+            work.run();
         } catch (TrackingException e) {
             Logger.error(Action.TRACK, e.getMessage());
         }
+    }
+
+    @FunctionalInterface
+    private interface Save {
+        void run() throws TrackingException;
     }
 
     /**
