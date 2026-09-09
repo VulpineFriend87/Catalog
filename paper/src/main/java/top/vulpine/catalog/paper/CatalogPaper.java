@@ -129,6 +129,22 @@ public final class CatalogPaper extends JavaPlugin {
         Logger.debug(Action.SETUP, "Scheduling through FoliaLib, detected platform: "
                 + foliaLib.getImplType() + ".");
 
+        String[] banner = {
+                "",
+                "<light_purple>    ┏┓     ┓",
+                "<light_purple>    ┃ ┏┓╋┏┓┃┏┓┏┓",
+                "<light_purple>    ┗┛┗┻┗┗┻┗┗┛┗┫",
+                "<light_purple>               ┛",
+                "",
+                "<white>    By <light_purple>" + String.join(", ", getDescription().getAuthors()),
+                "<white>    Version: <light_purple>" + getDescription().getVersion(),
+                ""
+        };
+
+        for (String line : banner) {
+            Logger.system(line);
+        }
+
         this.modrinth = ModrinthClient.builder()
                 .userAgent("VulpineFriend87/Catalog/" + getDescription().getVersion() + " (vulpine.top)")
                 .token(configuration.modrinth.token)
