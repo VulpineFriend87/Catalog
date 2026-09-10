@@ -940,7 +940,8 @@ public final class Messages {
     // --- /catalog dependencies -----------------------------------------------------------------------
 
     public static List<Component> dependencies(ModrinthProject project, List<DependencyView> rows,
-                                               boolean installed, boolean installable, String from) {
+                                               boolean installed, boolean installable,
+                                               String switchingTo, String from) {
 
         String key = project.slug();
         String here = ClickContext.DEPENDENCIES + key;
@@ -982,31 +983,43 @@ public final class Messages {
         }
 
         out.add(Component.empty());
-        out.add(dependencyActions(project, installed, installable, missing, reachable, here, from));
+        out.add(dependencyActions(project, installed, installable, missing, reachable,
+                switchingTo, here, from));
 
         return out;
     }
 
     private static Component dependencyActions(ModrinthProject project, boolean installed,
                                                boolean installable, int missing, boolean reachable,
-                                               String here, String from) {
+                                               String switchingTo, String here, String from) {
 
         String key = project.slug();
+
+        // A switch names the build, so pressing through this screen lands on the one that was
+        // chosen rather than on whatever installing would pick.
+        String install = "/catalog install " + key
+                + (switchingTo == null ? "" : " " + switchingTo);
+
         List<Component> row = new ArrayList<>();
 
-        if (!installed && missing > 0) {
+        if (missing > 0 && (!installed || switchingTo != null)) {
 
             // Hidden when a requirement has no build here: installing the rest would leave exactly
             // the broken server this screen exists to prevent.
             if (reachable) {
-                row.add(button("Install all", intent("/catalog install " + key,
+                row.add(button("Install all", intent(install,
                                 ClickContext.WITH_DEPENDENCIES, here), BRAND,
-                        "Install " + project.title() + " and the " + missing + " it requires"));
+                        installed
+                                ? "Install the " + missing + " missing, then switch"
+                                : "Install " + project.title() + " and the " + missing
+                                        + " it requires"));
             }
 
-            row.add(button("Just " + project.title(), intent("/catalog install " + key,
-                            ClickContext.ALONE, here), PENDING,
-                    "Install " + project.title() + " on its own"));
+            row.add(button(installed ? "Switch anyway" : "Just " + project.title(),
+                    intent(install, ClickContext.ALONE, here), PENDING,
+                    installed
+                            ? "Switch without installing what it needs"
+                            : "Install " + project.title() + " on its own"));
 
         } else if (!installed && installable) {
 
@@ -1476,6 +1489,14 @@ public final class Messages {
 
     public static Component stageFailed(String name, String reason) {
         return Component.text(name + ": " + reason, DANGER);
+    }
+
+    public static Component needsDependencies(String name, int missing) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" needs " + missing + " plugin"
+                        + (missing == 1 ? "" : "s") + " that are not installed", MUTED))
+                .build();
     }
 
     public static Component failed(String reason) {

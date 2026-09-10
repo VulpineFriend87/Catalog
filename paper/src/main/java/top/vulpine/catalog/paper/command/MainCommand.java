@@ -164,6 +164,17 @@ public final class MainCommand {
                 ReleaseChannel follow = version.versionType() == null
                         ? defaultChannel() : version.versionType();
 
+                DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
+                List<DependencyResolver.Requirement> missing = resolution.missing();
+                String answer = intent(data);
+
+                // A build that adds a dependency is checked whether it is a first install or a
+                // switch. Only the switch asks twice, because it replaces a jar that already works.
+                if ((!missing.isEmpty() || !resolution.conflicts().isEmpty()) && answer == null) {
+                    showDependencies(sender, project, version, resolution, screen(data));
+                    return;
+                }
+
                 if (tracked != null) {
 
                     if (!confirmed(sender, "switch:" + tracked.projectId() + ":" + version.id(), data)) {
@@ -172,20 +183,15 @@ public final class MainCommand {
                         return;
                     }
 
+                    if (ClickContext.WITH_DEPENDENCIES.equals(answer)) {
+                        plugin.install(pendingFor(missing), sender.getName());
+                    }
+
                     plugin.setChannel(tracked, follow);
                     plugin.stage(tracked, version);
 
                     redraw(sender, screen(data));
                     send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
-                    return;
-                }
-
-                DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
-                List<DependencyResolver.Requirement> missing = resolution.missing();
-                String answer = intent(data);
-
-                if ((!missing.isEmpty() || !resolution.conflicts().isEmpty()) && answer == null) {
-                    showDependencies(sender, project, version, resolution, screen(data));
                     return;
                 }
 
@@ -461,6 +467,12 @@ public final class MainCommand {
                     return;
                 }
 
+                // The same gate a switch goes through: a newer build may declare something this
+                // server does not have, and staging it anyway is a plugin that will not load.
+                if (blocked(sender, tracked, candidate, data)) {
+                    return;
+                }
+
                 plugin.stage(candidate);
 
                 redraw(sender, screen(data));
@@ -470,6 +482,34 @@ public final class MainCommand {
                 send(sender, Messages.failed(rootMessage(e)));
             }
         });
+    }
+
+    /**
+     * Sends an update to the dependency screen when the new build needs something that is missing.
+     *
+     * @return true if the screen was shown, so the caller should stop
+     */
+    private boolean blocked(CommandSender sender, TrackedPlugin tracked, UpdateCandidate candidate,
+                            String data) {
+
+        if (intent(data) != null) {
+            return false;
+        }
+
+        DependencyResolver.Resolution resolution = plugin.dependenciesOf(candidate.version());
+
+        if (resolution.missing().isEmpty() && resolution.conflicts().isEmpty()) {
+            return false;
+        }
+
+        ModrinthProject project = plugin.project(tracked.projectId());
+
+        if (project == null) {
+            return false;
+        }
+
+        showDependencies(sender, project, candidate.version(), resolution, screen(data));
+        return true;
     }
 
     private void updateAll(CommandSender sender, String data) {
@@ -492,6 +532,16 @@ public final class MainCommand {
                 for (UpdateCandidate candidate : candidates) {
 
                     try {
+
+                        List<DependencyResolver.Requirement> missing =
+                                plugin.missingFor(candidate.version());
+
+                        if (!missing.isEmpty()) {
+                            failures.add(Messages.needsDependencies(
+                                    candidate.plugin().displayName(), missing.size()));
+                            continue;
+                        }
+
                         plugin.stage(candidate);
                         staged++;
                     } catch (Exception e) {
@@ -620,9 +670,14 @@ public final class MainCommand {
         List<DependencyView> rows = views(declared);
         rows.addAll(conflicts(resolution.conflicts()));
 
-        boolean installed = plugin.getTracking().byProjectId(project.id()) != null;
+        TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
 
-        send(sender, Messages.dependencies(project, rows, installed, version != null, from));
+        // Only a build other than the installed one is a switch worth carrying through the screen.
+        String switchingTo = tracked != null && version != null
+                && !version.id().equals(tracked.versionId()) ? version.id() : null;
+
+        send(sender, Messages.dependencies(project, rows, tracked != null, version != null,
+                switchingTo, from));
     }
 
     /**
