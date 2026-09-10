@@ -98,6 +98,7 @@ public final class Messages {
 
         out.add(entry("install", "<slug> [version]", "Install a plugin"));
         out.add(entry("update", "<plugin|all>", "Update a plugin"));
+        out.add(entry("cancel", "<plugin>", "Drop a staged update"));
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
         out.add(entry("trash", "", "Restore a trashed plugin"));
 
@@ -482,7 +483,12 @@ public final class Messages {
             return buttons(row);
         }
 
-        if (view.updateAvailable() && !installed.pendingRestart()) {
+        if (installed.pendingRestart()) {
+
+            row.add(button("Cancel update", from("/catalog cancel " + key, here), PENDING,
+                    "Leave " + installed.versionNumber() + " in place"));
+
+        } else if (view.updateAvailable()) {
             row.add(button("Update", from("/catalog update " + key, here), BRAND,
                     "Stage " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
                             + " for the next restart"));
@@ -824,6 +830,8 @@ public final class Messages {
                 .append(Component.text("  "));
 
         boolean current = installed != null && version.id().equals(installed.versionId());
+        boolean staged = installed != null && version.id().equals(installed.stagedVersionId());
+        boolean waiting = installed != null && installed.pendingRestart();
 
         Component hover = Component.text(version.versionNumber(), TEXT)
                 .append(Component.newline())
@@ -835,20 +843,32 @@ public final class Messages {
                         : String.join(", ", version.gameVersions()), TEXT))
                 .append(Component.newline())
                 .append(Component.newline())
-                .append(Component.text(current ? "Already installed"
+                .append(Component.text(staged ? "Waiting for a restart"
+                        : current && waiting ? "Cancel the staged update and stay here"
+                        : current ? "Already installed"
                         : (installed == null ? "Install this build" : "Switch to this build")
                                 + " and follow the " + channel.apiName() + " channel", TEXT));
 
         row.append(Component.text(version.versionNumber(), current ? MUTED : TEXT));
 
-        if (current) {
+        if (staged) {
+            row.append(Component.text("  restart", PENDING));
+        } else if (current) {
             row.append(Component.text("  installed", DONE));
         }
 
+        String here = ClickContext.INFO + project.slug();
+
+        // While a build is waiting, the installed row is the way back out of it.
+        String command = staged ? null
+                : current && waiting ? from("/catalog cancel " + project.slug(), here)
+                : current ? null
+                : from("/catalog install " + project.slug() + " " + version.id(), here);
+
         return row.hoverEvent(HoverEvent.showText(hover))
-                .clickEvent(current ? ClickEvent.suggestCommand("/catalog info " + project.slug())
-                        : ClickEvent.runCommand(from("/catalog install " + project.slug()
-                                + " " + version.id(), ClickContext.INFO + project.slug())))
+                .clickEvent(command == null
+                        ? ClickEvent.suggestCommand("/catalog info " + project.slug())
+                        : ClickEvent.runCommand(command))
                 .build();
     }
 
@@ -1489,6 +1509,20 @@ public final class Messages {
 
     public static Component stageFailed(String name, String reason) {
         return Component.text(name + ": " + reason, DANGER);
+    }
+
+    public static Component cancelled(String name) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" staged update dropped", MUTED))
+                .build();
+    }
+
+    public static Component nothingStaged(String name) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" has no staged update", MUTED))
+                .build();
     }
 
     public static Component needsDependencies(String name, int missing) {

@@ -317,6 +317,7 @@ public final class Updates {
         for (TrackedPlugin plugin : abandoned) {
             plugin.pendingRestart(false);
             plugin.stagedAs(null);
+            plugin.stagedVersionId(null);
             Logger.warn(CatalogAction.UPDATE, "The build staged for " + plugin.displayName()
                     + " is gone from the update folder and was never applied.");
         }
@@ -357,6 +358,7 @@ public final class Updates {
             plugin.moveTo(became, plugin.fileName(), entry.getKey());
             plugin.pendingRestart(false);
             plugin.stagedAs(null);
+            plugin.stagedVersionId(null);
 
             Logger.info(CatalogAction.UPDATE, plugin.displayName() + " is now "
                     + became.versionNumber() + ", applied without a restart by something else.");

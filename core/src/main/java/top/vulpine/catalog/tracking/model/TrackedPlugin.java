@@ -45,6 +45,11 @@ public final class TrackedPlugin {
     private String stagedAs;
 
     /**
+     * Which build is staged, so a picker can mark it while the installed one is still running.
+     */
+    private String stagedVersionId;
+
+    /**
      * Set when Catalog wrote this jar straight into the plugins folder and cleared by the first startup that sees it.
      */
     private boolean pendingLoad;

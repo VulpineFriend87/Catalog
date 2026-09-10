@@ -295,6 +295,22 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         return updates.missingFor(version);
     }
 
+    /**
+     * Drops a staged build so the next restart leaves the plugin as it is.
+     *
+     * @param plugin the plugin to leave alone
+     * @return false when the staged file could not be deleted
+     */
+    public boolean cancelUpdate(TrackedPlugin plugin) {
+
+        try {
+            return installer.cancel(plugin);
+        } catch (TrackingException e) {
+            Logger.error(Action.TRACK, e.getMessage());
+            return false;
+        }
+    }
+
     public ModrinthVersion installTarget(String idOrSlug) {
         return projects.installTarget(idOrSlug);
     }

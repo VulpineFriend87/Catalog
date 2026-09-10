@@ -484,6 +484,39 @@ public final class MainCommand {
         });
     }
 
+    @Subcommand("cancel")
+    @Description("Drop a staged update")
+    @RequiresPermission("command.update")
+    public void cancel(CommandSender sender,
+                       @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
+
+        TrackedPlugin tracked = resolve(query);
+
+        if (tracked == null) {
+            send(sender, Messages.unknownPlugin(query));
+            return;
+        }
+
+        String data = context.take(sender);
+
+        if (!tracked.pendingRestart()) {
+            send(sender, Messages.nothingStaged(tracked.displayName()));
+            return;
+        }
+
+        plugin.getScheduler().runAsync(task -> {
+
+            if (!plugin.cancelUpdate(tracked)) {
+                send(sender, Messages.failed("Could not delete the staged build for "
+                        + tracked.displayName() + ", see the console."));
+                return;
+            }
+
+            redraw(sender, screen(data));
+            send(sender, Messages.cancelled(tracked.displayName()));
+        });
+    }
+
     /**
      * Sends an update to the dependency screen when the new build needs something that is missing.
      *

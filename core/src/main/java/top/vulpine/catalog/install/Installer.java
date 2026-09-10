@@ -68,8 +68,29 @@ public final class Installer {
         platform.applyAtRestart(staged, published);
 
         plugin.stagedAs(published);
+        plugin.stagedVersionId(version.id());
         plugin.pendingRestart(true);
         tracking.save();
+    }
+
+    /**
+     * Drops a staged build so the next restart leaves the plugin as it is.
+     *
+     * @param plugin the plugin to leave alone
+     * @return false when the staged file could not be deleted, in which case it will still apply
+     */
+    public boolean cancel(TrackedPlugin plugin) throws TrackingException {
+
+        if (!platform.cancelStaged(Removals.stagedName(plugin))) {
+            return false;
+        }
+
+        plugin.stagedAs(null);
+        plugin.stagedVersionId(null);
+        plugin.pendingRestart(false);
+        tracking.save();
+
+        return true;
     }
 
     /**
