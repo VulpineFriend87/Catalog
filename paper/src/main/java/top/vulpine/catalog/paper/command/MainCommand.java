@@ -2,6 +2,7 @@ package top.vulpine.catalog.paper.command;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import revxrsal.commands.annotation.Command;
 import revxrsal.commands.annotation.Default;
 import revxrsal.commands.annotation.Description;
@@ -1440,13 +1441,23 @@ public final class MainCommand {
         sender.sendMessage(Component.empty());
 
         for (Component line : lines) {
-            sender.sendMessage(line);
+            sender.sendMessage(shown(sender, line));
         }
     }
 
     private static void send(CommandSender sender, Component line) {
         sender.sendMessage(Component.empty());
-        sender.sendMessage(line);
+        sender.sendMessage(shown(sender, line));
+    }
+
+    /**
+     * A screen as this sender can use it.
+     *
+     * <p>Console, command blocks and RCON cannot click or hover, so a button there is a label with
+     * no way to act on it and no way to find out what it would have run.</p>
+     */
+    private static Component shown(CommandSender sender, Component line) {
+        return sender instanceof Player ? line : Messages.typed(line);
     }
 
     /**

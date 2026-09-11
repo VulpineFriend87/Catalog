@@ -1610,7 +1610,8 @@ public final class Messages {
                 .append(Component.text(label, colour))
                 .append(Component.text("]", MUTED))
                 .clickEvent(complete ? ClickEvent.runCommand(command) : ClickEvent.suggestCommand(command))
-                .hoverEvent(HoverEvent.showText(explain(description, command)));
+                .hoverEvent(HoverEvent.showText(explain(description, command)))
+                .insertion(ClickContext.strip(command).trim());
     }
 
     private static Component icon(String glyph, TextColor colour, String command, String description) {
@@ -1619,7 +1620,54 @@ public final class Messages {
                 .append(Component.text(glyph, colour))
                 .append(Component.text("]", MUTED))
                 .clickEvent(ClickEvent.runCommand(command))
-                .hoverEvent(HoverEvent.showText(explain(description, command)));
+                .hoverEvent(HoverEvent.showText(explain(description, command)))
+                .insertion(ClickContext.strip(command).trim());
+    }
+
+    /**
+     * Rewrites a screen for somewhere that cannot click.
+     *
+     * <p>Every widget carries the command it runs, so a console reads the command in place of a
+     * button it has no way to press.</p>
+     *
+     * @param component the screen as a player would see it
+     * @return the same screen with each button replaced by its command
+     */
+    public static Component typed(Component component) {
+
+        String insertion = component.insertion();
+
+        if (insertion != null && !insertion.isEmpty()) {
+            return Component.text("[", MUTED)
+                    .append(Component.text(insertion, labelColour(component)))
+                    .append(Component.text("]", MUTED));
+        }
+
+        if (component.children().isEmpty()) {
+            return component;
+        }
+
+        List<Component> children = new ArrayList<>();
+
+        for (Component child : component.children()) {
+            children.add(typed(child));
+        }
+
+        return component.children(children);
+    }
+
+    /**
+     * The colour a widget reads as, which is on its label rather than its brackets.
+     */
+    private static TextColor labelColour(Component widget) {
+
+        for (Component child : widget.children()) {
+            if (child.color() != null && !MUTED.equals(child.color())) {
+                return child.color();
+            }
+        }
+
+        return widget.color() == null ? BRAND : widget.color();
     }
 
     private static Component explain(String description, String command) {
