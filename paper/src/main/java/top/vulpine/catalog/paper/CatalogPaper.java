@@ -28,6 +28,7 @@ import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.paper.config.Config;
 import top.vulpine.catalog.paper.util.PermissionChecker;
 import top.vulpine.catalog.platform.Platform;
+import top.vulpine.catalog.tracking.Dependents;
 import top.vulpine.catalog.tracking.IgnoreList;
 import top.vulpine.catalog.tracking.Library;
 import top.vulpine.catalog.tracking.Settings;
@@ -82,6 +83,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private Installer installer;
     private Updates updates;
     private Library library;
+    private Dependents dependents;
 
     /**
      * When this server came up.
@@ -153,6 +155,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
                 () -> configuration.tracking.defaults.soakMinutes, projects::dependenciesOf);
         this.library = new Library(this, modrinth, tracking, ignored, this::defaults,
                 () -> configuration.tracking.autoTrack);
+        this.dependents = new Dependents(tracking, hashes -> modrinth.identify(hashes).join());
 
         Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
                 .permissionForAnnotation(RequiresPermission.class, annotation ->
@@ -301,6 +304,18 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      * @param plugin the plugin to leave alone
      * @return false when the staged file could not be deleted
      */
+    /**
+     * The installed plugins that require this one.
+     *
+     * <p>Blocks, so it must be called off the main thread.</p>
+     *
+     * @param plugin the plugin about to be removed
+     * @return what would be left without a dependency
+     */
+    public List<TrackedPlugin> dependentsOf(TrackedPlugin plugin) {
+        return dependents.of(plugin);
+    }
+
     public boolean cancelUpdate(TrackedPlugin plugin) {
 
         try {

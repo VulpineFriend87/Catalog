@@ -626,6 +626,19 @@ public final class MainCommand {
 
             try {
 
+                // Removing is normally offered with an undo rather than a confirmation. That stops
+                // being enough when something else needs it: an undo cannot help a server that
+                // already failed to start.
+                if (!confirmed(sender, "remove:" + tracked.projectId(), data)) {
+
+                    List<TrackedPlugin> dependents = plugin.dependentsOf(tracked);
+
+                    if (!dependents.isEmpty()) {
+                        send(sender, Messages.confirmRemove(tracked, dependents, screen(data)));
+                        return;
+                    }
+                }
+
                 TrashBin.Result result = plugin.uninstall(tracked, sender.getName());
 
                 redraw(sender, screen(data));
