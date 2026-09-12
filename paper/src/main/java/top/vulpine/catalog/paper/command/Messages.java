@@ -1028,6 +1028,10 @@ public final class Messages {
         String install = "/catalog install " + key
                 + (switchingTo == null ? "" : " " + switchingTo);
 
+        // Installing ends the flow, so it returns to wherever the flow began. Reaching this screen
+        // by typing began nowhere, and a typed command answers in one line.
+        String ends = from == null ? null : here;
+
 
         List<Component> row = new ArrayList<>();
 
@@ -1040,7 +1044,7 @@ public final class Messages {
                 // The count says how many files this writes, which is what "all" left open: the
                 // screen lists optional rows too, and those are never part of it.
                 row.add(button("Install all", intent(install,
-                                ClickContext.WITH_DEPENDENCIES, here), BRAND,
+                                ClickContext.WITH_DEPENDENCIES, ends), BRAND,
                         installed
                                 ? "Install the " + missing + " missing, then switch"
                                 : "Install " + project.title() + " and the " + missing
@@ -1048,14 +1052,14 @@ public final class Messages {
             }
 
             row.add(button(installed ? "Switch anyway" : "Just " + project.title(),
-                    intent(install, ClickContext.ALONE, here), PENDING,
+                    intent(install, ClickContext.ALONE, ends), PENDING,
                     installed
                             ? "Switch without installing what it needs"
                             : "Install " + project.title() + " on its own"));
 
         } else if (!installed && installable) {
 
-            row.add(button("Install " + project.title(), from("/catalog install " + key, here),
+            row.add(button("Install " + project.title(), from("/catalog install " + key, ends),
                     BRAND, "Install " + project.title()));
 
         } else if (installed && missing > 0 && reachable) {

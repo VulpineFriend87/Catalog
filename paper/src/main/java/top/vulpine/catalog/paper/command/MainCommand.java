@@ -207,7 +207,9 @@ public final class MainCommand {
                 pending.add(new CatalogPaper.Pending(project, version, follow, true, null));
                 plugin.install(pending, sender.getName());
 
-                redraw(sender, screen(data));
+                // The dependency screen was a gate, not a destination. Once everything is written
+                // there is nothing left for it to say, so the plugin's own page is where to land.
+                redraw(sender, afterInstall(screen(data), project.slug()));
                 send(sender, pending.size() == 1
                         ? Messages.installed(project.title(), version.versionNumber())
                         : Messages.installedWith(project.title(), version.versionNumber(),
@@ -560,6 +562,19 @@ public final class MainCommand {
             redraw(sender, screen(data));
             send(sender, Messages.cancelled(tracked.displayName()));
         });
+    }
+
+    /**
+     * Where to land once an install has finished.
+     *
+     * @param from the screen it was started from
+     * @param slug the plugin that was installed
+     * @return the same screen, unless it was the dependency gate, which has nothing left to show
+     */
+    private static String afterInstall(String from, String slug) {
+
+        return from != null && from.startsWith(ClickContext.DEPENDENCIES)
+                ? ClickContext.INFO + slug : from;
     }
 
     /**
