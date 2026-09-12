@@ -1043,12 +1043,15 @@ public final class Messages {
 
                 // The count says how many files this writes, which is what "all" left open: the
                 // screen lists optional rows too, and those are never part of it.
-                row.add(button("Install all", intent(install,
-                                ClickContext.WITH_DEPENDENCIES, ends), BRAND,
+                // The count says how many files this writes, which is what "all" left open: the
+                // screen lists optional rows too, and those are never part of it.
+                row.add(button(installed ? "Install all " + missing : "Install all " + (missing + 1),
+                        intent(install, ClickContext.WITH_DEPENDENCIES, ends), BRAND,
                         installed
                                 ? "Install the " + missing + " missing, then switch"
                                 : "Install " + project.title() + " and the " + missing
-                                        + " it requires"));
+                                        + (missing == 1 ? " plugin it requires"
+                                                : " plugins it requires")));
             }
 
             row.add(button(installed ? "Switch anyway" : "Just " + project.title(),
