@@ -1,6 +1,6 @@
 [versions]
 paper = "1.18.2-R0.1-SNAPSHOT"
-velocity = "3.4.0-SNAPSHOT"
+velocity = "4.1.1"
 papi = "2.12.3"
 # The oldest Gson across supported platforms: Paper 1.18.2 ships 2.8.9, Velocity 2.10.1.
 # Compiling against the floor keeps us off APIs (records, most notably) that would fail at runtime.
