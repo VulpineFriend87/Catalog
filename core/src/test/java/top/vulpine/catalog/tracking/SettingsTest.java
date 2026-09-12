@@ -44,33 +44,33 @@ class SettingsTest {
 
     @Test
     void channelIsWrittenThrough() throws Exception {
-        settings.channel(plugin, ReleaseChannel.BETA);
+        settings.channel(plugin, ReleaseChannel.BETA, "vulpine");
         assertEquals(ReleaseChannel.BETA, plugin.channel());
     }
 
     @Test
     void negativeSoakBecomesNone() throws Exception {
-        settings.soak(plugin, -5);
+        settings.soak(plugin, -5, "vulpine");
         assertEquals(0, plugin.soakMinutes());
     }
 
     @Test
     void inheritIsKeptRatherThanClamped() throws Exception {
-        settings.soak(plugin, TrackedPlugin.INHERIT_SOAK);
+        settings.soak(plugin, TrackedPlugin.INHERIT_SOAK, "vulpine");
         assertEquals(TrackedPlugin.INHERIT_SOAK, plugin.soakMinutes());
     }
 
     @Test
     void holdingPinsTheInstalledBuild() throws Exception {
-        settings.held(plugin, true);
+        settings.held(plugin, true, "vulpine");
         assertTrue(plugin.isPinned());
         assertEquals("aBc12XyZ", plugin.pinnedVersionId());
     }
 
     @Test
     void releasingClearsThePin() throws Exception {
-        settings.held(plugin, true);
-        settings.held(plugin, false);
+        settings.held(plugin, true, "vulpine");
+        settings.held(plugin, false, "vulpine");
         assertFalse(plugin.isPinned());
         assertNull(plugin.pinnedVersionId());
     }
@@ -83,7 +83,7 @@ class SettingsTest {
     @Test
     void everyChangeIsPersisted() throws Exception {
 
-        settings.channel(plugin, ReleaseChannel.ALPHA);
+        settings.channel(plugin, ReleaseChannel.ALPHA, "vulpine");
 
         TrackingStore reopened = new TrackingStore(directory.resolve("tracked.json"));
         reopened.load();

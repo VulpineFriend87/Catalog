@@ -188,8 +188,8 @@ public final class MainCommand {
                         plugin.install(pendingFor(missing), sender.getName());
                     }
 
-                    plugin.setChannel(tracked, follow);
-                    plugin.stage(tracked, version);
+                    plugin.setChannel(tracked, follow, sender.getName());
+                    plugin.stage(tracked, version, sender.getName());
 
                     redraw(sender, screen(data));
                     send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
@@ -346,7 +346,7 @@ public final class MainCommand {
             return;
         }
 
-        plugin.setAutoUpdate(tracked, state.on());
+        plugin.setAutoUpdate(tracked, state.on(), sender.getName());
         done(sender, context.take(sender), Messages.autoSet(tracked.displayName(), state.on()));
     }
 
@@ -371,7 +371,7 @@ public final class MainCommand {
             return;
         }
 
-        plugin.setSoak(tracked, minutes);
+        plugin.setSoak(tracked, minutes, sender.getName());
         done(sender, context.take(sender), Messages.soakSet(tracked.displayName(), minutes,
                 plugin.defaultSoakMinutes()));
     }
@@ -432,7 +432,7 @@ public final class MainCommand {
             return;
         }
 
-        plugin.setChannel(tracked, channel);
+        plugin.setChannel(tracked, channel, sender.getName());
         done(sender, context.take(sender), Messages.channelSet(tracked.displayName(), channel));
     }
 
@@ -474,7 +474,7 @@ public final class MainCommand {
                     return;
                 }
 
-                plugin.stage(candidate);
+                plugin.stage(candidate, sender.getName());
 
                 redraw(sender, screen(data));
                 send(sender, Messages.staged(tracked.displayName(), candidate.to()));
@@ -507,7 +507,7 @@ public final class MainCommand {
 
         plugin.getScheduler().runAsync(task -> {
 
-            if (!plugin.cancelUpdate(tracked)) {
+            if (!plugin.cancelUpdate(tracked, sender.getName())) {
                 send(sender, Messages.failed("Could not delete the staged build for "
                         + tracked.displayName() + ", see the console."));
                 return;
@@ -576,7 +576,7 @@ public final class MainCommand {
                             continue;
                         }
 
-                        plugin.stage(candidate);
+                        plugin.stage(candidate, sender.getName());
                         staged++;
                     } catch (Exception e) {
                         // One plugin failing is not a reason to abandon the rest of the queue, and
@@ -1012,7 +1012,7 @@ public final class MainCommand {
             return;
         }
 
-        plugin.setHeld(tracked, held);
+        plugin.setHeld(tracked, held, sender.getName());
         done(sender, context.take(sender), Messages.held(tracked.displayName(), held));
     }
 

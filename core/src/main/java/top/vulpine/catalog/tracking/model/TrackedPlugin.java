@@ -50,6 +50,11 @@ public final class TrackedPlugin {
     private String stagedVersionId;
 
     /**
+     * Who queued the staged build, read by the restart that applies it. Absent means Catalog did.
+     */
+    private String stagedBy;
+
+    /**
      * Set when Catalog wrote this jar straight into the plugins folder and cleared by the first startup that sees it.
      */
     private boolean pendingLoad;

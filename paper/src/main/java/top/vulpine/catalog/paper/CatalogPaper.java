@@ -316,10 +316,10 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         return dependents.of(plugin);
     }
 
-    public boolean cancelUpdate(TrackedPlugin plugin) {
+    public boolean cancelUpdate(TrackedPlugin plugin, String by) {
 
         try {
-            return installer.cancel(plugin);
+            return installer.cancel(plugin, by);
         } catch (TrackingException e) {
             Logger.error(Action.TRACK, e.getMessage());
             return false;
@@ -338,12 +338,12 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         return projects.compatibleVersions(idOrSlug);
     }
 
-    public void stage(UpdateCandidate candidate) {
-        saving(() -> installer.stage(candidate));
+    public void stage(UpdateCandidate candidate, String by) {
+        saving(() -> installer.stage(candidate, by));
     }
 
-    public void stage(TrackedPlugin plugin, ModrinthVersion version) {
-        saving(() -> installer.stage(plugin, version));
+    public void stage(TrackedPlugin plugin, ModrinthVersion version, String by) {
+        saving(() -> installer.stage(plugin, version, by));
     }
 
     /**
@@ -473,24 +473,24 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         removals.finish();
     }
 
-    public void setChannel(TrackedPlugin plugin, ReleaseChannel channel) {
-        saving(() -> settings.channel(plugin, channel));
+    public void setChannel(TrackedPlugin plugin, ReleaseChannel channel, String by) {
+        saving(() -> settings.channel(plugin, channel, by));
     }
 
-    public void setAutoUpdate(TrackedPlugin plugin, boolean on) {
-        saving(() -> settings.autoUpdate(plugin, on));
+    public void setAutoUpdate(TrackedPlugin plugin, boolean on, String by) {
+        saving(() -> settings.autoUpdate(plugin, on, by));
     }
 
-    public void setSoak(TrackedPlugin plugin, int minutes) {
-        saving(() -> settings.soak(plugin, minutes));
+    public void setSoak(TrackedPlugin plugin, int minutes, String by) {
+        saving(() -> settings.soak(plugin, minutes, by));
     }
 
     public int defaultSoakMinutes() {
         return settings.defaultSoakMinutes();
     }
 
-    public void setHeld(TrackedPlugin plugin, boolean held) {
-        saving(() -> settings.held(plugin, held));
+    public void setHeld(TrackedPlugin plugin, boolean held, String by) {
+        saving(() -> settings.held(plugin, held, by));
     }
 
     /**

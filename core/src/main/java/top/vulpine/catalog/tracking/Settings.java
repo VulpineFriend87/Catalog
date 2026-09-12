@@ -24,8 +24,10 @@ public final class Settings {
      *
      * @param plugin  the plugin to change
      * @param channel the least stable channel it should accept
+     * @param by      who asked
      */
-    public void channel(TrackedPlugin plugin, ReleaseChannel channel) throws TrackingException {
+    public void channel(TrackedPlugin plugin, ReleaseChannel channel, String by)
+            throws TrackingException {
         plugin.channel(channel);
         tracking.save();
     }
@@ -35,8 +37,10 @@ public final class Settings {
      *
      * @param plugin the plugin to change
      * @param on     true to let it update itself
+     * @param by     who asked
      */
-    public void autoUpdate(TrackedPlugin plugin, boolean on) throws TrackingException {
+    public void autoUpdate(TrackedPlugin plugin, boolean on, String by)
+            throws TrackingException {
         plugin.autoUpdate(on);
         tracking.save();
     }
@@ -47,8 +51,9 @@ public final class Settings {
      *
      * @param plugin  the plugin to change
      * @param minutes the window, or {@link TrackedPlugin#INHERIT_SOAK} to follow the config
+     * @param by      who asked
      */
-    public void soak(TrackedPlugin plugin, int minutes) throws TrackingException {
+    public void soak(TrackedPlugin plugin, int minutes, String by) throws TrackingException {
         plugin.soakMinutes(minutes == TrackedPlugin.INHERIT_SOAK ? minutes : Math.max(minutes, 0));
         tracking.save();
     }
@@ -58,8 +63,9 @@ public final class Settings {
      *
      * @param plugin the plugin to hold
      * @param held   true to freeze it
+     * @param by     who asked
      */
-    public void held(TrackedPlugin plugin, boolean held) throws TrackingException {
+    public void held(TrackedPlugin plugin, boolean held, String by) throws TrackingException {
 
         if (held) {
             plugin.pinToCurrent();

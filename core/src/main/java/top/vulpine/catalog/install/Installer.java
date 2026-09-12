@@ -47,9 +47,10 @@ public final class Installer {
      * Downloads an update and stages it for the next restart.
      *
      * @param candidate the update to stage
+     * @param by        who asked, or null when Catalog decided on its own
      */
-    public void stage(UpdateCandidate candidate) throws TrackingException {
-        stage(candidate.plugin(), candidate.version());
+    public void stage(UpdateCandidate candidate, String by) throws TrackingException {
+        stage(candidate.plugin(), candidate.version(), by);
     }
 
     /**
@@ -57,8 +58,10 @@ public final class Installer {
      *
      * @param plugin  the tracked plugin to replace
      * @param version the build to put in its place
+     * @param by      who asked, or null when Catalog decided on its own
      */
-    public void stage(TrackedPlugin plugin, ModrinthVersion version) throws TrackingException {
+    public void stage(TrackedPlugin plugin, ModrinthVersion version, String by)
+            throws TrackingException {
 
         Path staged = downloader.fetch(version, Runtime.version().feature());
 
@@ -69,6 +72,7 @@ public final class Installer {
 
         plugin.stagedAs(published);
         plugin.stagedVersionId(version.id());
+        plugin.stagedBy(by);
         plugin.pendingRestart(true);
         tracking.save();
     }
@@ -77,9 +81,10 @@ public final class Installer {
      * Drops a staged build so the next restart leaves the plugin as it is.
      *
      * @param plugin the plugin to leave alone
+     * @param by     who asked
      * @return false when the staged file could not be deleted, in which case it will still apply
      */
-    public boolean cancel(TrackedPlugin plugin) throws TrackingException {
+    public boolean cancel(TrackedPlugin plugin, String by) throws TrackingException {
 
         if (!platform.cancelStaged(Removals.stagedName(plugin))) {
             return false;
@@ -87,6 +92,7 @@ public final class Installer {
 
         plugin.stagedAs(null);
         plugin.stagedVersionId(null);
+        plugin.stagedBy(null);
         plugin.pendingRestart(false);
         tracking.save();
 

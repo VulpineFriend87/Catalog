@@ -212,7 +212,7 @@ public final class Updates {
 
             try {
 
-                installer.stage(candidate);
+                installer.stage(candidate, null);
 
                 Logger.info(CatalogAction.UPDATE, "Updated " + candidate.plugin().displayName()
                         + " " + candidate.from() + " -> " + candidate.to()
@@ -318,6 +318,7 @@ public final class Updates {
             plugin.pendingRestart(false);
             plugin.stagedAs(null);
             plugin.stagedVersionId(null);
+            plugin.stagedBy(null);
             Logger.warn(CatalogAction.UPDATE, "The build staged for " + plugin.displayName()
                     + " is gone from the update folder and was never applied.");
         }
@@ -359,6 +360,7 @@ public final class Updates {
             plugin.pendingRestart(false);
             plugin.stagedAs(null);
             plugin.stagedVersionId(null);
+            plugin.stagedBy(null);
 
             Logger.info(CatalogAction.UPDATE, plugin.displayName() + " is now "
                     + became.versionNumber() + ", applied without a restart by something else.");
