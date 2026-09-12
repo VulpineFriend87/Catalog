@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import top.vulpine.catalog.history.History;
 import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.json.Json;
 import top.vulpine.catalog.modrinth.model.DependencyType;
@@ -87,8 +88,13 @@ class UpdatesDependencyTest {
         store.put(plugin);
     }
 
+    private History history() {
+        return new History(directory.resolve("history.json"));
+    }
+
     private Updates updates(DependencyResolver.Resolution resolution) {
-        return new Updates(new Recording(), null, store, null, () -> 0, version -> resolution);
+        return new Updates(new Recording(), null, store, null, () -> 0, version -> resolution,
+                history());
     }
 
     private static DependencyResolver.Resolution needing(String projectId, boolean installed) {
@@ -146,7 +152,7 @@ class UpdatesDependencyTest {
         Updates failing = new Updates(new Recording(), null, store, null, () -> 0,
                 version -> {
                     throw new IllegalStateException("no network");
-                });
+                }, history());
 
         assertTrue(failing.missingFor(version()).isEmpty());
     }

@@ -1,6 +1,9 @@
 package top.vulpine.catalog.install;
 
 import top.vulpine.catalog.hash.Hashing;
+import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.history.History;
+import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
@@ -33,14 +36,16 @@ public final class Installer {
     private final TrackingStore tracking;
     private final Removals removals;
     private final Supplier<TrackingDefaults> defaults;
+    private final History history;
 
     public Installer(Platform platform, Downloader downloader, TrackingStore tracking,
-                     Removals removals, Supplier<TrackingDefaults> defaults) {
+                     Removals removals, Supplier<TrackingDefaults> defaults, History history) {
         this.platform = platform;
         this.downloader = downloader;
         this.tracking = tracking;
         this.removals = removals;
         this.defaults = defaults;
+        this.history = history;
     }
 
     /**
@@ -50,7 +55,7 @@ public final class Installer {
      * @param by        who asked, or null when Catalog decided on its own
      */
     public void stage(UpdateCandidate candidate, String by) throws TrackingException {
-        stage(candidate.plugin(), candidate.version(), by);
+        stage(candidate.plugin(), candidate.version(), by, Event.UPDATE_STAGED);
     }
 
     /**
@@ -59,9 +64,12 @@ public final class Installer {
      * @param plugin  the tracked plugin to replace
      * @param version the build to put in its place
      * @param by      who asked, or null when Catalog decided on its own
+     * @param as      how it is recorded: an update, a switch or a rollback
      */
-    public void stage(TrackedPlugin plugin, ModrinthVersion version, String by)
+    public void stage(TrackedPlugin plugin, ModrinthVersion version, String by, Event as)
             throws TrackingException {
+
+        HistoryEntry entry = HistoryEntry.staged(plugin, version, by, as);
 
         Path staged = downloader.fetch(version, Runtime.version().feature());
 
@@ -75,6 +83,8 @@ public final class Installer {
         plugin.stagedBy(by);
         plugin.pendingRestart(true);
         tracking.save();
+
+        history.add(entry);
     }
 
     /**
@@ -96,6 +106,7 @@ public final class Installer {
         plugin.pendingRestart(false);
         tracking.save();
 
+        history.add(HistoryEntry.cancelled(plugin, by));
         return true;
     }
 
@@ -110,7 +121,7 @@ public final class Installer {
      */
     public TrackedPlugin install(ModrinthProject project, ModrinthVersion version,
                                  ReleaseChannel channel, String by) throws TrackingException {
-        return install(List.of(new Pending(project, version, channel, true)), by).get(0);
+        return install(List.of(new Pending(project, version, channel, true, null)), by).get(0);
     }
 
     /**
@@ -154,17 +165,30 @@ public final class Installer {
         }
 
         tracking.save();
+
+        for (Map.Entry<Pending, Path> entry : staged.entrySet()) {
+
+            TrackedPlugin tracked = tracking.byProjectId(entry.getKey().project().id());
+
+            if (tracked != null) {
+                history.add(HistoryEntry.installed(tracked, by, entry.getKey().requiredBy()));
+            }
+        }
+
         return installed;
     }
 
     /**
      * A build about to be installed.
      *
-     * @param explicit false when it is only here because something else named it, which is what
-     *                 lets a later autoremove offer it once nothing needs it
+     * @param explicit   false when it is only here because something else named it, which is what
+     *                   lets a later autoremove offer it once nothing needs it
+     * @param requiredBy the plugin whose install pulled this one in, or null when it was asked for
+     *                   outright. The root rather than the immediate parent: six months later the
+     *                   useful answer is which install brought it, not which link in the chain.
      */
     public record Pending(ModrinthProject project, ModrinthVersion version, ReleaseChannel channel,
-                          boolean explicit) {
+                          boolean explicit, String requiredBy) {
     }
 
     /**

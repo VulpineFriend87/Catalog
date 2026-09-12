@@ -1,5 +1,8 @@
 package top.vulpine.catalog.tracking;
 
+import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.history.History;
+import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
@@ -13,10 +16,12 @@ public final class Settings {
 
     private final TrackingStore tracking;
     private final Supplier<TrackingDefaults> defaults;
+    private final History history;
 
-    public Settings(TrackingStore tracking, Supplier<TrackingDefaults> defaults) {
+    public Settings(TrackingStore tracking, Supplier<TrackingDefaults> defaults, History history) {
         this.tracking = tracking;
         this.defaults = defaults;
+        this.history = history;
     }
 
     /**
@@ -30,6 +35,7 @@ public final class Settings {
             throws TrackingException {
         plugin.channel(channel);
         tracking.save();
+        history.add(HistoryEntry.setting(plugin, Event.CHANNEL, channel.apiName(), by));
     }
 
     /**
@@ -43,6 +49,7 @@ public final class Settings {
             throws TrackingException {
         plugin.autoUpdate(on);
         tracking.save();
+        history.add(HistoryEntry.setting(plugin, Event.AUTO_UPDATE, on ? "on" : "off", by));
     }
 
     /**
@@ -56,6 +63,11 @@ public final class Settings {
     public void soak(TrackedPlugin plugin, int minutes, String by) throws TrackingException {
         plugin.soakMinutes(minutes == TrackedPlugin.INHERIT_SOAK ? minutes : Math.max(minutes, 0));
         tracking.save();
+        // The word rather than the number: -1 means follow the config, and rendering it as a
+        // duration would say "none", which is the opposite.
+        history.add(HistoryEntry.setting(plugin, Event.SOAK,
+                plugin.soakMinutes() == TrackedPlugin.INHERIT_SOAK
+                        ? "default" : String.valueOf(plugin.soakMinutes()), by));
     }
 
     /**
@@ -74,6 +86,7 @@ public final class Settings {
         }
 
         tracking.save();
+        history.add(HistoryEntry.setting(plugin, held ? Event.HELD : Event.UNHELD, null, by));
     }
 
     /**

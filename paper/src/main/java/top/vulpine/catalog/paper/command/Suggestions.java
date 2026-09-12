@@ -27,6 +27,16 @@ public final class Suggestions {
 
     private Suggestions() {}
 
+    /** Every plugin the history mentions, installed or not. */
+    public static final class Logged implements SuggestionProvider<BukkitCommandActor> {
+
+        @Override
+        public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
+            return JavaPlugin.getPlugin(CatalogPaper.class).loggedPlugins();
+        }
+
+    }
+
     /** Every managed plugin. */
     public static final class Tracked implements SuggestionProvider<BukkitCommandActor> {
 

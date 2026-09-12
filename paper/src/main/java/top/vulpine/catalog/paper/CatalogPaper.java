@@ -12,6 +12,9 @@ import revxrsal.commands.Lamp;
 import revxrsal.commands.bukkit.BukkitLamp;
 import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 import top.vulpine.catalog.install.DependencyResolver;
+import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.history.History;
+import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.install.Downloader;
 import top.vulpine.catalog.install.Installer;
 import top.vulpine.catalog.install.InstallException;
@@ -84,6 +87,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private Updates updates;
     private Library library;
     private Dependents dependents;
+    private History history;
 
     /**
      * When this server came up.
@@ -147,14 +151,18 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         Path data = getDataFolder().toPath();
         this.downloader = new Downloader(modrinth, data.resolve("staging"));
         this.trash = new TrashBin(data.resolve("trash"));
-        this.settings = new Settings(tracking, this::defaults);
+        this.history = new History(data.resolve("data").resolve("history.json"));
+        this.history.load();
+
+        this.settings = new Settings(tracking, this::defaults, history);
         this.projects = new Projects(this, modrinth, tracking);
-        this.removals = new Removals(this, trash, tracking, this::defaults, startedAt);
-        this.installer = new Installer(this, downloader, tracking, removals, this::defaults);
+        this.removals = new Removals(this, trash, tracking, this::defaults, startedAt, history);
+        this.installer = new Installer(this, downloader, tracking, removals, this::defaults, history);
         this.updates = new Updates(this, modrinth, tracking, installer,
-                () -> configuration.tracking.defaults.soakMinutes, projects::dependenciesOf);
+                () -> configuration.tracking.defaults.soakMinutes, projects::dependenciesOf,
+                history);
         this.library = new Library(this, modrinth, tracking, ignored, this::defaults,
-                () -> configuration.tracking.autoTrack);
+                () -> configuration.tracking.autoTrack, history);
         this.dependents = new Dependents(tracking, hashes -> modrinth.identify(hashes).join());
 
         Lamp<BukkitCommandActor> lamp = BukkitLamp.builder(this)
@@ -294,6 +302,32 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         return updates.byProject();
     }
 
+    /**
+     * What Catalog has done, newest first.
+     *
+     * @param projectId only this plugin, or null for every plugin
+     * @param by        only this author, or null for everyone
+     * @return the matching entries
+     */
+    public List<HistoryEntry> history(String projectId, String by) {
+        return history.filter(projectId, by);
+    }
+
+    /**
+     * @param query what was typed
+     * @return the project id the history knows it by, or null if it has never mentioned it
+     */
+    public String loggedProjectId(String query) {
+        return history.projectIdFor(query);
+    }
+
+    /**
+     * @return every plugin the history mentions, for tab completion
+     */
+    public List<String> loggedPlugins() {
+        return history.plugins();
+    }
+
     public List<DependencyResolver.Requirement> missingFor(ModrinthVersion version) {
         return updates.missingFor(version);
     }
@@ -342,8 +376,8 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         saving(() -> installer.stage(candidate, by));
     }
 
-    public void stage(TrackedPlugin plugin, ModrinthVersion version, String by) {
-        saving(() -> installer.stage(plugin, version, by));
+    public void stage(TrackedPlugin plugin, ModrinthVersion version, String by, Event as) {
+        saving(() -> installer.stage(plugin, version, by, as));
     }
 
     /**
@@ -359,7 +393,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      */
     public TrackedPlugin install(ModrinthProject project, ModrinthVersion version,
                                  ReleaseChannel channel, String by) {
-        return install(List.of(new Pending(project, version, channel, true)), by).get(0);
+        return install(List.of(new Pending(project, version, channel, true, null)), by).get(0);
     }
 
     /**
@@ -376,7 +410,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
         for (Pending one : pending) {
             work.add(new Installer.Pending(one.project(), one.version(), one.channel(),
-                    one.explicit()));
+                    one.explicit(), one.requiredBy()));
         }
 
         try {
@@ -393,7 +427,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
      *                 lets a later autoremove offer it once nothing needs it
      */
     public record Pending(ModrinthProject project, ModrinthVersion version, ReleaseChannel channel,
-                          boolean explicit) {
+                          boolean explicit, String requiredBy) {
     }
 
     public DependencyResolver.Resolution dependenciesOf(ModrinthVersion version) {
@@ -447,12 +481,12 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         }
     }
 
-    public void discardTrashed(TrashEntry entry) {
-        removals.discard(entry);
+    public void discardTrashed(TrashEntry entry, String by) {
+        removals.discard(entry, by);
     }
 
-    public int emptyTrash() {
-        return removals.empty();
+    public int emptyTrash(String by) {
+        return removals.empty(by);
     }
 
     /**

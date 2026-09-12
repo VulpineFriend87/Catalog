@@ -3,6 +3,7 @@ package top.vulpine.catalog.tracking;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import top.vulpine.catalog.history.History;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
@@ -33,7 +34,7 @@ class SettingsTest {
                 .channel(ReleaseChannel.RELEASE)
                 .autoUpdate(false)
                 .soakMinutes(120)
-                .build());
+                .build(), new History(directory.resolve("history.json")));
 
         plugin = new TrackedPlugin();
         plugin.projectId("P7dR8mSH");

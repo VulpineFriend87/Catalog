@@ -1,5 +1,8 @@
 package top.vulpine.catalog.trash;
 
+import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.history.History;
+import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.install.InstallException;
 import top.vulpine.catalog.platform.Platform;
 import top.vulpine.catalog.tracking.TrackingException;
@@ -13,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,6 +32,7 @@ public final class Removals {
     private final TrackingStore tracking;
     private final Supplier<TrackingDefaults> defaults;
     private final Instant startedAt;
+    private final History history;
 
     /**
      * Jars this server would not let us delete, to be removed once it has let go of them.
@@ -39,12 +44,13 @@ public final class Removals {
     private final Set<Path> deleteAtShutdown = ConcurrentHashMap.newKeySet();
 
     public Removals(Platform platform, TrashBin trash, TrackingStore tracking,
-                    Supplier<TrackingDefaults> defaults, Instant startedAt) {
+                    Supplier<TrackingDefaults> defaults, Instant startedAt, History history) {
         this.platform = platform;
         this.trash = trash;
         this.tracking = tracking;
         this.defaults = defaults;
         this.startedAt = startedAt;
+        this.history = history;
     }
 
     /**
@@ -72,6 +78,7 @@ public final class Removals {
         tracking.remove(plugin.projectId());
         tracking.save();
 
+        history.add(HistoryEntry.trashed(plugin, by));
         return result;
     }
 
@@ -162,6 +169,7 @@ public final class Removals {
         tracking.put(tracked);
         tracking.save();
 
+        history.add(HistoryEntry.restored(tracked, by));
         return tracked;
     }
 
@@ -209,18 +217,34 @@ public final class Removals {
      * Deletes one removal permanently.
      *
      * @param entry what to delete
+     * @param by    who asked
      */
-    public void discard(TrashEntry entry) {
+    public void discard(TrashEntry entry, String by) {
         trash.discard(entry);
+        history.add(HistoryEntry.deleted(entry, by));
     }
 
     /**
      * Deletes every removal permanently.
      *
+     * @param by who asked
      * @return how many went
      */
-    public int empty() {
-        return trash.empty();
+    public int empty(String by) {
+
+        List<String> names = new ArrayList<>();
+
+        for (TrashEntry entry : trash.list()) {
+            names.add(entry.displayName());
+        }
+
+        int gone = trash.empty();
+
+        if (gone > 0) {
+            history.add(HistoryEntry.many(Event.TRASH_EMPTIED, gone, names, by));
+        }
+
+        return gone;
     }
 
     /**

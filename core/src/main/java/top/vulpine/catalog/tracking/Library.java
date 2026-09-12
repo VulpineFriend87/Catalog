@@ -2,6 +2,9 @@ package top.vulpine.catalog.tracking;
 
 import top.vulpine.catalog.CatalogAction;
 import top.vulpine.catalog.Errors;
+import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.history.History;
+import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.jar.JarScanner;
 import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.jar.model.ScanResult;
@@ -33,18 +36,20 @@ public final class Library {
     private final IgnoreList ignored;
     private final Supplier<TrackingDefaults> defaults;
     private final BooleanSupplier autoTrack;
+    private final History history;
 
     private volatile int unmanaged;
 
     public Library(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
                    IgnoreList ignored, Supplier<TrackingDefaults> defaults,
-                   BooleanSupplier autoTrack) {
+                   BooleanSupplier autoTrack, History history) {
         this.platform = platform;
         this.modrinth = modrinth;
         this.tracking = tracking;
         this.ignored = ignored;
         this.defaults = defaults;
         this.autoTrack = autoTrack;
+        this.history = history;
     }
 
     /**
@@ -98,6 +103,9 @@ public final class Library {
         ReconcileReport report = reconciler.reconcile(scan, identified);
         boolean named = nameTrackedPlugins();
 
+        // Before the save, because recording who staged a build also clears it from the record.
+        record(report);
+
         if (report.hasChanges() || named) {
 
             try {
@@ -110,7 +118,52 @@ public final class Library {
         unmanaged = report.unknown().size();
 
         describe(report, scan);
+
         return true;
+    }
+
+    /**
+     * Writes down what this scan found had changed while the server was off.
+     */
+    private void record(ReconcileReport report) {
+
+        if (report.applied().size() == 1) {
+            history.add(HistoryEntry.applied(report.applied().get(0)));
+        } else if (report.applied().size() > 1) {
+            history.add(HistoryEntry.many(Event.UPDATES_APPLIED, report.applied().size(),
+                    named(report.applied()), null));
+        }
+
+        // The Reconciler clears everything else about the staging; this is the last reader.
+        for (TrackedPlugin plugin : report.applied()) {
+            plugin.stagedBy(null);
+        }
+
+        if (report.adopted().size() == 1) {
+            history.add(HistoryEntry.found(report.adopted().get(0), Event.ADOPTED));
+        } else if (report.adopted().size() > 1) {
+            history.add(HistoryEntry.many(Event.ADOPTED, report.adopted().size(),
+                    named(report.adopted()), null));
+        }
+
+        for (TrackedPlugin plugin : report.moved()) {
+            history.add(HistoryEntry.found(plugin, Event.REPLACED_BY_HAND));
+        }
+
+        for (TrackedPlugin plugin : report.removed()) {
+            history.add(HistoryEntry.found(plugin, Event.NO_LONGER_INSTALLED));
+        }
+    }
+
+    private static List<String> named(List<TrackedPlugin> plugins) {
+
+        List<String> names = new ArrayList<>();
+
+        for (TrackedPlugin plugin : plugins) {
+            names.add(plugin.displayName());
+        }
+
+        return names;
     }
 
     /**

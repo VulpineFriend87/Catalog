@@ -14,6 +14,7 @@ import revxrsal.commands.annotation.Sized;
 import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
 import revxrsal.commands.annotation.Switch;
+import top.vulpine.catalog.history.Event;
 import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.modrinth.model.Dependency;
 import top.vulpine.catalog.modrinth.model.DependencyType;
@@ -185,11 +186,12 @@ public final class MainCommand {
                     }
 
                     if (ClickContext.WITH_DEPENDENCIES.equals(answer)) {
-                        plugin.install(pendingFor(missing), sender.getName());
+                        plugin.install(pendingFor(missing, project), sender.getName());
                     }
 
                     plugin.setChannel(tracked, follow, sender.getName());
-                    plugin.stage(tracked, version, sender.getName());
+                    plugin.stage(tracked, version, sender.getName(),
+                            isOlder(version, tracked) ? Event.ROLLED_BACK : Event.SWITCHED);
 
                     redraw(sender, screen(data));
                     send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
@@ -199,10 +201,10 @@ public final class MainCommand {
                 List<CatalogPaper.Pending> pending = new ArrayList<>();
 
                 if (ClickContext.WITH_DEPENDENCIES.equals(answer)) {
-                    pending.addAll(pendingFor(missing));
+                    pending.addAll(pendingFor(missing, project));
                 }
 
-                pending.add(new CatalogPaper.Pending(project, version, follow, true));
+                pending.add(new CatalogPaper.Pending(project, version, follow, true, null));
                 plugin.install(pending, sender.getName());
 
                 redraw(sender, screen(data));
@@ -485,6 +487,48 @@ public final class MainCommand {
         });
     }
 
+    @Subcommand("history")
+    @Description("What Catalog has done")
+    @RequiresPermission("command.list")
+    public void history(CommandSender sender,
+                        @Optional @Flag(value = "plugin", shorthand = 'l')
+                        @SuggestWith(Suggestions.Logged.class) String which,
+                        @Optional @Flag("author") String author,
+                        @Flag("page") @Default("1") int page) {
+
+        context.take(sender);
+
+        plugin.getScheduler().runAsync(task -> {
+
+            String projectId = null;
+            String label = null;
+            StringBuilder command = new StringBuilder("/catalog history");
+
+            if (which != null && !which.isBlank()) {
+
+                // Resolved against the log rather than the tracking file, so a plugin that has
+                // since been removed can still be looked up.
+                projectId = plugin.loggedProjectId(which);
+
+                if (projectId == null) {
+                    send(sender, Messages.unknownPlugin(which));
+                    return;
+                }
+
+                label = which;
+                command.append(" --plugin ").append(which);
+            }
+
+            if (author != null && !author.isBlank()) {
+                label = label == null ? author : label + " · " + author;
+                command.append(" --author ").append(author);
+            }
+
+            send(sender, Messages.history(plugin.history(projectId, author),
+                    Math.max(page, 1), label, command.toString()));
+        });
+    }
+
     @Subcommand("cancel")
     @Description("Drop a staged update")
     @RequiresPermission("command.update")
@@ -683,7 +727,7 @@ public final class MainCommand {
 
                 if (installMissing) {
 
-                    List<CatalogPaper.Pending> pending = pendingFor(resolution.missing());
+                    List<CatalogPaper.Pending> pending = pendingFor(resolution.missing(), project);
 
                     if (pending.isEmpty()) {
                         send(sender, Messages.nothingMissing());
@@ -779,7 +823,8 @@ public final class MainCommand {
     /**
      * What to install for each missing requirement.
      */
-    private List<CatalogPaper.Pending> pendingFor(List<DependencyResolver.Requirement> missing) {
+    private List<CatalogPaper.Pending> pendingFor(List<DependencyResolver.Requirement> missing,
+                                                  ModrinthProject root) {
 
         Map<String, ModrinthProject> projects = projectsFor(missing);
         List<CatalogPaper.Pending> pending = new ArrayList<>();
@@ -795,7 +840,8 @@ public final class MainCommand {
             ReleaseChannel follow = requirement.available().versionType() == null
                     ? defaultChannel() : requirement.available().versionType();
 
-            pending.add(new CatalogPaper.Pending(project, requirement.available(), follow, false));
+            pending.add(new CatalogPaper.Pending(project, requirement.available(), follow, false,
+                    root == null ? null : root.title()));
         }
 
         return pending;
@@ -920,7 +966,7 @@ public final class MainCommand {
                     return;
                 }
 
-                plugin.discardTrashed(entry);
+                plugin.discardTrashed(entry, sender.getName());
 
                 redraw(sender, screen(data));
                 send(sender, Messages.discarded(entry.displayName()));
@@ -949,7 +995,7 @@ public final class MainCommand {
                     return;
                 }
 
-                int deleted = plugin.emptyTrash();
+                int deleted = plugin.emptyTrash(sender.getName());
 
                 redraw(sender, screen(data));
                 send(sender, Messages.emptied(deleted));

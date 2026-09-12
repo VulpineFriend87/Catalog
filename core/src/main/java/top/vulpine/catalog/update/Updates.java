@@ -3,9 +3,12 @@ package top.vulpine.catalog.update;
 import top.vulpine.catalog.CatalogAction;
 import top.vulpine.catalog.Errors;
 import top.vulpine.catalog.hash.Hashing;
+import top.vulpine.catalog.history.History;
+import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.install.Installer;
 import top.vulpine.catalog.modrinth.ModrinthClient;
+import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.platform.Platform;
 import top.vulpine.catalog.tracking.TrackingException;
@@ -43,6 +46,7 @@ public final class Updates {
     private final Installer installer;
     private final IntSupplier defaultSoakMinutes;
     private final Function<ModrinthVersion, DependencyResolver.Resolution> dependencies;
+    private final History history;
 
     private volatile List<UpdateCandidate> lastCheck = List.of();
     private volatile Instant checkedAt;
@@ -59,13 +63,15 @@ public final class Updates {
 
     public Updates(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
                    Installer installer, IntSupplier defaultSoakMinutes,
-                   Function<ModrinthVersion, DependencyResolver.Resolution> dependencies) {
+                   Function<ModrinthVersion, DependencyResolver.Resolution> dependencies,
+                   History history) {
         this.platform = platform;
         this.modrinth = modrinth;
         this.tracking = tracking;
         this.installer = installer;
         this.defaultSoakMinutes = defaultSoakMinutes;
         this.dependencies = dependencies;
+        this.history = history;
     }
 
     /**
@@ -239,11 +245,51 @@ public final class Updates {
             return;
         }
 
+        history.add(HistoryEntry.heldBack(candidate.plugin(), candidate.version(),
+                missing.size(), named(missing)));
+
         Logger.warn(CatalogAction.UPDATE, "Not updating " + candidate.plugin().displayName()
                 + " to " + candidate.to() + " automatically: it needs " + missing.size()
                 + " plugin" + (missing.size() == 1 ? "" : "s")
                 + " that are not installed. Use /catalog update "
                 + candidate.plugin().displayName() + " to install them.");
+    }
+
+    /**
+     * The names of what is missing, for the line that says an update was held back.
+     *
+     * <p>A missing dependency is not installed, so nothing on disk knows what it is called. This
+     * runs inside the update check, which is already talking to Modrinth, and only when something
+     * is actually held back.</p>
+     */
+    private List<String> named(List<DependencyResolver.Requirement> missing) {
+
+        List<String> ids = new ArrayList<>();
+
+        for (DependencyResolver.Requirement requirement : missing) {
+            ids.add(requirement.projectId());
+        }
+
+        try {
+
+            Map<String, String> titles = new HashMap<>();
+
+            for (ModrinthProject project : modrinth.projects(ids).join()) {
+                titles.put(project.id(), project.title());
+            }
+
+            List<String> names = new ArrayList<>();
+
+            for (String id : ids) {
+                names.add(titles.getOrDefault(id, id));
+            }
+
+            return names;
+
+        } catch (Exception e) {
+            // The ids still identify them, which is more than nothing on a line nobody can act on.
+            return ids;
+        }
     }
 
     /**
