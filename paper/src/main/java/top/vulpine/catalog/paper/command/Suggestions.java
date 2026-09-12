@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import revxrsal.commands.autocomplete.SuggestionProvider;
 import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 import revxrsal.commands.node.ExecutionContext;
+import revxrsal.commands.stream.StringStream;
 import top.vulpine.catalog.paper.CatalogPaper;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.trash.model.TrashEntry;
@@ -12,6 +13,7 @@ import top.vulpine.catalog.trash.model.TrashEntry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -32,7 +34,7 @@ public final class Suggestions {
 
         @Override
         public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
-            return JavaPlugin.getPlugin(CatalogPaper.class).loggedPlugins();
+            return matching(context, JavaPlugin.getPlugin(CatalogPaper.class).loggedPlugins());
         }
 
     }
@@ -42,7 +44,7 @@ public final class Suggestions {
 
         @Override
         public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
-            return names(plugin -> true);
+            return matching(context, names(plugin -> true));
         }
 
     }
@@ -60,7 +62,7 @@ public final class Suggestions {
                 names.add(0, "all");
             }
 
-            return names;
+            return matching(context, names);
         }
 
     }
@@ -70,7 +72,7 @@ public final class Suggestions {
 
         @Override
         public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
-            return names(plugin -> !plugin.isPinned());
+            return matching(context, names(plugin -> !plugin.isPinned()));
         }
 
     }
@@ -80,7 +82,7 @@ public final class Suggestions {
 
         @Override
         public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
-            return names(TrackedPlugin::isPinned);
+            return matching(context, names(TrackedPlugin::isPinned));
         }
 
     }
@@ -97,7 +99,7 @@ public final class Suggestions {
                 names.add(quoted(entry.displayName()));
             }
 
-            return names;
+            return matching(context, names);
         }
 
     }
@@ -118,7 +120,7 @@ public final class Suggestions {
                 names.add(0, "all");
             }
 
-            return names;
+            return matching(context, names);
         }
 
     }
@@ -126,6 +128,53 @@ public final class Suggestions {
     /**
      * What to offer for a plugin argument: the name the plugin is listed under.
      */
+    /**
+     * Narrows a list of completions to what has been typed so far.
+     *
+     * <p>Brigadier filters literals on the client, but anything the server supplies is sent as it
+     * is: Lamp hands every value straight to the builder without looking at the partial input, so
+     * without this the list never shrinks as you type.</p>
+     */
+    private static Collection<String> matching(ExecutionContext<BukkitCommandActor> context,
+                                               List<String> names) {
+
+        StringStream input = context.input();
+        return matching(input.hasRemaining() ? input.peekRemaining() : "", names);
+    }
+
+    /**
+     * @param typed what has been written for this argument, quoted or not
+     * @param names every completion the command could offer
+     * @return the ones that start with what was typed
+     */
+    static List<String> matching(String typed, List<String> names) {
+
+        String wanted = unquoted(typed).toLowerCase(Locale.ROOT);
+
+        if (wanted.isEmpty()) {
+            return names;
+        }
+
+        List<String> matched = new ArrayList<>();
+
+        for (String name : names) {
+            if (unquoted(name).toLowerCase(Locale.ROOT).startsWith(wanted)) {
+                matched.add(name);
+            }
+        }
+
+        return matched;
+    }
+
+    /**
+     * Drops the opening quote a name with a space is offered under, so a typed quote still matches.
+     */
+    private static String unquoted(String value) {
+
+        String trimmed = value.trim();
+        return trimmed.startsWith("\"") ? trimmed.substring(1) : trimmed;
+    }
+
     private static List<String> names(Predicate<TrackedPlugin> filter) {
 
         CatalogPaper plugin = JavaPlugin.getPlugin(CatalogPaper.class);
