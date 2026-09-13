@@ -73,6 +73,10 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
     private static final int PLUGIN_ID = 33849;
 
+    private static final String MINIMUM = "1.18.2";
+
+    private boolean started;
+
     private Config configuration;
     private FoliaLib foliaLib;
     private ModrinthClient modrinth;
@@ -102,7 +106,14 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     @Override
     public void onEnable() {
 
-        if (!hasPaperApi()) {
+        if (isOlderThan(running(), MINIMUM)) {
+            getLogger().severe("Catalog needs Minecraft " + MINIMUM + " or newer, this server runs "
+                    + running() + ".");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        if (!isPaper()) {
             getLogger().severe("Catalog needs Paper or a fork of it, such as Purpur or Folia.");
             getLogger().severe("Latest version: " + MODRINTH);
             getServer().getPluginManager().disablePlugin(this);
@@ -111,6 +122,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
         Colorize.init(Dialect.MODERN);
         Logger.builder().logger(getComponentLogger()).build();
+        this.started = true;
 
         if (!loadConfiguration()) {
             getServer().getPluginManager().disablePlugin(this);
@@ -187,6 +199,11 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
     @Override
     public void onDisable() {
+
+        // A server Catalog refused to start on has no Adventure, which everything below reaches.
+        if (!started) {
+            return;
+        }
 
         if (modrinth != null) {
             modrinth.close();
@@ -684,14 +701,58 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         }
     }
 
-    private static boolean hasPaperApi() {
+    private static boolean isPaper() {
 
         try {
-            Class.forName("net.kyori.adventure.text.minimessage.MiniMessage");
+            Class.forName("com.destroystokyo.paper.PaperConfig");
             return true;
         } catch (ClassNotFoundException e) {
             return false;
         }
+    }
+
+    /**
+     * The Minecraft version this server runs.
+     *
+     * <p>Read from {@code getBukkitVersion}, which every version has, rather than from
+     * {@code getMinecraftVersion}, which Paper only added later.</p>
+     */
+    private String running() {
+        return getServer().getBukkitVersion().split("-")[0];
+    }
+
+    /**
+     * Whether one Minecraft version is older than another.
+     *
+     * <p>Compared number by number rather than as text, because Paper moved from 1.21 to 26 and
+     * every way of ordering those two as strings puts them the wrong way round.</p>
+     *
+     * @param version what the server reports
+     * @param minimum the oldest Catalog supports
+     * @return whether the server is below it, and false for anything unreadable
+     */
+    static boolean isOlderThan(String version, String minimum) {
+
+        String[] here = version.split("\\.");
+        String[] least = minimum.split("\\.");
+
+        for (int i = 0; i < least.length; i++) {
+
+            int mine;
+
+            try {
+                mine = i < here.length ? Integer.parseInt(here[i].trim()) : 0;
+            } catch (NumberFormatException e) {
+                // An unreadable version is not a reason to refuse to start.
+                return false;
+            }
+
+            if (mine != Integer.parseInt(least[i])) {
+                return mine < Integer.parseInt(least[i]);
+            }
+        }
+
+        return false;
     }
 
 }
