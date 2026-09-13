@@ -27,6 +27,8 @@ subprojects {
     }
 
     tasks.withType<JavaCompile> {
+        options.release.set(17)
+
         // Lamp resolves command parameter names by reflection.
         options.compilerArgs.add("-parameters")
         options.encoding = "UTF-8"
