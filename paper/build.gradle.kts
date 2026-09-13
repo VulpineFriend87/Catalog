@@ -16,11 +16,8 @@ dependencies {
     implementation(libs.commons)
     implementation(libs.lamp.common)
     implementation(libs.lamp.bukkit)
-    implementation(libs.inventoryframework)
 
     compileOnly(libs.paper)
-    compileOnly(libs.papi)
-    compileOnly(libs.gson)
 
     testImplementation(libs.junit)
     testImplementation(libs.paper)
@@ -46,7 +43,6 @@ tasks {
         shade("com.tcoded.folialib", "folialib")
         shade("top.vulpine.commons", "commons")
         shade("revxrsal.commands", "lamp")
-        shade("com.github.stefvanschie.inventoryframework", "inventoryframework")
     }
 
     build {
@@ -65,6 +61,4 @@ bukkit {
     author = "VulpineFriend87"
     website = "https://vulpine.top"
     foliaSupported = true
-
-    softDepend = listOf("PlaceholderAPI")
 }

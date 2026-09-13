@@ -1,7 +1,6 @@
 [versions]
 paper = "1.18.2-R0.1-SNAPSHOT"
 velocity = "3.4.0"
-papi = "2.12.3"
 # The oldest Gson across supported platforms: Paper 1.18.2 ships 2.8.9, Velocity 2.10.1.
 # Compiling against the floor keeps us off APIs (records, most notably) that would fail at runtime.
 gson = "2.8.9"
@@ -11,7 +10,6 @@ bstats = "3.2.1"
 folialib = "0.5.2"
 commons = "0.3.1"
 lamp = "4.0.0-rc.18"
-inventoryframework = "0.10.19"
 
 junit = "6.1.3"
 
@@ -22,7 +20,6 @@ pluginyml = "0.9.0"
 [libraries]
 paper = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
 velocity = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
-papi = { module = "me.clip:placeholderapi", version.ref = "papi" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 
 okaeri-yaml-bukkit = { module = "eu.okaeri:okaeri-configs-yaml-bukkit", version.ref = "okaeri" }
@@ -38,8 +35,6 @@ commons = { module = "top.vulpine:commons", version.ref = "commons" }
 lamp-common = { module = "io.github.revxrsal:lamp.common", version.ref = "lamp" }
 lamp-bukkit = { module = "io.github.revxrsal:lamp.bukkit", version.ref = "lamp" }
 lamp-velocity = { module = "io.github.revxrsal:lamp.velocity", version.ref = "lamp" }
-
-inventoryframework = { module = "com.github.stefvanschie.inventoryframework:IF", version.ref = "inventoryframework" }
 
 junit = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }

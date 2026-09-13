@@ -16,7 +16,6 @@ subprojects {
         mavenCentral()
         maven("https://repo.papermc.io/repository/maven-public/")
         maven("https://repo.tcoded.com/releases")
-        maven("https://repo.extendedclip.com/releases/")
         maven("https://repo.okaeri.cloud/releases")
         maven("https://repo.vulpine.top/repository/maven-open/")
     }
