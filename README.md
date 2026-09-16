@@ -102,6 +102,4 @@ Only with `allow_incompatible_installs` turned on in the config. Otherwise build
 **Does it phone home?**
 It talks to the Modrinth API, and reports anonymous server statistics to [bStats](https://bstats.org), which you can turn off in the bStats config.
 
-## License
-
-Catalog is free and open source software under GPL-3.0-only. Source and issues are on [GitHub](https://github.com/VulpineFriend87/Catalog), and [CONTRIBUTING.md](CONTRIBUTING.md) is worth a read before sending a pull request. Made by [VulpineFriend87](https://vulpine.top).
+Made by [Vulpine](https://vulpine.top)
