@@ -1,6 +1,6 @@
 <a href="https://modrinth.com/plugin/catalog"><img alt="Available on Modrinth" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg"></a>
-<img alt="Works on Paper 1.18.2+" height="56" src="https://cdn.modrinth.com/data/cached_images/5931d6d8084dca212a8dc704b273a1e24816cec1_0.webp">
-<img alt="Requires Java 17+" height="56" src="https://cdn.modrinth.com/data/cached_images/2596014e45e0eca4bbc29394b38f580c964280de.png">
+<img alt="Works on Paper 1.18.2+" height="56" src="https://u.vulpine.top/u/AIB6AM.svg">
+<img alt="Requires Java 17+" height="56" src="https://u.vulpine.top/u/ggP6Ta.svg">
 
 > **Note**: as of right now, the project is awayting review on Modrinth, so it won't be available for download unless you compile it yourself.
 
