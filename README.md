@@ -2,6 +2,8 @@
 <img alt="Works on Paper 1.18.2+" height="56" src="https://cdn.modrinth.com/data/cached_images/5931d6d8084dca212a8dc704b273a1e24816cec1_0.webp">
 <img alt="Requires Java 17+" height="56" src="https://cdn.modrinth.com/data/cached_images/2596014e45e0eca4bbc29394b38f580c964280de.png">
 
+> **Note**: as of right now, the project is awayting review on Modrinth, so it won't be available for download unless you compile it yourself.
+
 Catalog analyses your plugins folder once the server boots, figuring out which Modrinth plugin each `.jar` belongs to. Every jar is identified by its hash, so a renamed file is still recognized and nothing has to be mapped by hand. Then you will get your updates in chat and be able to search, install and remove plugins with a click. Every plugin that Catalog does not recognize is left untouched.
 
 ## Requirements
