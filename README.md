@@ -2,7 +2,7 @@
 <img alt="Works on Paper 1.18.2+" height="56" src="https://u.vulpine.top/u/AIB6AM.svg">
 <img alt="Requires Java 17+" height="56" src="https://u.vulpine.top/u/ggP6Ta.svg">
 
-> **Note**: as of right now, the project is awayting review on Modrinth, so it won't be available for download unless you compile it yourself.
+> **Note**: as of right now, the project is awaiting review on Modrinth, so it won't be available for download unless you compile it yourself.
 
 Catalog analyses your plugins folder once the server boots, figuring out which Modrinth plugin each `.jar` belongs to. Every jar is identified by its hash, so a renamed file is still recognized and nothing has to be mapped by hand. Then you will get your updates in chat and be able to search, install and remove plugins with a click. Every plugin that Catalog does not recognize is left untouched.
 
