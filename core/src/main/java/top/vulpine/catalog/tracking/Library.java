@@ -311,7 +311,7 @@ public final class Library {
         if (startup) {
             for (TrackedPlugin plugin : report.notApplied()) {
                 Logger.warn(CatalogAction.UPDATE, plugin.displayName() + " is still "
-                        + plugin.versionNumber() + ": the staged build was not taken from "
+                        + plugin.versionNumber() + ": the downloaded build was not taken from "
                         + platform.stagingName()
                         + ". It is still there and will be tried again on the next start.");
             }

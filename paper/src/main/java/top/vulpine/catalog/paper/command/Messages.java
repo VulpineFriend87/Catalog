@@ -104,7 +104,7 @@ public final class Messages {
 
         out.add(entry("install", "<slug> [version]", "Install a plugin"));
         out.add(entry("update", "<plugin|all>", "Update a plugin"));
-        out.add(entry("cancel", "<plugin>", "Drop a staged update"));
+        out.add(entry("cancel", "<plugin>", "Drop a downloaded update"));
         out.add(entry("history", "", "What Catalog has done"));
         out.add(entry("uninstall", "<plugin>", "Move a plugin to the trash"));
         out.add(entry("trash", "", "Restore a trashed plugin"));
@@ -212,7 +212,7 @@ public final class Messages {
         if (update != null && !plugin.awaitingRestart()) {
             row.append(Component.space()).append(icon("↑", BRAND,
                     from("/catalog update " + key(plugin), ClickContext.LIST),
-                    "Stage " + update.to() + " for the next restart"));
+                    "Download " + update.to() + " for the next restart"));
         }
 
         // No remove button on Catalog's own row: pressing it would delete the thing holding the
@@ -300,7 +300,7 @@ public final class Messages {
 
         if (plugin.pendingRestart()) {
             return Component.newline()
-                    .append(Component.text("update staged, applies on restart", PENDING));
+                    .append(Component.text("update downloaded, applies on restart", PENDING));
         }
 
         if (plugin.pendingLoad()) {
@@ -369,7 +369,7 @@ public final class Messages {
         }
 
         if (view.installed().pendingRestart()) {
-            return Component.text("  update staged", PENDING);
+            return Component.text("  update downloaded", PENDING);
         }
 
         if (view.installed().pendingLoad()) {
@@ -542,7 +542,7 @@ public final class Messages {
 
         } else if (view.updateAvailable()) {
             row.add(button("Update", from("/catalog update " + key, here), BRAND,
-                    "Stage " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
+                    "Download " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
                             + " for the next restart"));
         }
 
@@ -907,7 +907,7 @@ public final class Messages {
                 .append(Component.newline())
                 .append(Component.newline())
                 .append(Component.text(staged ? "Waiting for a restart"
-                        : current && waiting ? "Cancel the staged update and stay here"
+                        : current && waiting ? "Cancel the downloaded update and stay here"
                         : current ? "Already installed"
                         : (installed == null ? "Install this build" : "Switch to this build")
                                 + " and follow the " + channel.apiName() + " channel", TEXT));
@@ -1486,7 +1486,7 @@ public final class Messages {
         return switch (entry.event()) {
             case INSTALLED -> "installed";
             case INSTALLED_AS_DEPENDENCY -> "installed as a dependency";
-            case UPDATE_STAGED -> entry.byPerson() ? "update staged" : "auto-update staged";
+            case UPDATE_STAGED -> entry.byPerson() ? "update downloaded" : "auto-update downloaded";
             case UPDATE_CANCELLED -> "update cancelled";
             case SWITCHED -> "switched";
             case ROLLED_BACK -> "rolled back";
@@ -1495,7 +1495,7 @@ public final class Messages {
             case DELETED -> "deleted from trash";
             case TRASH_EMPTIED -> "Trash emptied";
             case UPDATES_APPLIED -> entry.name() != null ? "applied"
-                    : "Applied " + entry.count() + " staged builds";
+                    : "Applied " + entry.count() + " downloaded builds";
             case ADOPTED -> entry.name() != null ? "adopted"
                     : "Adopted " + entry.count() + " plugins";
             case UNTRACKED -> "untracked";
@@ -1663,15 +1663,15 @@ public final class Messages {
     public static Component staged(String name, String version) {
         return line()
                 .append(Component.text(name + " " + version, TEXT))
-                .append(Component.text(" staged, applies on restart", MUTED))
+                .append(Component.text(" downloaded, applies on restart", MUTED))
                 .build();
     }
 
     public static Component stagedAll(int count) {
         return line()
                 .append(Component.text(count, DONE))
-                .append(Component.text(count == 1 ? " update staged, applies on restart"
-                        : " updates staged, apply on restart", MUTED))
+                .append(Component.text(count == 1 ? " update downloaded, applies on restart"
+                        : " updates downloaded, apply on restart", MUTED))
                 .build();
     }
 
@@ -1871,14 +1871,14 @@ public final class Messages {
     public static Component cancelled(String name) {
         return line()
                 .append(Component.text(name, TEXT))
-                .append(Component.text(" staged update dropped", MUTED))
+                .append(Component.text(" update dropped", MUTED))
                 .build();
     }
 
     public static Component nothingStaged(String name) {
         return line()
                 .append(Component.text(name, TEXT))
-                .append(Component.text(" has no staged update", MUTED))
+                .append(Component.text(" has no update to cancel", MUTED))
                 .build();
     }
 

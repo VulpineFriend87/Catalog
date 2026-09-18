@@ -463,7 +463,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     public TrashBin.Result uninstall(TrackedPlugin plugin, String by) {
 
         if (!removals.cancelStagedFor(plugin)) {
-            Logger.warn(Action.UPDATE, "A staged update for " + plugin.displayName()
+            Logger.warn(Action.UPDATE, "A downloaded update for " + plugin.displayName()
                     + " is still in the update folder and should be deleted by hand.");
         }
 
@@ -720,7 +720,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
             Files.createDirectories(folder);
             Files.move(staged, folder.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new InstallException("Could not stage the build: " + e.getMessage(), e);
+            throw new InstallException("Could not prepare the update: " + e.getMessage(), e);
         }
     }
 

@@ -442,7 +442,7 @@ public final class MainCommand {
     }
 
     @Subcommand("update")
-    @Description("Download an update and stage it for the next restart")
+    @Description("Download an update and apply it at the next restart")
     @RequiresPermission("command.update")
     public void update(CommandSender sender,
                        @Named("plugin") @SuggestWith(Suggestions.Updatable.class) String query) {
@@ -533,7 +533,7 @@ public final class MainCommand {
     }
 
     @Subcommand("cancel")
-    @Description("Drop a staged update")
+    @Description("Drop a downloaded update")
     @RequiresPermission("command.update")
     public void cancel(CommandSender sender,
                        @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
@@ -555,7 +555,7 @@ public final class MainCommand {
         plugin.getScheduler().runAsync(task -> {
 
             if (!plugin.cancelUpdate(tracked, sender.getName())) {
-                send(sender, Messages.failed("Could not delete the staged build for "
+                send(sender, Messages.failed("Could not delete the downloaded build for "
                         + tracked.displayName() + ", see the console."));
                 return;
             }
