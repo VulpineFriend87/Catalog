@@ -1494,8 +1494,8 @@ public final class Messages {
             case RESTORED -> "restored";
             case DELETED -> "deleted from trash";
             case TRASH_EMPTIED -> "Trash emptied";
-            case UPDATES_APPLIED -> entry.name() != null ? "applied on restart"
-                    : "Applied " + entry.count() + " staged builds on restart";
+            case UPDATES_APPLIED -> entry.name() != null ? "applied"
+                    : "Applied " + entry.count() + " staged builds";
             case ADOPTED -> entry.name() != null ? "adopted"
                     : "Adopted " + entry.count() + " plugins";
             case UNTRACKED -> "untracked";
