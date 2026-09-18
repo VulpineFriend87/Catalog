@@ -2,7 +2,6 @@ package top.vulpine.catalog.update;
 
 import top.vulpine.catalog.CatalogAction;
 import top.vulpine.catalog.Errors;
-import top.vulpine.catalog.hash.Hashing;
 import top.vulpine.catalog.history.History;
 import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.install.DependencyResolver;
@@ -19,9 +18,7 @@ import top.vulpine.catalog.update.model.ServerTarget;
 import top.vulpine.catalog.update.model.UpdateCandidate;
 import top.vulpine.commons.log.Logger;
 
-import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
 
@@ -48,6 +46,9 @@ public final class Updates {
     private final Function<ModrinthVersion, DependencyResolver.Resolution> dependencies;
     private final History history;
 
+    /** Rescans the plugins folder and settles the tracking file against it. */
+    private final BooleanSupplier reconcile;
+
     private volatile List<UpdateCandidate> lastCheck = List.of();
     private volatile Instant checkedAt;
 
@@ -64,7 +65,7 @@ public final class Updates {
     public Updates(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
                    Installer installer, IntSupplier defaultSoakMinutes,
                    Function<ModrinthVersion, DependencyResolver.Resolution> dependencies,
-                   History history) {
+                   History history, BooleanSupplier reconcile) {
         this.platform = platform;
         this.modrinth = modrinth;
         this.tracking = tracking;
@@ -72,6 +73,7 @@ public final class Updates {
         this.defaultSoakMinutes = defaultSoakMinutes;
         this.dependencies = dependencies;
         this.history = history;
+        this.reconcile = reconcile;
     }
 
     /**
@@ -336,30 +338,24 @@ public final class Updates {
      */
     private void noticeStagedApplied() throws TrackingException {
 
-        Map<String, TrackedPlugin> rehashed = new HashMap<>();
-        List<TrackedPlugin> abandoned = new ArrayList<>();
-
-        for (TrackedPlugin plugin : tracking.pendingRestart()) {
-
-            // Still sitting there waiting for a restart, which is the normal case.
-            if (platform.isStaged(Removals.stagedName(plugin))) {
-                continue;
-            }
-
-            String hash = hashOf(platform.pluginsFolder().resolve(plugin.fileName()));
-
-            if (hash == null || hash.equals(plugin.sha512())) {
-                // Gone from the update folder without the jar changing: somebody deleted it.
-                abandoned.add(plugin);
-            } else {
-                rehashed.put(hash, plugin);
-            }
-        }
-
-        if (rehashed.isEmpty() && abandoned.isEmpty()) {
+        if (stagedAndWaiting().isEmpty()) {
             return;
         }
 
+        // Where the jar went cannot be guessed from here: applying a build renames it, and so does
+        // replacing one by hand. The scan is the only thing that matches on contents and project id
+        // rather than on a name, so it decides. It costs a folder hash and one call to Modrinth,
+        // and only runs once something has already taken a staged build.
+        reconcile.getAsBoolean();
+
+        List<TrackedPlugin> abandoned = stagedAndWaiting();
+
+        if (abandoned.isEmpty()) {
+            return;
+        }
+
+        // Anything the scan could not account for really is gone: no jar on disk holds it, under
+        // any name.
         for (TrackedPlugin plugin : abandoned) {
             plugin.pendingRestart(false);
             plugin.stagedAs(null);
@@ -369,48 +365,25 @@ public final class Updates {
                     + " is gone from the update folder and was never applied.");
         }
 
-        identifyApplied(rehashed);
         tracking.save();
     }
 
     /**
-     * Re-identifies jars that changed underneath Catalog and records what they became.
+     * The plugins owed a restart whose staged build is no longer in the update folder.
+     *
+     * @return the plugins something has taken a build from, never null
      */
-    private void identifyApplied(Map<String, TrackedPlugin> byHash) {
+    private List<TrackedPlugin> stagedAndWaiting() {
 
-        if (byHash.isEmpty()) {
-            return;
-        }
+        List<TrackedPlugin> taken = new ArrayList<>();
 
-        Map<String, ModrinthVersion> identified;
-
-        try {
-            identified = modrinth.identify(byHash.keySet()).join();
-        } catch (Exception e) {
-            // The flags stay set and the next startup sorts it out from the hashes on disk.
-            Logger.debug(CatalogAction.UPDATE, "Could not identify applied builds: "
-                    + Errors.rootMessage(e));
-            return;
-        }
-
-        for (Map.Entry<String, TrackedPlugin> entry : byHash.entrySet()) {
-
-            TrackedPlugin plugin = entry.getValue();
-            ModrinthVersion became = identified.get(entry.getKey());
-
-            if (became == null || !plugin.projectId().equals(became.projectId())) {
-                continue;
+        for (TrackedPlugin plugin : tracking.pendingRestart()) {
+            if (!platform.isStaged(Removals.stagedName(plugin))) {
+                taken.add(plugin);
             }
-
-            plugin.moveTo(became, plugin.fileName(), entry.getKey());
-            plugin.pendingRestart(false);
-            plugin.stagedAs(null);
-            plugin.stagedVersionId(null);
-            plugin.stagedBy(null);
-
-            Logger.info(CatalogAction.UPDATE, plugin.displayName() + " is now "
-                    + became.versionNumber() + ", applied without a restart by something else.");
         }
+
+        return taken;
     }
 
     /**
@@ -431,15 +404,6 @@ public final class Updates {
                 + " held=" + tracked.isPinned()
                 + " pendingRestart=" + tracked.pendingRestart()
                 + " pendingLoad=" + tracked.pendingLoad();
-    }
-
-    private static String hashOf(Path jar) {
-
-        try {
-            return Files.isRegularFile(jar) ? Hashing.sha512(jar) : null;
-        } catch (IOException e) {
-            return null;
-        }
     }
 
 }

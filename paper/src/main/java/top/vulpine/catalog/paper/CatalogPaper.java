@@ -173,7 +173,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         this.installer = new Installer(this, downloader, tracking, removals, this::defaults, history);
         this.updates = new Updates(this, modrinth, tracking, installer,
                 () -> configuration.tracking.defaults.soakMinutes, projects::dependenciesOf,
-                history);
+                history, () -> library.index());
         this.library = new Library(this, modrinth, tracking, ignored, this::defaults,
                 () -> configuration.tracking.autoTrack, history);
         this.dependents = new Dependents(tracking, hashes -> modrinth.identify(hashes).join());

@@ -94,7 +94,7 @@ class UpdatesDependencyTest {
 
     private Updates updates(DependencyResolver.Resolution resolution) {
         return new Updates(new Recording(), null, store, null, () -> 0, version -> resolution,
-                history());
+                history(), () -> true);
     }
 
     private static DependencyResolver.Resolution needing(String projectId, boolean installed) {
@@ -152,7 +152,7 @@ class UpdatesDependencyTest {
         Updates failing = new Updates(new Recording(), null, store, null, () -> 0,
                 version -> {
                     throw new IllegalStateException("no network");
-                }, history());
+                }, history(), () -> true);
 
         assertTrue(failing.missingFor(version()).isEmpty());
     }
