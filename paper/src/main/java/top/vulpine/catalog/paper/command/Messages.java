@@ -1658,7 +1658,7 @@ public final class Messages {
         TextComponent.Builder out = line()
                 .append(Component.text(name, TEXT))
                 .append(Component.text(deleted ? " moved to trash, unloads on restart"
-                        : " moved to trash, file is removed on restart", MUTED));
+                        : " moved to trash, the jar stays until restart", MUTED));
 
         if (entry != null) {
             out.append(Component.space()).append(button("Undo", restoreCommand(entry, from), BRAND,
