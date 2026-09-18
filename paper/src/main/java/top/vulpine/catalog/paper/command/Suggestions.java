@@ -4,6 +4,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import revxrsal.commands.autocomplete.SuggestionProvider;
 import revxrsal.commands.bukkit.actor.BukkitCommandActor;
+import top.vulpine.catalog.jar.model.InstalledJar;
 import revxrsal.commands.node.ExecutionContext;
 import revxrsal.commands.stream.StringStream;
 import top.vulpine.catalog.paper.CatalogPaper;
@@ -28,6 +29,23 @@ import java.util.function.Predicate;
 public final class Suggestions {
 
     private Suggestions() {}
+
+    /** Every jar Catalog could manage but is not. */
+    public static final class Untracked implements SuggestionProvider<BukkitCommandActor> {
+
+        @Override
+        public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
+
+            List<String> names = new ArrayList<>();
+
+            for (InstalledJar jar : JavaPlugin.getPlugin(CatalogPaper.class).untracked()) {
+                names.add(Messages.shownName(jar));
+            }
+
+            return matching(context, names);
+        }
+
+    }
 
     /** Every plugin the history mentions, installed or not. */
     public static final class Logged implements SuggestionProvider<BukkitCommandActor> {

@@ -15,6 +15,7 @@ import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
 import revxrsal.commands.annotation.Switch;
 import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.modrinth.model.Dependency;
 import top.vulpine.catalog.modrinth.model.DependencyType;
@@ -1048,6 +1049,82 @@ public final class MainCommand {
         return null;
     }
 
+    @Subcommand("untrack")
+    @Description("Stops managing a plugin, leaving the jar alone")
+    @RequiresPermission("command.untrack")
+    public void untrack(CommandSender sender,
+                        @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
+
+        String data = context.take(sender);
+
+        plugin.getScheduler().runAsync(task -> {
+
+            TrackedPlugin tracked = resolve(query);
+
+            if (tracked == null) {
+                send(sender, Messages.unknownPlugin(query));
+                return;
+            }
+
+            String name = tracked.displayName();
+
+            // A staged build is already in the update folder, so leaving it there would update a
+            // plugin Catalog has just been told to stop following.
+            if (tracked.pendingRestart()) {
+                plugin.cancelUpdate(tracked, sender.getName());
+            }
+
+            plugin.untrack(tracked, sender.getName());
+            done(sender, data, Messages.untracked(name));
+        });
+    }
+
+    @Subcommand("track")
+    @Description("Manages a plugin Catalog was told to leave alone")
+    @RequiresPermission("command.untrack")
+    public void track(CommandSender sender,
+                      @Named("jar") @SuggestWith(Suggestions.Untracked.class) String query) {
+
+        String data = context.take(sender);
+
+        plugin.getScheduler().runAsync(task -> {
+
+            InstalledJar jar = resolveUntracked(query);
+
+            if (jar == null) {
+                send(sender, Messages.unknownPlugin(query));
+                return;
+            }
+
+            if (!plugin.track(jar, sender.getName())) {
+                send(sender, Messages.unknownPlugin(query));
+                return;
+            }
+
+            done(sender, data, Messages.tracked(Messages.shownName(jar)));
+        });
+    }
+
+    /**
+     * Finds an untracked jar by the name the list shows, or by its file name.
+     *
+     * @param query what was typed
+     * @return the jar, or null if no untracked jar answers to it
+     */
+    private InstalledJar resolveUntracked(String query) {
+
+        String wanted = query.trim();
+
+        for (InstalledJar jar : plugin.untracked()) {
+            if (jar.fileName().equalsIgnoreCase(wanted)
+                    || Messages.shownName(jar).equalsIgnoreCase(wanted)) {
+                return jar;
+            }
+        }
+
+        return null;
+    }
+
     @Subcommand("hold")
     @Description("Freeze a plugin at its installed version")
     @RequiresPermission("command.hold")
@@ -1192,7 +1269,7 @@ public final class MainCommand {
 
         abandonConfirmation(sender);
 
-        if (plugin.getTracking().size() == 0) {
+        if (plugin.getTracking().size() == 0 && plugin.untracked().isEmpty()) {
             send(sender, Messages.nothingTracked());
             return;
         }
@@ -1207,7 +1284,7 @@ public final class MainCommand {
         }
 
         send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject(),
-                plugin.ownFileName()));
+                plugin.ownFileName(), plugin.untracked()));
     }
 
     /**

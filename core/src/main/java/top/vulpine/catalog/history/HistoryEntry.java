@@ -154,6 +154,17 @@ public final class HistoryEntry {
                 .build();
     }
 
+    public static HistoryEntry letGo(TrackedPlugin plugin, String by) {
+        return about(plugin, by).event(Event.UNTRACKED).to(plugin.versionNumber()).build();
+    }
+
+    /**
+      * A plugin taken under management, by the scan or because someone asked.
+      */
+    public static HistoryEntry adopted(TrackedPlugin plugin, String by) {
+        return about(plugin, by).event(Event.ADOPTED).to(plugin.versionNumber()).build();
+    }
+
     public static HistoryEntry found(TrackedPlugin plugin, Event event) {
         return about(plugin, null).event(event).to(plugin.versionNumber()).build();
     }

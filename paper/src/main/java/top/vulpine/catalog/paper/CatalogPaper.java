@@ -13,6 +13,7 @@ import revxrsal.commands.bukkit.BukkitLamp;
 import revxrsal.commands.bukkit.actor.BukkitCommandActor;
 import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.history.History;
 import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.install.Downloader;
@@ -543,6 +544,44 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     public void setHeld(TrackedPlugin plugin, boolean held, String by) {
         saving(() -> settings.held(plugin, held, by));
     }
+
+    /**
+     * Stops managing a plugin. The jar is not touched.
+     *
+     * @param plugin the plugin to let go of
+     * @param by     who asked
+     */
+    public void untrack(TrackedPlugin plugin, String by) {
+        library.untrack(plugin, by);
+
+        // The scan is what fills the untracked list, so without it the plugin would vanish from
+        // every screen until the next restart.
+        library.index();
+    }
+
+    /**
+     * Puts a jar back under management and rescans, so it appears without a restart.
+     *
+     * @param jar the file to stop ignoring
+     * @return true if it was ignored and now is not
+     */
+    public boolean track(InstalledJar jar, String by) {
+
+        if (!library.track(jar, by)) {
+            return false;
+        }
+
+        library.index(by);
+        return true;
+    }
+
+    /**
+     * @return the jars Catalog could manage but is not
+     */
+    public List<InstalledJar> untracked() {
+        return library.untracked();
+    }
+
 
     /**
      * The loaders this server can use, for showing which of a project's loaders apply here.

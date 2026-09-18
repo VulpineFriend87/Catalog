@@ -8,6 +8,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.modrinth.model.DependencyType;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
@@ -116,6 +117,8 @@ public final class Messages {
         out.add(entry("soak", "<plugin> <window>", "Change soak time for a plugin"));
         out.add(entry("hold", "<plugin>", "Freeze a plugin at its version"));
         out.add(entry("unhold", "<plugin>", "Allow updates again"));
+        out.add(entry("untrack", "<plugin>", "Stop managing a plugin"));
+        out.add(entry("track", "<jar>", "Manage a plugin again"));
 
         out.add(Component.empty());
 
@@ -147,7 +150,7 @@ public final class Messages {
     // --- /catalog list ----------------------------------------------------------------------
 
     public static List<Component> list(List<TrackedPlugin> plugins, Map<String, UpdateCandidate> updates,
-                                       String self) {
+                                       String self, List<InstalledJar> untracked) {
 
         List<TrackedPlugin> ordered = new ArrayList<>(plugins);
 
@@ -174,6 +177,10 @@ public final class Messages {
 
         for (TrackedPlugin plugin : ordered) {
             out.add(row(plugin, updates.get(plugin.projectId()), plugin.fileName().equals(self)));
+        }
+
+        for (InstalledJar jar : untracked) {
+            out.add(untrackedRow(jar));
         }
 
         out.add(Component.empty());
@@ -225,6 +232,43 @@ public final class Messages {
         }
 
         return row.build();
+    }
+
+    private static Component untrackedRow(InstalledJar jar) {
+
+        String shown = shownName(jar);
+
+        Component hover = Component.text(shown, TEXT)
+                .append(Component.newline())
+                .append(Component.text(jar.fileName(), MUTED))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text("Catalog is not managing this", MUTED));
+
+        return line()
+                .append(Component.text(INDENT))
+                .append(Component.text(shown, MUTED).hoverEvent(HoverEvent.showText(hover)))
+                .append(Component.space())
+                .append(icon("+", BRAND, from("/catalog track " + quoted(jar.fileName()),
+                        ClickContext.LIST), "Track " + shown))
+                .append(Component.text("  untracked", MUTED))
+                .build();
+    }
+
+    /**
+     * What to call a jar Catalog does not track, which has no Modrinth name to use.
+     *
+     * @param jar the file
+     * @return the name from its plugin.yml, or the file name
+     */
+    public static String shownName(InstalledJar jar) {
+
+        String name = jar.info() == null ? null : jar.info().pluginName();
+        return name == null || name.isBlank() ? jar.fileName() : name;
+    }
+
+    private static String quoted(String value) {
+        return value.contains(" ") ? "\"" + value + "\"" : value;
     }
 
     private static Component name(TrackedPlugin plugin) {
@@ -562,6 +606,17 @@ public final class Messages {
         }
 
         out.add(setting("Updates", holdChoices(plugin, key, here)));
+
+        out.add(Component.empty());
+
+        // Said on the line rather than only in the hover, because the one thing anyone fears here
+        // is that it deletes the file.
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(button("Untrack", from("/catalog untrack " + key, here), DANGER,
+                        "Stop tracking " + plugin.displayName()))
+                .append(Component.text("  the jar is not removed", MUTED))
+                .build());
 
         out.add(Component.empty());
 
@@ -1418,7 +1473,7 @@ public final class Messages {
             case INSTALLED, INSTALLED_AS_DEPENDENCY, RESTORED, UPDATES_APPLIED -> DONE;
             case UPDATE_STAGED, SWITCHED, ROLLED_BACK, UPDATE_HELD_BACK, REPLACED_BY_HAND -> PENDING;
             case TRASHED, DELETED, TRASH_EMPTIED, NO_LONGER_INSTALLED -> DANGER;
-            case ADOPTED -> TEXT;
+            case ADOPTED, UNTRACKED -> TEXT;
             default -> MUTED;
         };
     }
@@ -1443,6 +1498,7 @@ public final class Messages {
                     : "Applied " + entry.count() + " staged builds on restart";
             case ADOPTED -> entry.name() != null ? "adopted"
                     : "Adopted " + entry.count() + " plugins";
+            case UNTRACKED -> "untracked";
             case REPLACED_BY_HAND -> "replaced by hand";
             case NO_LONGER_INSTALLED -> "no longer installed";
             case UPDATE_HELD_BACK -> "update held back";
@@ -1730,6 +1786,20 @@ public final class Messages {
         return line()
                 .append(Component.text(name, TEXT))
                 .append(Component.text(held ? " held at this version" : " no longer held", MUTED))
+                .build();
+    }
+
+    public static Component untracked(String name) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" untracked, the jar is not removed", MUTED))
+                .build();
+    }
+
+    public static Component tracked(String name) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" is now tracked", MUTED))
                 .build();
     }
 

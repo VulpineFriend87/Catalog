@@ -18,6 +18,7 @@ public enum Event {
     UPDATES_APPLIED,
 
     ADOPTED,
+    UNTRACKED,
     REPLACED_BY_HAND,
     NO_LONGER_INSTALLED,
 

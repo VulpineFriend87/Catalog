@@ -18,6 +18,7 @@ import top.vulpine.catalog.tracking.model.TrackingDefaults;
 import top.vulpine.commons.log.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
@@ -39,6 +40,7 @@ public final class Library {
     private final History history;
 
     private volatile int unmanaged;
+    private volatile List<InstalledJar> untracked = new ArrayList<>();
 
     public Library(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
                    IgnoreList ignored, Supplier<TrackingDefaults> defaults,
@@ -60,11 +62,81 @@ public final class Library {
     }
 
     /**
+     * The jars Catalog could manage but is not, as the last scan left them.
+     *
+     * @return the untracked jars, newest scan only
+     */
+    public List<InstalledJar> untracked() {
+        return Collections.unmodifiableList(untracked);
+    }
+
+    /**
+     * Stops managing a plugin, leaving its jar where it is.
+     *
+     * <p>The ignore list is what makes this last: without it the next scan would adopt the plugin
+     * straight back.</p>
+     *
+     * @param plugin the plugin to let go of
+     * @param by     who asked, or null for Catalog
+     */
+    public void untrack(TrackedPlugin plugin, String by) {
+
+        ignored.add(plugin.projectId(), plugin.sha512());
+        ignored.save();
+
+        tracking.remove(plugin.projectId());
+        tracking.save();
+
+        history.add(HistoryEntry.letGo(plugin, by));
+    }
+
+    /**
+     * Puts a jar back under management.
+     *
+     * <p>Both the project id and the hash have to go, because either one on its own keeps the scan
+     * skipping the file. The id is not on disk, so it is asked for again.</p>
+     *
+     * @param jar the file to stop ignoring
+     * @return true if it was ignored and now is not
+     */
+    public boolean track(InstalledJar jar, String by) {
+
+        String projectId = null;
+
+        if (jar.sha512() != null) {
+
+            try {
+                ModrinthVersion version = modrinth.identify(List.of(jar.sha512())).join()
+                        .get(jar.sha512());
+                projectId = version == null ? null : version.projectId();
+            } catch (Exception e) {
+                Logger.debug(CatalogAction.TRACK, "Could not identify " + jar.fileName() + ": "
+                        + Errors.rootMessage(e));
+            }
+        }
+
+        if (!ignored.remove(projectId, jar.sha512())) {
+            return false;
+        }
+
+        ignored.save();
+        return true;
+    }
+
+    /**
      * Hashes the plugins folder, identifies what Modrinth knows, and reconciles the tracking file.
      *
      * @return true if the scan completed, false if Modrinth could not be reached
      */
     public boolean index() {
+        return index(null);
+    }
+
+    /**
+     * @param adoptedBy who asked for this scan, credited with anything it adopts, or null for the
+     *                  scan Catalog runs on its own
+     */
+    public boolean index(String adoptedBy) {
 
         long started = System.currentTimeMillis();
         ScanResult scan = new JarScanner(platform.pluginsFolder()).scan();
@@ -104,7 +176,7 @@ public final class Library {
         boolean named = nameTrackedPlugins();
 
         // Before the save, because recording who staged a build also clears it from the record.
-        record(report);
+        record(report, adoptedBy);
 
         if (report.hasChanges() || named) {
 
@@ -117,6 +189,10 @@ public final class Library {
 
         unmanaged = report.unknown().size();
 
+        List<InstalledJar> loose = new ArrayList<>(report.ignored());
+        loose.addAll(report.notAdopted());
+        untracked = loose;
+
         describe(report, scan);
 
         return true;
@@ -125,7 +201,7 @@ public final class Library {
     /**
      * Writes down what this scan found had changed while the server was off.
      */
-    private void record(ReconcileReport report) {
+    private void record(ReconcileReport report, String adoptedBy) {
 
         if (report.applied().size() == 1) {
             history.add(HistoryEntry.applied(report.applied().get(0)));
@@ -140,10 +216,10 @@ public final class Library {
         }
 
         if (report.adopted().size() == 1) {
-            history.add(HistoryEntry.found(report.adopted().get(0), Event.ADOPTED));
+            history.add(HistoryEntry.adopted(report.adopted().get(0), adoptedBy));
         } else if (report.adopted().size() > 1) {
             history.add(HistoryEntry.many(Event.ADOPTED, report.adopted().size(),
-                    named(report.adopted()), null));
+                    named(report.adopted()), adoptedBy));
         }
 
         for (TrackedPlugin plugin : report.moved()) {
