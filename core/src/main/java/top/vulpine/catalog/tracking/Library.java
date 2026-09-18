@@ -40,6 +40,7 @@ public final class Library {
     private final History history;
 
     private volatile int unmanaged;
+    private volatile boolean scanned;
     private volatile List<InstalledJar> untracked = new ArrayList<>();
 
     public Library(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
@@ -138,6 +139,8 @@ public final class Library {
      */
     public boolean index(String adoptedBy) {
 
+        boolean startup = !scanned;
+
         long started = System.currentTimeMillis();
         ScanResult scan = new JarScanner(platform.pluginsFolder()).scan();
 
@@ -193,7 +196,8 @@ public final class Library {
         loose.addAll(report.notAdopted());
         untracked = loose;
 
-        describe(report, scan);
+        scanned = true;
+        describe(report, scan, startup);
 
         return true;
     }
@@ -286,7 +290,7 @@ public final class Library {
     /**
      * Says what the scan found, at the volume each outcome deserves.
      */
-    private void describe(ReconcileReport report, ScanResult scan) {
+    private void describe(ReconcileReport report, ScanResult scan, boolean startup) {
 
         Logger.info(CatalogAction.SCAN, "Indexed " + scan.jars().size() + " jars, tracking "
                 + tracking.size() + " plugins.");
@@ -297,15 +301,20 @@ public final class Library {
         }
 
         if (!report.applied().isEmpty()) {
-            Logger.info(CatalogAction.UPDATE, "Updates applied on this start: "
-                    + names(report.applied()));
+            Logger.info(CatalogAction.UPDATE, startup
+                    ? "Updates applied on this start: " + names(report.applied())
+                    : "Applied without a restart by something else: " + names(report.applied()));
         }
 
-        for (TrackedPlugin plugin : report.notApplied()) {
-            Logger.warn(CatalogAction.UPDATE, plugin.displayName() + " is still "
-                    + plugin.versionNumber() + ": the staged build was not taken from "
-                    + platform.stagingName()
-                    + ". It is still there and will be tried again on the next start.");
+        // Only the scan that runs at startup can say this. Later on, a staged build sitting
+        // untouched next to an unchanged jar is a restart that has not happened yet.
+        if (startup) {
+            for (TrackedPlugin plugin : report.notApplied()) {
+                Logger.warn(CatalogAction.UPDATE, plugin.displayName() + " is still "
+                        + plugin.versionNumber() + ": the staged build was not taken from "
+                        + platform.stagingName()
+                        + ". It is still there and will be tried again on the next start.");
+            }
         }
 
         if (!report.moved().isEmpty()) {
