@@ -30,7 +30,7 @@ Only builds made for your exact Minecraft version are offered. Purpur and Folia 
 
 Catalog looks for updates when the server starts and every three hours after that. `/catalog list` shows what is out of date, and `/catalog update <plugin>` or `/catalog update all` fetches the new builds.
 
-Nothing is ever swapped while the plugin runs. Catalog downloads the new build and gives it to the server, which installs it automatically once the next restart happens, before plugins load. `/catalog cancel <plugin>` drops a staged update.
+Nothing is ever swapped while the plugin runs. Catalog downloads the new build and gives it to the server, which installs it automatically once the next restart happens, before plugins load. `/catalog cancel <plugin>` drops a downloaded update.
 
 You can let Catalog handle that process. Once you enable automatic updates for a trusted plugin, it will stay up-to-date. Catalog waits a couple of hours after a build comes out before installing it. If the author notices a problem and puts out a fix in that time, you get the fixed build and never install the broken one. The pause time, the channel a plugin follows and the auto-update switch are set per each plugin, so you can choose which plugins you want updated immediately and which ones can wait.
 
@@ -60,7 +60,7 @@ Everything is clickable, so you rarely need to type any command. `/catalog help`
 | `/catalog history` | What Catalog has done, and who asked | `catalog.command.list` |
 | `/catalog install <slug> [version]` | Install a plugin, optionally a specific build | `catalog.command.install` |
 | `/catalog update <plugin\|all>` | Download updates, apply them on next restart | `catalog.command.update` |
-| `/catalog cancel <plugin>` | Drop a staged update | `catalog.command.update` |
+| `/catalog cancel <plugin>` | Drop a downloaded update | `catalog.command.update` |
 | `/catalog uninstall <plugin>` | Move a plugin to trash | `catalog.command.uninstall` |
 | `/catalog trash` | What you have removed | `catalog.command.trash` |
 | `/catalog trash restore <plugin>` | Put a removed plugin back | `catalog.command.trash` |
@@ -95,7 +95,7 @@ Permissions are listed above next to each action/command.
 ## Questions
 
 **Does it reload or hot-swap plugins?**
-No. Catalog does not touch plugins while the server is running, which is what prevents classloader leaks and locked files. Builds are staged and the server applies them at the next restart, before the plugins load.
+No. Catalog does not touch plugins while the server is running, which is what prevents classloader leaks and locked files. Builds are downloaded and the server applies them at the next restart, before the plugins load.
 
 **What about plugins that are not on Modrinth?**
 They are ignored. Catalog never does anything to them.
