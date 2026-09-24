@@ -342,11 +342,6 @@ public final class Library {
                     + " recognised plugins were not adopted because auto_track is off.");
         }
 
-        for (TrackedPlugin plugin : report.orphaned()) {
-            Logger.warn(CatalogAction.TRACK, plugin.displayName()
-                    + " was replaced with a different plugin, so Catalog stopped tracking it.");
-        }
-
         for (InstalledJar jar : report.conflicting()) {
             Logger.warn(CatalogAction.TRACK, jar.fileName()
                     + " is a second jar for a project that is already tracked.");

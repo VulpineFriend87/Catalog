@@ -40,15 +40,9 @@ public final class ReconcileReport {
     @Builder.Default
     private final List<TrackedPlugin> renamed = Collections.emptyList();
 
-    /** The file is gone, so tracking stopped. Deleting a jar by hand is a valid way to uninstall. */
+    /** No longer installed, so tracking stopped. Deleting a jar by hand is a valid way to uninstall. */
     @Builder.Default
     private final List<TrackedPlugin> removed = Collections.emptyList();
-
-    /**
-     * The file was replaced by something Catalog can no longer tie to the same project, so tracking stopped.
-     */
-    @Builder.Default
-    private final List<TrackedPlugin> orphaned = Collections.emptyList();
 
     /** Not on Modrinth. Listed, never touched. */
     @Builder.Default
@@ -80,7 +74,7 @@ public final class ReconcileReport {
      */
     public boolean hasChanges() {
         return !adopted.isEmpty() || !moved.isEmpty() || !renamed.isEmpty()
-                || !removed.isEmpty() || !orphaned.isEmpty() || !applied.isEmpty();
+                || !removed.isEmpty() || !applied.isEmpty();
     }
 
     /**
@@ -89,7 +83,7 @@ public final class ReconcileReport {
      * @return true if there is something worth a warning
      */
     public boolean needsAttention() {
-        return !orphaned.isEmpty() || !conflicting.isEmpty() || !notApplied.isEmpty();
+        return !conflicting.isEmpty() || !notApplied.isEmpty();
     }
 
 }

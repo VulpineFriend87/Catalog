@@ -311,7 +311,7 @@ class ReconcilerTest {
     }
 
     @Test
-    @DisplayName("swapping a jar for a different plugin untracks the old one and adopts the new")
+    @DisplayName("a different plugin under the same file name is a removal and an adoption")
     void handlesSwapToAnotherProject() {
 
         store.put(TrackedPlugin.of(version("v1", "PROJ-A"), "plugin.jar", "old-hash",
@@ -321,16 +321,16 @@ class ReconcilerTest {
 
         ReconcileReport report = run();
 
-        assertEquals(1, report.orphaned().size(), "the old project is no longer there");
+        assertEquals(1, report.removed().size(), "the old project is no longer installed");
         assertEquals(1, report.adopted().size(), "and the new one must not be missed");
         assertNull(store.byProjectId("PROJ-A"));
         assertNotNull(store.byProjectId("PROJ-B"));
-        assertTrue(report.needsAttention());
+        assertFalse(report.needsAttention());
     }
 
     @Test
-    @DisplayName("a jar replaced with something unrecognisable is untracked, not left pointing at it")
-    void orphansUnidentifiableReplacements() {
+    @DisplayName("a jar replaced with something unrecognisable is no longer installed")
+    void removesUnidentifiableReplacements() {
 
         store.put(TrackedPlugin.of(version("v1", "PROJ-A"), "plugin.jar", "old-hash",
                 ReleaseChannel.RELEASE, "test"));
@@ -339,7 +339,7 @@ class ReconcilerTest {
 
         ReconcileReport report = run();
 
-        assertEquals(1, report.orphaned().size());
+        assertEquals(1, report.removed().size());
         assertEquals(1, report.unknown().size());
         assertEquals(0, store.size());
     }

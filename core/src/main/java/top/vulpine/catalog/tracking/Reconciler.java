@@ -63,21 +63,21 @@ public final class Reconciler {
 
         Changes changes = new Changes();
         Set<String> claimed = new HashSet<>();
-        List<Unsettled> unsettled = new ArrayList<>();
+        List<TrackedPlugin> unsettled = new ArrayList<>();
 
         // Two rounds, because the strong evidence has to win everywhere before the weak evidence is
         // used anywhere. Settled one plugin at a time, the first to be looked at could claim a jar
         // that a later one owns byte for byte, and that later one would then look deleted.
         for (TrackedPlugin tracked : store.all()) {
 
-            Unsettled left = settle(tracked, scan, identified, claimed, changes);
+            TrackedPlugin left = settle(tracked, scan, identified, claimed, changes);
 
             if (left != null) {
                 unsettled.add(left);
             }
         }
 
-        for (Unsettled left : unsettled) {
+        for (TrackedPlugin left : unsettled) {
             settleByProject(left, scan, identified, claimed, changes);
         }
 
@@ -120,21 +120,11 @@ public final class Reconciler {
                 .notApplied(changes.notApplied)
                 .renamed(changes.renamed)
                 .removed(changes.removed)
-                .orphaned(changes.orphaned)
                 .unknown(unknown)
                 .ignored(ignored)
                 .conflicting(conflicting)
                 .notAdopted(notAdopted)
                 .build();
-    }
-
-    /**
-     * A tracked plugin neither the hash nor the file name could account for.
-     *
-     * @param nameTaken whether a jar was sitting under its file name, holding something else — the
-     *                  difference between a plugin that was replaced and one that simply left
-     */
-    private record Unsettled(TrackedPlugin plugin, boolean nameTaken) {
     }
 
     /** What became of the plugins already tracked, gathered as each one is settled. */
@@ -145,7 +135,6 @@ public final class Reconciler {
         private final List<TrackedPlugin> notApplied = new ArrayList<>();
         private final List<TrackedPlugin> renamed = new ArrayList<>();
         private final List<TrackedPlugin> removed = new ArrayList<>();
-        private final List<TrackedPlugin> orphaned = new ArrayList<>();
 
     }
 
@@ -154,7 +143,7 @@ public final class Reconciler {
      *
      * <p>Matched by hash first and only then by file name.</p>
      */
-    private Unsettled settle(TrackedPlugin tracked, ScanResult scan,
+    private TrackedPlugin settle(TrackedPlugin tracked, ScanResult scan,
                              Map<String, ModrinthVersion> identified, Set<String> claimed,
                              Changes changes) {
 
@@ -184,7 +173,7 @@ public final class Reconciler {
         InstalledJar sameName = tracked.fileName() == null ? null : scan.byFileName(tracked.fileName());
 
         if (sameName == null) {
-            return new Unsettled(tracked, false);
+            return tracked;
         }
 
         ModrinthVersion replacement = identified.get(sameName.sha512());
@@ -207,7 +196,7 @@ public final class Reconciler {
         // The file now holds something else entirely. The name is left unclaimed, so whatever
         // actually lives there can be adopted, and the plugin goes to the second round in case it
         // is still on disk somewhere under a name nobody has looked at yet.
-        return new Unsettled(tracked, true);
+        return tracked;
     }
 
     /**
@@ -223,11 +212,9 @@ public final class Reconciler {
      * plugin that matched it exactly. If two are left over for the same project, the first is taken
      * and the other falls through to be reported as a duplicate.</p>
      */
-    private void settleByProject(Unsettled left, ScanResult scan,
+    private void settleByProject(TrackedPlugin tracked, ScanResult scan,
                                  Map<String, ModrinthVersion> identified, Set<String> claimed,
                                  Changes changes) {
-
-        TrackedPlugin tracked = left.plugin();
 
         for (InstalledJar jar : scan.jars()) {
 
@@ -254,7 +241,7 @@ public final class Reconciler {
         }
 
         store.remove(tracked.projectId());
-        (left.nameTaken() ? changes.orphaned : changes.removed).add(tracked);
+        changes.removed.add(tracked);
     }
 
     private TrackedPlugin adopt(ModrinthVersion version, InstalledJar jar) {
