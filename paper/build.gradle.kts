@@ -1,3 +1,5 @@
+import net.minecrell.pluginyml.bukkit.BukkitPluginDescription.Permission.Default
+
 plugins {
     alias(libs.plugins.lombok)
     alias(libs.plugins.shadow)
@@ -61,4 +63,36 @@ bukkit {
     author = "VulpineFriend87"
     website = "https://vulpine.top"
     foliaSupported = true
+
+    val commands = linkedMapOf(
+        "about" to "Shows the version and credits.",
+        "help" to "Lists all commands.",
+        "list" to "Lists managed plugins and the history.",
+        "info" to "Shows a plugin's details, versions and dependencies.",
+        "search" to "Searches Modrinth.",
+        "install" to "Installs plugins.",
+        "update" to "Downloads and cancels updates.",
+        "uninstall" to "Moves plugins to the trash.",
+        "trash" to "Opens the trash, restores and deletes removals.",
+        "settings" to "Changes a plugin's settings.",
+        "channel" to "Changes a plugin's release channel.",
+        "hold" to "Holds and unholds plugins.",
+        "untrack" to "Tracks and untracks plugins.",
+        "reload" to "Reloads the configuration."
+    )
+
+    permissions {
+        commands.forEach { (command, text) ->
+            register("catalog.command.$command") {
+                description = text
+                default = Default.OP
+            }
+        }
+
+        register("catalog.admin") {
+            description = "Grants every Catalog permission."
+            default = Default.OP
+            children = commands.keys.map { "catalog.command.$it" }
+        }
+    }
 }
