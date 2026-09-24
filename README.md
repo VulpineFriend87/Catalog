@@ -62,6 +62,8 @@ Everything is clickable, so you rarely need to type any command. `/catalog help`
 | `/catalog update <plugin\|all>` | Download updates, apply them on next restart | `catalog.command.update` |
 | `/catalog cancel <plugin>` | Drop a downloaded update | `catalog.command.update` |
 | `/catalog uninstall <plugin>` | Move a plugin to trash | `catalog.command.uninstall` |
+| `/catalog untrack <plugin>` | Stop managing a plugin, the jar is not removed | `catalog.command.untrack` |
+| `/catalog track <jar>` | Manage an untracked plugin again | `catalog.command.untrack` |
 | `/catalog trash` | What you have removed | `catalog.command.trash` |
 | `/catalog trash restore <plugin>` | Put a removed plugin back | `catalog.command.trash` |
 | `/catalog trash delete <plugin\|all>` | Delete a removal permanently | `catalog.command.trash` |
