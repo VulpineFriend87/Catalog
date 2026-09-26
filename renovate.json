@@ -3,6 +3,30 @@
   "extends": [
     "config:recommended"
   ],
+  "customDatasources": {
+    "minecraft": {
+      "defaultRegistryUrlTemplate": "https://api.modrinth.com/v2/tag/game_version",
+      "transformTemplates": [
+        "{ \"releases\": $[version_type = 'release'].{ \"version\": version, \"releaseTimestamp\": date } }"
+      ]
+    }
+  },
+  "customManagers": [
+    {
+      "description": "appends new Minecraft releases to the game versions published to Modrinth",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/build\\.yml$/"
+      ],
+      "matchStrings": [
+        "\\n(?<indentation>[ ]+)(?<currentValue>\\d+\\.\\d+(?:\\.\\d+)?)\\s*$"
+      ],
+      "depNameTemplate": "minecraft",
+      "datasourceTemplate": "custom.minecraft",
+      "versioningTemplate": "loose",
+      "autoReplaceStringTemplate": "\n{{{indentation}}}{{{currentValue}}}\n{{{indentation}}}{{{newValue}}}"
+    }
+  ],
   "packageRules": [
     {
       "description": "pinned to the oldest supported platform, not kept current",
@@ -12,6 +36,15 @@
         "com.google.code.gson:gson"
       ],
       "enabled": false
+    },
+    {
+      "description": "a new Minecraft version is only claimed once it has been tested",
+      "matchDatasources": [
+        "custom.minecraft"
+      ],
+      "commitMessageTopic": "supported Minecraft versions",
+      "commitMessageExtra": "(add {{{newValue}}})",
+      "automerge": false
     }
   ]
 }
