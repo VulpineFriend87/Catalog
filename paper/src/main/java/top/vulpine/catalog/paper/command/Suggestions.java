@@ -57,6 +57,23 @@ public final class Suggestions {
 
     }
 
+    /** The kinds of event the history can be narrowed to. */
+    public static final class Kinds implements SuggestionProvider<BukkitCommandActor> {
+
+        @Override
+        public Collection<String> getSuggestions(@NotNull ExecutionContext<BukkitCommandActor> context) {
+
+            List<String> kinds = new ArrayList<>();
+
+            for (HistoryKind kind : HistoryKind.values()) {
+                kinds.add(kind.label());
+            }
+
+            return matching(context, kinds);
+        }
+
+    }
+
     /** Every managed plugin. */
     public static final class Tracked implements SuggestionProvider<BukkitCommandActor> {
 

@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 
 /**
  * All chat messages the plugin sends.
@@ -150,9 +151,19 @@ public final class Messages {
     // --- /catalog list ----------------------------------------------------------------------
 
     public static List<Component> list(List<TrackedPlugin> plugins, Map<String, UpdateCandidate> updates,
-                                       String self, List<InstalledJar> untracked) {
+                                       String self, List<InstalledJar> untracked,
+                                       Set<ListFilter> filters) {
 
-        List<TrackedPlugin> ordered = new ArrayList<>(plugins);
+        String screen = ListFilter.screen(filters);
+        List<TrackedPlugin> ordered = new ArrayList<>();
+
+        for (TrackedPlugin plugin : plugins) {
+            if (ListFilter.keeps(filters, plugin, updates)) {
+                ordered.add(plugin);
+            }
+        }
+
+        List<InstalledJar> jars = ListFilter.keepsUntracked(filters) ? untracked : List.of();
 
         // Every plugin is here; the order only stops the ones asking for a decision being buried.
         ordered.sort(Comparator
@@ -172,15 +183,31 @@ public final class Messages {
                     .append(Component.text(" to update", MUTED));
         }
 
+        if (!filters.isEmpty()) {
+
+            StringJoiner shown = new StringJoiner(" · ");
+
+            for (ListFilter filter : filters) {
+                shown.add(filter.label());
+            }
+
+            header.append(Component.text("  " + shown, TEXT));
+        }
+
         out.add(header.build());
         out.add(Component.empty());
 
         for (TrackedPlugin plugin : ordered) {
-            out.add(row(plugin, updates.get(plugin.projectId()), plugin.fileName().equals(self)));
+            out.add(row(plugin, updates.get(plugin.projectId()), plugin.fileName().equals(self),
+                    screen));
         }
 
-        for (InstalledJar jar : untracked) {
-            out.add(untrackedRow(jar));
+        for (InstalledJar jar : jars) {
+            out.add(untrackedRow(jar, screen));
+        }
+
+        if (ordered.isEmpty() && jars.isEmpty()) {
+            out.add(Component.text(INDENT + "No plugins match", MUTED));
         }
 
         out.add(Component.empty());
@@ -188,7 +215,7 @@ public final class Messages {
         TextComponent.Builder footer = line().append(Component.text(INDENT));
 
         if (!updates.isEmpty()) {
-            footer.append(button("Update all", from("/catalog update all", ClickContext.LIST),
+            footer.append(button("Update all", from("/catalog update all", screen),
                     BRAND, "Update all plugins")).append(Component.space());
         }
 
@@ -203,15 +230,16 @@ public final class Messages {
         return out;
     }
 
-    private static Component row(TrackedPlugin plugin, UpdateCandidate update, boolean self) {
+    private static Component row(TrackedPlugin plugin, UpdateCandidate update, boolean self,
+                                 String screen) {
 
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
-                .append(name(plugin));
+                .append(name(plugin, screen));
 
         if (update != null && !plugin.awaitingRestart()) {
             row.append(Component.space()).append(icon("↑", BRAND,
-                    from("/catalog update " + key(plugin), ClickContext.LIST),
+                    from("/catalog update " + key(plugin), screen),
                     "Download " + update.to() + " for the next restart"));
         }
 
@@ -219,7 +247,7 @@ public final class Messages {
         // button, and nothing in game could put it back.
         if (!self) {
             row.append(Component.space()).append(icon("×", DANGER,
-                    from("/catalog uninstall " + key(plugin), ClickContext.LIST),
+                    from("/catalog uninstall " + key(plugin), screen),
                     "Move " + plugin.displayName() + " to the trash"));
         }
 
@@ -234,7 +262,7 @@ public final class Messages {
         return row.build();
     }
 
-    private static Component untrackedRow(InstalledJar jar) {
+    private static Component untrackedRow(InstalledJar jar, String screen) {
 
         String shown = shownName(jar);
 
@@ -250,7 +278,7 @@ public final class Messages {
                 .append(Component.text(shown, MUTED).hoverEvent(HoverEvent.showText(hover)))
                 .append(Component.space())
                 .append(icon("+", BRAND, from("/catalog track " + quoted(jar.fileName()),
-                        ClickContext.LIST), "Track " + shown))
+                        screen), "Track " + shown))
                 .append(Component.text("  untracked", MUTED))
                 .build();
     }
@@ -271,7 +299,7 @@ public final class Messages {
         return value.contains(" ") ? "\"" + value + "\"" : value;
     }
 
-    private static Component name(TrackedPlugin plugin) {
+    private static Component name(TrackedPlugin plugin, String screen) {
 
         Component hover = Component.text(plugin.displayName(), TEXT)
                 .append(Component.newline())
@@ -288,8 +316,7 @@ public final class Messages {
                 .append(Component.text("/catalog info " + key(plugin), MUTED));
 
         return Component.text(plugin.displayName(), TEXT)
-                .clickEvent(ClickEvent.runCommand(from("/catalog info " + key(plugin),
-                        ClickContext.LIST)))
+                .clickEvent(ClickEvent.runCommand(from("/catalog info " + key(plugin), screen)))
                 .hoverEvent(HoverEvent.showText(hover));
     }
 
@@ -1186,8 +1213,10 @@ public final class Messages {
             return fallback;
         }
 
-        if (from.equals(ClickContext.LIST)) {
-            return "/catalog list";
+        Set<ListFilter> filters = ListFilter.parse(from);
+
+        if (filters != null) {
+            return "/catalog list" + ListFilter.switches(filters);
         }
 
         if (from.equals(ClickContext.TRASH)) {
@@ -1815,6 +1844,13 @@ public final class Messages {
         return line()
                 .append(Component.text(name, TEXT))
                 .append(Component.text(" is already up to date", MUTED))
+                .build();
+    }
+
+    public static Component unknownKind(String typed) {
+        return line()
+                .append(Component.text("No event kind called ", DANGER))
+                .append(Component.text(typed, TEXT))
                 .build();
     }
 

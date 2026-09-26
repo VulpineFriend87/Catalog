@@ -15,6 +15,7 @@ import revxrsal.commands.annotation.Subcommand;
 import revxrsal.commands.annotation.SuggestWith;
 import revxrsal.commands.annotation.Switch;
 import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.install.DependencyResolver;
 import top.vulpine.catalog.modrinth.model.Dependency;
@@ -36,6 +37,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -95,8 +97,40 @@ public final class MainCommand {
     @Subcommand("list")
     @Description("Managed plugins")
     @RequiresPermission("command.list")
-    public void list(CommandSender sender) {
-        plugin.getScheduler().runAsync(task -> showList(sender, true));
+    public void list(CommandSender sender,
+                     @Switch("updates") boolean updates,
+                     @Switch("restart") boolean restart,
+                     @Switch("held") boolean held,
+                     @Switch("auto") boolean auto,
+                     @Switch(value = "untracked", shorthand = 'n') boolean untracked) {
+
+        // A button on the list only changes the filters, so the answer from Modrinth it already
+        // showed is still the current one.
+        boolean refresh = ListFilter.parse(context.take(sender)) == null;
+
+        Set<ListFilter> filters = EnumSet.noneOf(ListFilter.class);
+
+        if (updates) {
+            filters.add(ListFilter.UPDATES);
+        }
+
+        if (restart) {
+            filters.add(ListFilter.RESTART);
+        }
+
+        if (held) {
+            filters.add(ListFilter.HELD);
+        }
+
+        if (auto) {
+            filters.add(ListFilter.AUTO);
+        }
+
+        if (untracked) {
+            filters.add(ListFilter.UNTRACKED);
+        }
+
+        plugin.getScheduler().runAsync(task -> showList(sender, refresh, filters));
     }
 
     @Subcommand("info")
@@ -497,6 +531,7 @@ public final class MainCommand {
                         @Optional @Flag(value = "plugin", shorthand = 'l')
                         @SuggestWith(Suggestions.Logged.class) String which,
                         @Optional @Flag("author") String author,
+                        @Optional @Flag("event") @SuggestWith(Suggestions.Kinds.class) String event,
                         @Flag("page") @Default("1") int page) {
 
         context.take(sender);
@@ -527,8 +562,23 @@ public final class MainCommand {
                 command.append(" --author ").append(author);
             }
 
-            send(sender, Messages.history(plugin.history(projectId, author),
-                    Math.max(page, 1), label, command.toString()));
+            List<HistoryEntry> entries = plugin.history(projectId, author);
+
+            if (event != null && !event.isBlank()) {
+
+                HistoryKind kind = HistoryKind.named(event);
+
+                if (kind == null) {
+                    send(sender, Messages.unknownKind(event));
+                    return;
+                }
+
+                entries = entries.stream().filter(entry -> kind.covers(entry.event())).toList();
+                label = label == null ? kind.label() : label + " · " + kind.label();
+                command.append(" --event ").append(kind.label());
+            }
+
+            send(sender, Messages.history(entries, Math.max(page, 1), label, command.toString()));
         });
     }
 
@@ -1169,8 +1219,10 @@ public final class MainCommand {
             return;
         }
 
-        if (data.equals(ClickContext.LIST)) {
-            showList(sender, false);
+        Set<ListFilter> filters = ListFilter.parse(data);
+
+        if (filters != null) {
+            showList(sender, false, filters);
         } else if (data.equals(ClickContext.TRASH)) {
             showTrash(sender, 1);
         } else if (data.startsWith(ClickContext.DEPENDENCIES)) {
@@ -1265,7 +1317,7 @@ public final class MainCommand {
      * @param refresh whether to ask Modrinth again first, which is wasted after an action that
      *                already knows what changed
      */
-    private void showList(CommandSender sender, boolean refresh) {
+    private void showList(CommandSender sender, boolean refresh, Set<ListFilter> filters) {
 
         abandonConfirmation(sender);
 
@@ -1284,7 +1336,7 @@ public final class MainCommand {
         }
 
         send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject(),
-                plugin.ownFileName(), plugin.untracked()));
+                plugin.ownFileName(), plugin.untracked(), filters));
     }
 
     /**

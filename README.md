@@ -52,12 +52,12 @@ Everything is clickable, so you rarely need to type any command. `/catalog help`
 | --- | --- | --- |
 | `/catalog` | Version and credits | `catalog.command.about` |
 | `/catalog help` | All commands | `catalog.command.help` |
-| `/catalog list` | All plugins managed by Catalog, and what needs updating | `catalog.command.list` |
+| `/catalog list [--updates] [--restart] [--held] [--auto] [--untracked]` | All plugins managed by Catalog, and what needs updating | `catalog.command.list` |
 | `/catalog info <plugin>` | All available information about any plugin, whether installed or not | `catalog.command.info` |
 | `/catalog search <query>` | Searches Modrinth for plugins compatible with your server | `catalog.command.search` |
 | `/catalog versions <plugin>` | Newest release, beta and alpha | `catalog.command.info` |
 | `/catalog dependencies <plugin>` | What a plugin declares it needs | `catalog.command.info` |
-| `/catalog history` | What Catalog has done, and who asked | `catalog.command.list` |
+| `/catalog history [--plugin <plugin>] [--author <name>] [--event <kind>]` | What Catalog has done, and who asked | `catalog.command.list` |
 | `/catalog install <slug> [version]` | Install a plugin, optionally a specific build | `catalog.command.install` |
 | `/catalog update <plugin\|all>` | Download updates, apply them on next restart | `catalog.command.update` |
 | `/catalog cancel <plugin>` | Drop a downloaded update | `catalog.command.update` |
