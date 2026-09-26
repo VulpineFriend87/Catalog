@@ -94,6 +94,8 @@ public final class MainCommand {
         send(sender, Messages.help());
     }
 
+    // Four switches at most. Past four, Lamp's Brigadier tree only chains them in declaration order,
+    // so the client stops suggesting, and marks as wrong, any switch typed after a later one.
     @Subcommand("list")
     @Description("Managed plugins")
     @RequiresPermission("command.list")
@@ -101,7 +103,6 @@ public final class MainCommand {
                      @Switch("updates") boolean updates,
                      @Switch("restart") boolean restart,
                      @Switch("held") boolean held,
-                     @Switch("auto") boolean auto,
                      @Switch(value = "untracked", shorthand = 'n') boolean untracked) {
 
         // A button on the list only changes the filters, so the answer from Modrinth it already
@@ -120,10 +121,6 @@ public final class MainCommand {
 
         if (held) {
             filters.add(ListFilter.HELD);
-        }
-
-        if (auto) {
-            filters.add(ListFilter.AUTO);
         }
 
         if (untracked) {
@@ -558,7 +555,7 @@ public final class MainCommand {
             }
 
             if (author != null && !author.isBlank()) {
-                label = label == null ? author : label + " · " + author;
+                label = label == null ? author : label + ", " + author;
                 command.append(" --author ").append(author);
             }
 
@@ -574,7 +571,7 @@ public final class MainCommand {
                 }
 
                 entries = entries.stream().filter(entry -> kind.covers(entry.event())).toList();
-                label = label == null ? kind.label() : label + " · " + kind.label();
+                label = label == null ? kind.label() : label + ", " + kind.label();
                 command.append(" --event ").append(kind.label());
             }
 

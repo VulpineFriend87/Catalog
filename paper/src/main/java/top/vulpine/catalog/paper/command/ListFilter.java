@@ -17,7 +17,6 @@ public enum ListFilter {
     UPDATES,
     RESTART,
     HELD,
-    AUTO,
     UNTRACKED;
 
     public String label() {
@@ -34,7 +33,6 @@ public enum ListFilter {
             case UPDATES -> updates.containsKey(plugin.projectId()) && !plugin.awaitingRestart();
             case RESTART -> plugin.awaitingRestart();
             case HELD -> plugin.isPinned();
-            case AUTO -> plugin.autoUpdate();
             case UNTRACKED -> false;
         };
     }

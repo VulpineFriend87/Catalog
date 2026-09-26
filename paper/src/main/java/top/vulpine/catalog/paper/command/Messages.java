@@ -183,18 +183,18 @@ public final class Messages {
                     .append(Component.text(" to update", MUTED));
         }
 
+        out.add(header.build());
+
         if (!filters.isEmpty()) {
 
-            StringJoiner shown = new StringJoiner(" · ");
+            StringJoiner shown = new StringJoiner(", ");
 
             for (ListFilter filter : filters) {
                 shown.add(filter.label());
             }
 
-            header.append(Component.text("  " + shown, TEXT));
+            out.add(filtersLine(shown.toString(), from("/catalog list", screen)));
         }
-
-        out.add(header.build());
         out.add(Component.empty());
 
         for (TrackedPlugin plugin : ordered) {
@@ -228,6 +228,15 @@ public final class Messages {
         out.add(footer.build());
 
         return out;
+    }
+
+    private static Component filtersLine(String shown, String clear) {
+        return line()
+                .append(Component.text(INDENT + "Filters: ", MUTED))
+                .append(Component.text(shown, TEXT))
+                .append(Component.space())
+                .append(button("Clear", clear, MUTED, "Remove the filters"))
+                .build();
     }
 
     private static Component row(TrackedPlugin plugin, UpdateCandidate update, boolean self,
@@ -1406,11 +1415,11 @@ public final class Messages {
                 .append(Component.text("Catalog", BRAND).decorate(TextDecoration.BOLD))
                 .append(Component.text("  history", MUTED));
 
-        if (filter != null) {
-            header.append(Component.text("  " + filter, TEXT));
-        }
-
         out.add(header.build());
+
+        if (filter != null) {
+            out.add(filtersLine(filter, "/catalog history"));
+        }
 
         if (entries.isEmpty()) {
             out.add(Component.empty());

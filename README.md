@@ -52,7 +52,7 @@ Everything is clickable, so you rarely need to type any command. `/catalog help`
 | --- | --- | --- |
 | `/catalog` | Version and credits | `catalog.command.about` |
 | `/catalog help` | All commands | `catalog.command.help` |
-| `/catalog list [--updates] [--restart] [--held] [--auto] [--untracked]` | All plugins managed by Catalog, and what needs updating | `catalog.command.list` |
+| `/catalog list [--updates] [--restart] [--held] [--untracked]` | All plugins managed by Catalog, and what needs updating | `catalog.command.list` |
 | `/catalog info <plugin>` | All available information about any plugin, whether installed or not | `catalog.command.info` |
 | `/catalog search <query>` | Searches Modrinth for plugins compatible with your server | `catalog.command.search` |
 | `/catalog versions <plugin>` | Newest release, beta and alpha | `catalog.command.info` |
