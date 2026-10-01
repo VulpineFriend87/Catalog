@@ -60,6 +60,28 @@ class TrashBinTest {
     }
 
     @Test
+    @DisplayName("keeps the whole record, settings included, across a restart")
+    void keepsTheRecord() throws IOException {
+
+        TrackedPlugin removed = tracked("abc123", "LuckPerms");
+        removed.autoUpdate(true);
+        removed.soakMinutes(30);
+        removed.pinnedVersionId("ver1");
+        removed.datePublished(Instant.parse("2026-08-08T10:00:00Z"));
+
+        bin().bin(jar("LuckPerms.jar", "x"), removed, "vulpine");
+
+        TrackedPlugin kept = bin().list().get(0).plugin();
+
+        assertAll(
+                () -> assertTrue(kept.autoUpdate()),
+                () -> assertEquals(30, kept.soakMinutes()),
+                () -> assertEquals("ver1", kept.pinnedVersionId()),
+                () -> assertEquals(Instant.parse("2026-08-08T10:00:00Z"), kept.datePublished())
+        );
+    }
+
+    @Test
     @DisplayName("keeps what it was told about the plugin, so a restore does not need Modrinth")
     void records() throws IOException {
 

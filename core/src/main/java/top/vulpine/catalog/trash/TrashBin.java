@@ -337,8 +337,10 @@ public final class TrashBin {
                     .name(plugin.name())
                     .versionId(plugin.versionId())
                     .versionNumber(plugin.versionNumber())
+                    .datePublished(plugin.datePublished())
                     .sha512(plugin.sha512())
-                    .channel(plugin.channel());
+                    .channel(plugin.channel())
+                    .plugin(plugin);
         }
 
         return entry.build();

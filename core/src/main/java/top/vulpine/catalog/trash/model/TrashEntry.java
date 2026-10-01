@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 import top.vulpine.catalog.modrinth.model.ReleaseChannel;
+import top.vulpine.catalog.tracking.model.TrackedPlugin;
 
 import java.time.Instant;
 
@@ -27,6 +28,7 @@ public final class TrashEntry {
 
     private String versionId;
     private String versionNumber;
+    private Instant datePublished;
     private String sha512;
 
     /** The channel the plugin was following, so restoring it does not silently reset the setting. */
@@ -34,6 +36,11 @@ public final class TrashEntry {
 
     private String removedBy;
     private Instant removedAt;
+
+    /**
+     * The tracking record at removal, or null for removals made before 0.10.0.
+     */
+    private TrackedPlugin plugin;
 
     /**
      * What to call this on screen: the Modrinth title when it is known, and the file name when the

@@ -120,6 +120,7 @@ public final class Reconciler {
                 .notApplied(changes.notApplied)
                 .renamed(changes.renamed)
                 .removed(changes.removed)
+                .completed(changes.completed)
                 .unknown(unknown)
                 .ignored(ignored)
                 .conflicting(conflicting)
@@ -135,6 +136,7 @@ public final class Reconciler {
         private final List<TrackedPlugin> notApplied = new ArrayList<>();
         private final List<TrackedPlugin> renamed = new ArrayList<>();
         private final List<TrackedPlugin> removed = new ArrayList<>();
+        private final List<TrackedPlugin> completed = new ArrayList<>();
 
     }
 
@@ -165,6 +167,8 @@ public final class Reconciler {
 
             // A fresh install is a different case entirely: the jar was always the right one.
             tracked.pendingLoad(false);
+
+            complete(tracked, identified.get(sameContent.sha512()), changes);
 
             claimed.add(sameContent.fileName());
             return null;
@@ -242,6 +246,20 @@ public final class Reconciler {
 
         store.remove(tracked.projectId());
         changes.removed.add(tracked);
+    }
+
+    /**
+     * Fills in the publish date a record is missing.
+     */
+    private static void complete(TrackedPlugin tracked, ModrinthVersion known, Changes changes) {
+
+        if (known == null || !known.id().equals(tracked.versionId())
+                || tracked.datePublished() != null || known.datePublished() == null) {
+            return;
+        }
+
+        tracked.datePublished(known.datePublished());
+        changes.completed.add(tracked);
     }
 
     private TrackedPlugin adopt(ModrinthVersion version, InstalledJar jar) {

@@ -150,6 +150,41 @@ public final class Removals {
             return null;
         }
 
+        TrackedPlugin tracked = entry.plugin() != null ? asRemoved(entry) : rebuilt(entry, by);
+
+        tracked.pendingLoad(!removedWhileRunning(entry.removedAt()));
+
+        tracking.put(tracked);
+        tracking.save();
+
+        history.add(HistoryEntry.restored(tracked, by));
+        return tracked;
+    }
+
+    /**
+     * The record as it was removed, without its pending restart.
+     */
+    private static TrackedPlugin asRemoved(TrashEntry entry) {
+
+        TrackedPlugin tracked = entry.plugin();
+
+        tracked.fileName(entry.fileName());
+        tracked.pendingRenameTo(null);
+        tracked.pendingRestart(false);
+        tracked.stagedAs(null);
+        tracked.stagedVersionId(null);
+        tracked.stagedBy(null);
+
+        return tracked;
+    }
+
+    /**
+     * A record rebuilt from a removal made before the whole record was kept.
+     *
+     * <p>Missing settings fall back to the defaults.</p>
+     */
+    private TrackedPlugin rebuilt(TrashEntry entry, String by) {
+
         TrackingDefaults configured = defaults.get();
         TrackedPlugin tracked = new TrackedPlugin();
 
@@ -158,18 +193,14 @@ public final class Removals {
         tracked.name(entry.name());
         tracked.versionId(entry.versionId());
         tracked.versionNumber(entry.versionNumber());
+        tracked.datePublished(entry.datePublished());
         tracked.fileName(entry.fileName());
         tracked.sha512(entry.sha512());
         tracked.channel(entry.channel() == null ? configured.channel() : entry.channel());
         tracked.autoUpdate(configured.autoUpdate());
         tracked.installedBy(by);
         tracked.installedAt(Instant.now());
-        tracked.pendingLoad(!removedWhileRunning(entry.removedAt()));
 
-        tracking.put(tracked);
-        tracking.save();
-
-        history.add(HistoryEntry.restored(tracked, by));
         return tracked;
     }
 

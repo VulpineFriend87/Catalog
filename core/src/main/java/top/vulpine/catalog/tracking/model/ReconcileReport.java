@@ -40,6 +40,10 @@ public final class ReconcileReport {
     @Builder.Default
     private final List<TrackedPlugin> renamed = Collections.emptyList();
 
+    /** Given back a missing publish date. */
+    @Builder.Default
+    private final List<TrackedPlugin> completed = Collections.emptyList();
+
     /** No longer installed, so tracking stopped. Deleting a jar by hand is a valid way to uninstall. */
     @Builder.Default
     private final List<TrackedPlugin> removed = Collections.emptyList();
@@ -74,7 +78,7 @@ public final class ReconcileReport {
      */
     public boolean hasChanges() {
         return !adopted.isEmpty() || !moved.isEmpty() || !renamed.isEmpty()
-                || !removed.isEmpty() || !applied.isEmpty();
+                || !removed.isEmpty() || !applied.isEmpty() || !completed.isEmpty();
     }
 
     /**

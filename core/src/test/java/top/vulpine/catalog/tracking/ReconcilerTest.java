@@ -15,6 +15,7 @@ import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -342,6 +343,24 @@ class ReconcilerTest {
         assertEquals(1, report.removed().size());
         assertEquals(1, report.unknown().size());
         assertEquals(0, store.size());
+    }
+
+    @Test
+    @DisplayName("a record that lost its publish date gets it back from the scan")
+    void completesAMissingPublishDate() {
+
+        TrackedPlugin restored = TrackedPlugin.of(version("v1", "PROJ-A"), "plugin.jar", "hash-1",
+                ReleaseChannel.RELEASE, "test");
+        restored.datePublished(null);
+        store.put(restored);
+
+        onDisk("plugin.jar", "hash-1", "LuckPerms", version("v1", "PROJ-A"));
+
+        ReconcileReport report = run();
+
+        assertEquals(Instant.parse("2026-08-08T10:00:00Z"),
+                store.byProjectId("PROJ-A").datePublished());
+        assertTrue(report.hasChanges(), "the date is only kept if the file is saved");
     }
 
     @Test
