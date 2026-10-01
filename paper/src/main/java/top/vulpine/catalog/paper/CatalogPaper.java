@@ -30,6 +30,7 @@ import top.vulpine.catalog.paper.command.ClickCommand;
 import top.vulpine.catalog.paper.command.MainCommand;
 import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.paper.config.Config;
+import top.vulpine.catalog.paper.notify.JoinNotifier;
 import top.vulpine.catalog.paper.util.PermissionChecker;
 import top.vulpine.catalog.platform.Platform;
 import top.vulpine.catalog.tracking.Dependents;
@@ -187,6 +188,8 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
         lamp.register(new MainCommand(this, clicks), new ClickCommand(clicks));
         clicks.dispatcher(lamp);
+
+        getServer().getPluginManager().registerEvents(new JoinNotifier(this), this);
 
         Logger.debug(Action.SETUP, "Initializing metrics...");
         new Metrics(this, PLUGIN_ID);

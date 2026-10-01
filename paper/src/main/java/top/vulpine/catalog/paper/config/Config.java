@@ -72,6 +72,10 @@ public class Config extends OkaeriConfig {
         @CustomKey("check_interval_minutes")
         public int checkIntervalMinutes = 180;
 
+        @Comment("Notify players with catalog.notify about updates when they join.")
+        @CustomKey("notify_on_join")
+        public boolean notifyOnJoin = true;
+
     }
 
     @CustomKey("trash")

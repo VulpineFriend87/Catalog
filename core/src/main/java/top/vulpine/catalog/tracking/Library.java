@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -42,6 +43,9 @@ public final class Library {
     private volatile int unmanaged;
     private volatile boolean scanned;
     private volatile List<InstalledJar> untracked = new ArrayList<>();
+
+    private final List<TrackedPlugin> applied = new CopyOnWriteArrayList<>();
+    private volatile List<TrackedPlugin> notApplied = List.of();
 
     public Library(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
                    IgnoreList ignored, Supplier<TrackingDefaults> defaults,
@@ -125,6 +129,20 @@ public final class Library {
     }
 
     /**
+     * @return the updates applied since this server started
+     */
+    public List<TrackedPlugin> applied() {
+        return List.copyOf(applied);
+    }
+
+    /**
+     * @return the downloaded builds this server's start did not take
+     */
+    public List<TrackedPlugin> notApplied() {
+        return notApplied;
+    }
+
+    /**
      * Hashes the plugins folder, identifies what Modrinth knows, and reconciles the tracking file.
      *
      * @return true if the scan completed, false if Modrinth could not be reached
@@ -195,6 +213,12 @@ public final class Library {
         List<InstalledJar> loose = new ArrayList<>(report.ignored());
         loose.addAll(report.notAdopted());
         untracked = loose;
+
+        applied.addAll(report.applied());
+
+        if (startup) {
+            notApplied = List.copyOf(report.notApplied());
+        }
 
         scanned = true;
         describe(report, scan, startup);

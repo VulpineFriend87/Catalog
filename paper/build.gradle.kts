@@ -89,10 +89,15 @@ bukkit {
             }
         }
 
+        register("catalog.notify") {
+            description = "Notifies about updates on join."
+            default = Default.OP
+        }
+
         register("catalog.admin") {
             description = "Grants every Catalog permission."
             default = Default.OP
-            children = commands.keys.map { "catalog.command.$it" }
+            children = commands.keys.map { "catalog.command.$it" } + "catalog.notify"
         }
     }
 }
