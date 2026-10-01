@@ -1335,13 +1335,14 @@ public final class MainCommand {
 
             try {
                 plugin.refreshUpdates();
-            } catch (Exception e) {
-                send(sender, Messages.unreachable(rootMessage(e)));
+            } catch (Exception ignored) {
+                // Shown under the list header.
             }
         }
 
         send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject(),
-                plugin.ownFileName(), plugin.untracked(), filters));
+                plugin.ownFileName(), plugin.untracked(), filters,
+                plugin.getUpdates().checkedAt(), plugin.getUpdates().unreachable()));
     }
 
     /**

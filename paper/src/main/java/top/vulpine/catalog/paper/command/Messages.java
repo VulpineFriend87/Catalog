@@ -150,9 +150,14 @@ public final class Messages {
 
     // --- /catalog list ----------------------------------------------------------------------
 
+    /**
+     * @param checkedAt   when Modrinth last answered, or null if it never has
+     * @param unreachable why the last check could not reach it, or null when it did
+     */
     public static List<Component> list(List<TrackedPlugin> plugins, Map<String, UpdateCandidate> updates,
                                        String self, List<InstalledJar> untracked,
-                                       Set<ListFilter> filters) {
+                                       Set<ListFilter> filters, Instant checkedAt,
+                                       String unreachable) {
 
         String screen = ListFilter.screen(filters);
         List<TrackedPlugin> ordered = new ArrayList<>();
@@ -195,6 +200,19 @@ public final class Messages {
 
             out.add(filtersLine(shown.toString(), from("/catalog list", screen)));
         }
+
+        if (unreachable != null) {
+
+            Component reason = Component.text("Could not reach Modrinth", TEXT)
+                    .append(Component.newline())
+                    .append(Component.text(unreachable, MUTED));
+
+            out.add(Component.empty());
+            out.add(Component.text(INDENT + "(" + (checkedAt == null ? "never checked"
+                            : "last checked " + ago(checkedAt)) + ")", DANGER)
+                    .hoverEvent(HoverEvent.showText(reason)));
+        }
+
         out.add(Component.empty());
 
         for (TrackedPlugin plugin : ordered) {

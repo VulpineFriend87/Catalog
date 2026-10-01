@@ -58,6 +58,11 @@ public final class Updates {
     private final Map<String, String> failed = new ConcurrentHashMap<>();
 
     /**
+     * Why the last check could not reach Modrinth, or null when it did.
+     */
+    private volatile String unreachable;
+
+    /**
      * Why each held back build was held back, by version id.
      */
     private final Map<String, String> missingByVersion = new ConcurrentHashMap<>();
@@ -107,6 +112,13 @@ public final class Updates {
     }
 
     /**
+     * @return why the last check could not reach Modrinth, or null when it did
+     */
+    public String unreachable() {
+        return unreachable;
+    }
+
+    /**
      * @return when the last check ran, or null if none has
      */
     public Instant checkedAt() {
@@ -131,7 +143,14 @@ public final class Updates {
             Logger.debug(CatalogAction.UPDATE, "  asking about " + state(tracked));
         }
 
-        lastCheck = new UpdateChecker(modrinth, tracking).check(target);
+        try {
+            lastCheck = new UpdateChecker(modrinth, tracking).check(target);
+        } catch (RuntimeException e) {
+            unreachable = Errors.rootMessage(e);
+            throw e;
+        }
+
+        unreachable = null;
         checkedAt = Instant.now();
 
         Set<String> offered = new HashSet<>();
