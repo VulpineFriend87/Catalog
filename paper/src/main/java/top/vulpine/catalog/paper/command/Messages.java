@@ -1458,7 +1458,8 @@ public final class Messages {
 
         return switch (event) {
             case INSTALLED, INSTALLED_AS_DEPENDENCY, RESTORED, UPDATES_APPLIED -> DONE;
-            case UPDATE_STAGED, SWITCHED, ROLLED_BACK, UPDATE_HELD_BACK, REPLACED_BY_HAND -> PENDING;
+            case UPDATE_STAGED, SWITCHED, ROLLED_BACK, UPDATE_HELD_BACK, AUTO_UPDATE_FAILED,
+                 UPDATE_NOT_APPLIED, UPDATE_LOST, REPLACED_BY_HAND -> PENDING;
             case TRASHED, DELETED, TRASH_EMPTIED, NO_LONGER_INSTALLED -> DANGER;
             case ADOPTED, UNTRACKED -> TEXT;
             default -> MUTED;
@@ -1488,7 +1489,10 @@ public final class Messages {
             case UNTRACKED -> "untracked";
             case REPLACED_BY_HAND -> "replaced by hand";
             case NO_LONGER_INSTALLED -> "no longer installed";
-            case UPDATE_HELD_BACK -> "update held back";
+            case UPDATE_HELD_BACK -> "auto-update blocked";
+            case AUTO_UPDATE_FAILED -> "auto-update failed";
+            case UPDATE_NOT_APPLIED -> "update did not apply";
+            case UPDATE_LOST -> "update removed from the update folder";
             case HELD -> "held";
             case UNHELD -> "unheld";
             case AUTO_UPDATE -> "auto-update " + entry.value();
@@ -1514,7 +1518,7 @@ public final class Messages {
 
         if (entry.from() != null && entry.to() != null) {
             hover.append(Component.newline())
-                    .append(Component.text(entry.from() + " -> " + entry.to(), MUTED));
+                    .append(Component.text(entry.from() + " → " + entry.to(), MUTED));
         } else if (entry.to() != null) {
             hover.append(Component.newline()).append(Component.text(entry.to(), MUTED));
         }
@@ -1528,7 +1532,21 @@ public final class Messages {
                     .append(Component.text("required by " + entry.value(), MUTED));
         }
 
-        if (entry.names() != null && !entry.names().isEmpty()) {
+        String reason = switch (entry.event()) {
+            case UPDATE_HELD_BACK -> entry.names() == null || entry.names().isEmpty() ? null
+                    : String.join(", ", entry.names()) + " required missing";
+            case AUTO_UPDATE_FAILED -> entry.value();
+            default -> null;
+        };
+
+        if (reason != null) {
+            hover.append(Component.newline()).append(Component.text("Reason: " + reason, MUTED));
+        }
+
+        if (entry.event() == Event.UPDATE_NOT_APPLIED) {
+            hover.append(Component.newline())
+                    .append(Component.text("Still in the update folder", MUTED));
+        } else if (entry.names() != null && !entry.names().isEmpty()) {
             hover.append(Component.newline())
                     .append(Component.text(String.join(", ", entry.names()), MUTED));
         }

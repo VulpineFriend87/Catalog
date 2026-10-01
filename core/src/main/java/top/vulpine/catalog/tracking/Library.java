@@ -310,6 +310,7 @@ public final class Library {
         // untouched next to an unchanged jar is a restart that has not happened yet.
         if (startup) {
             for (TrackedPlugin plugin : report.notApplied()) {
+                history.add(HistoryEntry.notApplied(plugin));
                 Logger.warn(CatalogAction.UPDATE, plugin.displayName() + " is still "
                         + plugin.versionNumber() + ": the downloaded build was not taken from "
                         + platform.stagingName()

@@ -158,9 +158,9 @@ class UpdatesDependencyTest {
     }
 
     @Test
-    @DisplayName("nothing is held back before a check has run")
-    void nothingBlockedInitially() {
-        assertTrue(updates(needing("Vault", false)).blocked().isEmpty());
+    @DisplayName("no automatic update has failed before a check has run")
+    void nothingFailedInitially() {
+        assertTrue(updates(needing("Vault", false)).failures().isEmpty());
     }
 
 }

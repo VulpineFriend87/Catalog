@@ -53,14 +53,19 @@ public final class Updates {
     private volatile Instant checkedAt;
 
     /**
-     * Updates held back because the new build needs something that is not installed, by project id.
+     * Why the last automatic update of a plugin did not happen, by project id.
      */
-    private final Map<String, List<DependencyResolver.Requirement>> blocked = new ConcurrentHashMap<>();
+    private final Map<String, String> failed = new ConcurrentHashMap<>();
 
     /**
-     * Version ids already reported as blocked, so a check every few hours does not repeat itself.
+     * Why each held back build was held back, by version id.
      */
-    private final Set<String> reported = ConcurrentHashMap.newKeySet();
+    private final Map<String, String> missingByVersion = new ConcurrentHashMap<>();
+
+    /**
+     * Version ids whose failed download is already in the history.
+     */
+    private final Set<String> failuresReported = ConcurrentHashMap.newKeySet();
 
     public Updates(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
                    Installer installer, IntSupplier defaultSoakMinutes,
@@ -74,15 +79,6 @@ public final class Updates {
         this.dependencies = dependencies;
         this.history = history;
         this.reconcile = reconcile;
-    }
-
-    /**
-     * What each held-back update is waiting for.
-     *
-     * @return project id to the required dependencies that are not installed
-     */
-    public Map<String, List<DependencyResolver.Requirement>> blocked() {
-        return Map.copyOf(blocked);
     }
 
     /**
@@ -101,6 +97,13 @@ public final class Updates {
                     + version.versionNumber() + ": " + Errors.rootMessage(e));
             return List.of();
         }
+    }
+
+    /**
+     * @return why each failed automatic update failed, by project id
+     */
+    public Map<String, String> failures() {
+        return Map.copyOf(failed);
     }
 
     /**
@@ -196,6 +199,7 @@ public final class Updates {
             }
 
             TrackedPlugin waiting = candidate.plugin();
+            failed.remove(waiting.projectId());
 
             Logger.debug(CatalogAction.UPDATE, "Not updating " + waiting.displayName()
                     + " on its own: " + (!waiting.autoUpdate() ? "auto-update is off"
@@ -216,19 +220,27 @@ public final class Updates {
                 continue;
             }
 
-            blocked.remove(candidate.plugin().projectId());
-
             try {
 
                 installer.stage(candidate, null);
+                failed.remove(candidate.plugin().projectId());
 
                 Logger.info(CatalogAction.UPDATE, "Updated " + candidate.plugin().displayName()
                         + " " + candidate.from() + " -> " + candidate.to()
                         + ", applies on the next restart.");
 
             } catch (Exception e) {
+
+                String reason = Errors.rootMessage(e);
+                failed.put(candidate.plugin().projectId(), reason);
+
                 Logger.warn(CatalogAction.UPDATE, "Could not update "
-                        + candidate.plugin().displayName() + ": " + Errors.rootMessage(e));
+                        + candidate.plugin().displayName() + ": " + reason);
+
+                if (failuresReported.add(candidate.version().id())) {
+                    history.add(HistoryEntry.autoUpdateFailed(candidate.plugin(),
+                            candidate.version(), reason));
+                }
             }
         }
     }
@@ -241,14 +253,22 @@ public final class Updates {
      */
     private void hold(UpdateCandidate candidate, List<DependencyResolver.Requirement> missing) {
 
-        blocked.put(candidate.plugin().projectId(), missing);
+        String versionId = candidate.version().id();
+        String reason = missingByVersion.get(versionId);
 
-        if (!reported.add(candidate.version().id())) {
+        if (reason != null) {
+            failed.put(candidate.plugin().projectId(), reason);
             return;
         }
 
+        List<String> names = named(missing);
+        reason = String.join(", ", names) + " required missing";
+
+        missingByVersion.put(versionId, reason);
+        failed.put(candidate.plugin().projectId(), reason);
+
         history.add(HistoryEntry.heldBack(candidate.plugin(), candidate.version(),
-                missing.size(), named(missing)));
+                missing.size(), names));
 
         Logger.warn(CatalogAction.UPDATE, "Not updating " + candidate.plugin().displayName()
                 + " to " + candidate.to() + " automatically: it needs " + missing.size()
@@ -357,6 +377,7 @@ public final class Updates {
         // Anything the scan could not account for really is gone: no jar on disk holds it, under
         // any name.
         for (TrackedPlugin plugin : abandoned) {
+            history.add(HistoryEntry.lost(plugin));
             plugin.pendingRestart(false);
             plugin.stagedAs(null);
             plugin.stagedVersionId(null);

@@ -122,6 +122,36 @@ public final class HistoryEntry {
                 .build();
     }
 
+    public static HistoryEntry autoUpdateFailed(TrackedPlugin plugin, ModrinthVersion version,
+                                                String reason) {
+        return about(plugin, null)
+                .event(Event.AUTO_UPDATE_FAILED)
+                .from(plugin.versionNumber())
+                .to(version.versionNumber())
+                .value(reason)
+                .build();
+    }
+
+    /**
+     * A downloaded build a restart left in the update folder.
+     */
+    public static HistoryEntry notApplied(TrackedPlugin plugin) {
+        return about(plugin, null)
+                .event(Event.UPDATE_NOT_APPLIED)
+                .from(plugin.versionNumber())
+                .build();
+    }
+
+    /**
+     * A downloaded build that left the update folder without a restart applying it.
+     */
+    public static HistoryEntry lost(TrackedPlugin plugin) {
+        return about(plugin, null)
+                .event(Event.UPDATE_LOST)
+                .from(plugin.versionNumber())
+                .build();
+    }
+
     /**
      * A removal deleted for good, named from what the trash kept rather than from a tracked plugin.
      */

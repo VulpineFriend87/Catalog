@@ -6,14 +6,12 @@ import java.util.Locale;
 
 /**
  * What {@code /catalog history --event} can be narrowed to.
- *
- * <p>Grouped, because the history records twenty-odd events and nobody looking for "what got
- * updated" should need to know that a switch and a rollback are separate ones.</p>
  */
 public enum HistoryKind {
 
     INSTALL,
     UPDATE,
+    FAILED,
     TRASH,
     TRACKING,
     SETTINGS;
@@ -24,6 +22,12 @@ public enum HistoryKind {
 
     public boolean covers(Event event) {
 
+        // The only kind that overlaps another.
+        if (this == FAILED) {
+            return event == Event.UPDATE_HELD_BACK || event == Event.AUTO_UPDATE_FAILED
+                    || event == Event.UPDATE_NOT_APPLIED || event == Event.UPDATE_LOST;
+        }
+
         if (event.isSetting()) {
             return this == SETTINGS;
         }
@@ -31,7 +35,8 @@ public enum HistoryKind {
         return switch (event) {
             case INSTALLED, INSTALLED_AS_DEPENDENCY -> this == INSTALL;
             case UPDATE_STAGED, UPDATE_CANCELLED, SWITCHED, ROLLED_BACK, UPDATES_APPLIED,
-                 UPDATE_HELD_BACK -> this == UPDATE;
+                 UPDATE_HELD_BACK, AUTO_UPDATE_FAILED, UPDATE_NOT_APPLIED,
+                 UPDATE_LOST -> this == UPDATE;
             case TRASHED, RESTORED, DELETED, TRASH_EMPTIED -> this == TRASH;
             case ADOPTED, UNTRACKED, REPLACED_BY_HAND, NO_LONGER_INSTALLED -> this == TRACKING;
             default -> false;
