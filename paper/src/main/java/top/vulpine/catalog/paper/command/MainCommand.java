@@ -1,5 +1,6 @@
 package top.vulpine.catalog.paper.command;
 
+import com.tcoded.folialib.wrapper.task.WrappedTask;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -46,6 +47,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The {@code /catalog} command.
@@ -64,6 +67,9 @@ public final class MainCommand {
      * still consumes every remaining word at parse time.</p>
      */
     private static final int MAX_WORDS = 12;
+
+    /** How long a command waits before saying it is still waiting. */
+    private static final Duration PATIENCE = Duration.ofSeconds(2);
 
     private final CatalogPaper plugin;
 
@@ -92,6 +98,30 @@ public final class MainCommand {
     @RequiresPermission("command.help")
     public void help(CommandSender sender) {
         send(sender, Messages.help());
+    }
+
+    /**
+     * Runs a command's work off the main thread, with a notice once it takes {@link #PATIENCE}.
+     */
+    private void runAsync(CommandSender sender, Runnable work) {
+
+        plugin.getScheduler().runAsync(task -> {
+
+            AtomicBoolean done = new AtomicBoolean();
+
+            WrappedTask waiting = plugin.getScheduler().runLaterAsync(() -> {
+                if (!done.get()) {
+                    send(sender, Messages.stillWaiting());
+                }
+            }, PATIENCE.toMillis(), TimeUnit.MILLISECONDS);
+
+            try {
+                work.run();
+            } finally {
+                done.set(true);
+                waiting.cancel();
+            }
+        });
     }
 
     // Four switches at most. Past four, Lamp's Brigadier tree only chains them in declaration order,
@@ -127,7 +157,7 @@ public final class MainCommand {
             filters.add(ListFilter.UNTRACKED);
         }
 
-        plugin.getScheduler().runAsync(task -> showList(sender, refresh, filters));
+        runAsync(sender, () -> showList(sender, refresh, filters));
     }
 
     @Subcommand("info")
@@ -135,7 +165,7 @@ public final class MainCommand {
     @RequiresPermission("command.info")
     public void info(CommandSender sender,
                      @Named("plugin") @SuggestWith(Suggestions.Tracked.class) String query) {
-        plugin.getScheduler().runAsync(task -> showProject(sender, query));
+        runAsync(sender, () -> showProject(sender, query));
     }
 
     @Subcommand("search")
@@ -157,7 +187,7 @@ public final class MainCommand {
         String named = wanted == null || ClickContext.strip(wanted).isEmpty()
                 ? null : ClickContext.strip(wanted);
 
-        plugin.getScheduler().runAsync(task -> runInstall(sender, query, named, data));
+        runAsync(sender, () -> runInstall(sender, query, named, data));
     }
 
     /**
@@ -281,7 +311,7 @@ public final class MainCommand {
 
         abandonConfirmation(sender);
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             try {
 
@@ -481,7 +511,7 @@ public final class MainCommand {
      */
     private void done(CommandSender sender, String data, Component outcome) {
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
             redraw(sender, screen(data));
             send(sender, outcome);
         });
@@ -526,7 +556,7 @@ public final class MainCommand {
             return;
         }
 
-        plugin.getScheduler().runAsync(task -> runUpdate(sender, tracked, data));
+        runAsync(sender, () -> runUpdate(sender, tracked, data));
     }
 
     /**
@@ -589,7 +619,7 @@ public final class MainCommand {
 
         context.take(sender);
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             String projectId = null;
             String label = null;
@@ -655,7 +685,7 @@ public final class MainCommand {
             return;
         }
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             if (!plugin.cancelUpdate(tracked, sender.getName())) {
                 send(sender, Messages.failed("Could not delete the downloaded build for "
@@ -670,7 +700,7 @@ public final class MainCommand {
 
     private void updateAll(CommandSender sender, String data) {
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             try {
 
@@ -745,7 +775,7 @@ public final class MainCommand {
         String data = context.take(sender);
         String name = tracked.displayName();
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             try {
 
@@ -783,7 +813,7 @@ public final class MainCommand {
 
         String data = context.take(sender);
 
-        plugin.getScheduler().runAsync(task -> showDependencies(sender, query, wanted, screen(data)));
+        runAsync(sender, () -> showDependencies(sender, query, wanted, screen(data)));
     }
 
     /**
@@ -968,7 +998,7 @@ public final class MainCommand {
     @Description("Show plugins you have removed")
     @RequiresPermission("command.trash")
     public void trash(CommandSender sender, @Flag("page") @Default("1") int page) {
-        plugin.getScheduler().runAsync(task -> showTrash(sender, Math.max(page, 1)));
+        runAsync(sender, () -> showTrash(sender, Math.max(page, 1)));
     }
 
     private void showTrash(CommandSender sender, int page) {
@@ -988,7 +1018,7 @@ public final class MainCommand {
 
         String data = context.take(sender);
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             try {
 
@@ -1026,7 +1056,7 @@ public final class MainCommand {
             return;
         }
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             try {
 
@@ -1050,7 +1080,7 @@ public final class MainCommand {
 
     private void emptyTrash(CommandSender sender, String data) {
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             try {
 
@@ -1112,7 +1142,7 @@ public final class MainCommand {
 
         String data = context.take(sender);
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             TrackedPlugin tracked = resolve(query);
 
@@ -1142,7 +1172,7 @@ public final class MainCommand {
 
         String data = context.take(sender);
 
-        plugin.getScheduler().runAsync(task -> {
+        runAsync(sender, () -> {
 
             InstalledJar jar = resolveUntracked(query);
 
@@ -1394,7 +1424,7 @@ public final class MainCommand {
     }
 
     private void runSearch(CommandSender sender, String query, int page) {
-        plugin.getScheduler().runAsync(task -> showSearch(sender, query, page));
+        runAsync(sender, () -> showSearch(sender, query, page));
     }
 
     /**

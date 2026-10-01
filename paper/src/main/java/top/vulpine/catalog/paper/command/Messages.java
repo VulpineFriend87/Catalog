@@ -1879,6 +1879,10 @@ public final class Messages {
                 .build();
     }
 
+    public static Component stillWaiting() {
+        return Component.text("Still waiting for Modrinth", MUTED);
+    }
+
     public static Component unknownKind(String typed) {
         return line()
                 .append(Component.text("No event kind called ", DANGER))
