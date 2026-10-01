@@ -32,6 +32,8 @@ Nothing is ever swapped while the plugin runs. Catalog downloads the new build a
 
 You can let Catalog handle that process. Once you enable automatic updates for a trusted plugin, it will stay up-to-date. Catalog waits a couple of hours after a build comes out before installing it. If the author notices a problem and puts out a fix in that time, you get the fixed build and never install the broken one. The pause time, the channel a plugin follows and the auto-update switch are set per each plugin, so you can choose which plugins you want updated immediately and which ones can wait.
 
+Staff with `catalog.notify` get a summary when they join: what the last restart applied, what did not apply, which automatic updates failed and why, and what is waiting. `notify_on_join` in the config turns it off.
+
 Each downloaded file is being validated before being added to your plugin folder: the right file is expected, the right size is expected and it is being made for the Java version you can use on your server. Anything that does not pass this check will be deleted instead of being placed into your plugin folder.
 
 ## Uninstallation
@@ -41,6 +43,8 @@ Uninstalled plugins are moved to a separate "trash" folder instead of being dele
 ## History
 
 `/catalog history` lists what Catalog has done to your server: every install, update, removal and restore, when it happened and who asked for it.
+
+It also records what went wrong and why: automatic updates that were blocked or failed, downloaded updates a restart did not apply, and downloaded updates removed before a restart. `/catalog history --event failed` shows only those.
 
 ## Commands
 
@@ -87,6 +91,7 @@ Permissions are listed above next to each action/command.
 | `catalog.admin` | Everything |
 | `catalog.*` | Everything |
 | `catalog.command.<name>` | A single command/action |
+| `catalog.notify` | The update summary on join |
 
 ## Configuration
 
