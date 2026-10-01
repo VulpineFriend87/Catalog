@@ -479,6 +479,14 @@ public final class Messages {
         return hover.build();
     }
 
+    /**
+     * The build this page describes, as the argument that names it.
+     */
+    private static String described(ProjectView view) {
+        ModrinthVersion offered = offered(view);
+        return offered == null ? "" : " " + offered.id();
+    }
+
     private static ModrinthVersion offered(ProjectView view) {
         return view.latest() != null ? view.latest() : view.installTarget();
     }
@@ -564,7 +572,7 @@ public final class Messages {
                     "Choose a build: the newest release, beta and alpha for this server"));
 
             if (view.declaresAnything()) {
-                row.add(button("Dependencies", from("/catalog dependencies " + key, here), MUTED,
+                row.add(button("Dependencies", from("/catalog dependencies " + key + described(view), here), MUTED,
                         "Show dependencies"));
             }
 
@@ -586,7 +594,7 @@ public final class Messages {
                 "Choose a different version"));
 
         if (view.declaresAnything()) {
-            row.add(button("Dependencies", from("/catalog dependencies " + key, here), MUTED,
+            row.add(button("Dependencies", from("/catalog dependencies " + key + described(view), here), MUTED,
                     "Show dependencies"));
         }
 
@@ -797,7 +805,7 @@ public final class Messages {
             ModrinthVersion version = newest.get(channel);
 
             if (version != null) {
-                out.add(versionRow(project, channel, version, installed));
+                out.add(versionRow(project, channel, version, installed, from));
             }
         }
 
@@ -921,7 +929,8 @@ public final class Messages {
     }
 
     private static Component versionRow(ModrinthProject project, ReleaseChannel channel,
-                                        ModrinthVersion version, TrackedPlugin installed) {
+                                        ModrinthVersion version, TrackedPlugin installed,
+                                        String from) {
 
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
@@ -956,7 +965,8 @@ public final class Messages {
             row.append(Component.text("  installed", DONE));
         }
 
-        String here = ClickContext.INFO + project.slug();
+        // Choosing a build returns to the screen the list was opened from.
+        String here = from != null ? from : ClickContext.INFO + project.slug();
 
         // While a build is waiting, the installed row is the way back out of it.
         String command = staged ? null
@@ -1058,28 +1068,25 @@ public final class Messages {
 
     // --- /catalog dependencies -----------------------------------------------------------------------
 
-    public static List<Component> dependencies(ModrinthProject project, List<DependencyView> rows,
-                                               boolean installed, boolean installable,
-                                               String switchingTo, String from) {
+    public static List<Component> dependencies(ModrinthProject project, ModrinthVersion version,
+                                               List<DependencyView> rows, String from) {
 
         String key = project.slug();
-        String here = ClickContext.DEPENDENCIES + key;
+        String here = ClickContext.dependencies(key, version.id());
 
         List<Component> out = new ArrayList<>();
 
         out.add(line()
                 .append(Component.text(project.title(), BRAND).decorate(TextDecoration.BOLD))
+                .append(Component.text(" " + version.versionNumber(), TEXT))
                 .append(Component.text("  dependencies", MUTED))
                 .build());
 
         int missing = 0;
-        boolean reachable = true;
 
         for (DependencyView row : rows) {
-
             if (row.blocking()) {
                 missing++;
-                reachable &= row.available();
             }
         }
 
@@ -1102,70 +1109,12 @@ public final class Messages {
         }
 
         out.add(Component.empty());
-        out.add(dependencyActions(project, installed, installable, missing, reachable,
-                switchingTo, here, from));
+        out.add(line()
+                .append(Component.text(INDENT))
+                .append(button("Back", backTo(from, "/catalog info " + key), MUTED, "Back"))
+                .build());
 
         return out;
-    }
-
-    private static Component dependencyActions(ModrinthProject project, boolean installed,
-                                               boolean installable, int missing, boolean reachable,
-                                               String switchingTo, String here, String from) {
-
-        String key = project.slug();
-
-        // A switch names the build, so pressing through this screen lands on the one that was
-        // chosen rather than on whatever installing would pick.
-        String install = "/catalog install " + key
-                + (switchingTo == null ? "" : " " + switchingTo);
-
-        // Installing ends the flow, so it returns to wherever the flow began. Reaching this screen
-        // by typing began nowhere, and a typed command answers in one line.
-        String ends = from == null ? null : here;
-
-
-        List<Component> row = new ArrayList<>();
-
-        if (missing > 0 && (!installed || switchingTo != null)) {
-
-            // Hidden when a requirement has no build here: installing the rest would leave exactly
-            // the broken server this screen exists to prevent.
-            if (reachable) {
-
-                // The count says how many files this writes, which is what "all" left open: the
-                // screen lists optional rows too, and those are never part of it.
-                // The count says how many files this writes, which is what "all" left open: the
-                // screen lists optional rows too, and those are never part of it.
-                row.add(button(installed ? "Install all " + missing : "Install all " + (missing + 1),
-                        intent(install, ClickContext.WITH_DEPENDENCIES, ends), BRAND,
-                        installed
-                                ? "Install the " + missing + " missing, then switch"
-                                : "Install " + project.title() + " and the " + missing
-                                        + (missing == 1 ? " plugin it requires"
-                                                : " plugins it requires")));
-            }
-
-            row.add(button(installed ? "Switch anyway" : "Just " + project.title(),
-                    intent(install, ClickContext.ALONE, ends), PENDING,
-                    installed
-                            ? "Switch without installing what it needs"
-                            : "Install " + project.title() + " on its own"));
-
-        } else if (!installed && installable) {
-
-            row.add(button("Install " + project.title(), from("/catalog install " + key, ends),
-                    BRAND, "Install " + project.title()));
-
-        } else if (installed && missing > 0 && reachable) {
-
-            row.add(button("Install required",
-                    from("/catalog dependencies " + key + " --install", here), BRAND,
-                    "Install the " + missing + " missing"));
-        }
-
-        row.add(button("Back", backTo(from, "/catalog info " + key), MUTED, "Back"));
-
-        return buttons(row);
     }
 
     private static Component dependencyRow(DependencyView row, String here) {
@@ -1241,7 +1190,13 @@ public final class Messages {
         }
 
         if (from.startsWith(ClickContext.DEPENDENCIES)) {
-            return "/catalog dependencies " + from.substring(ClickContext.DEPENDENCIES.length());
+            String[] about = ClickContext.dependenciesOf(from);
+            return "/catalog dependencies " + about[0] + (about[1] == null ? "" : " " + about[1]);
+        }
+
+        if (from.startsWith(ClickContext.CHANGE)) {
+            String[] change = ClickContext.changeOf(from);
+            return "/catalog " + change[0] + " " + change[1] + (change[2] == null ? "" : " " + change[2]);
         }
 
         return fallback;
@@ -1249,13 +1204,6 @@ public final class Messages {
 
     private static String back(String from) {
         return backTo(from, "/catalog list");
-    }
-
-    /**
-     * Tags a command with what it is an answer to, wrapping the screen it was asked from.
-     */
-    private static String intent(String command, String marker, String screen) {
-        return from(command, marker + (screen == null ? "" : screen));
     }
 
     // --- /catalog trash ---------------------------------------------------------------------
@@ -1380,7 +1328,8 @@ public final class Messages {
 
         out.add(line()
                 .append(Component.text(INDENT))
-                .append(button("Confirm", confirming("/catalog trash delete all", ClickContext.TRASH),
+                .append(button("Confirm", confirming("/catalog trash delete all",
+                                Press.on(ClickContext.TRASH)),
                         DANGER, "Delete them now"))
                 .append(Component.space())
                 .append(button("Cancel", "/catalog trash", MUTED, "Keep them"))
@@ -1621,9 +1570,10 @@ public final class Messages {
      * @param from       the screen the removal was asked from
      */
     public static List<Component> confirmRemove(TrackedPlugin plugin, List<TrackedPlugin> dependents,
-                                                String from) {
+                                                Press asked) {
 
         String key = key(plugin);
+        String from = asked == null ? null : asked.screen();
         List<Component> out = new ArrayList<>();
 
         out.add(line()
@@ -1651,7 +1601,7 @@ public final class Messages {
 
         out.add(line()
                 .append(Component.text(INDENT))
-                .append(button("Remove anyway", confirming("/catalog uninstall " + key, from),
+                .append(button("Remove anyway", confirming("/catalog uninstall " + key, asked),
                         DANGER, "Remove " + plugin.displayName()))
                 .append(Component.space())
                 .append(button("Cancel", backTo(from, "/catalog info " + key), MUTED, "Keep it"))
@@ -1660,40 +1610,85 @@ public final class Messages {
         return out;
     }
 
-    public static List<Component> confirmSwitch(TrackedPlugin plugin, ModrinthVersion version,
-                                                boolean older, String from) {
+    /**
+     * The confirmation screen for an install, update or switch.
+     *
+     * @param from    the version installed now, or null for a first install
+     * @param needs   the required plugins that are missing, and the conflicts
+     * @param asked   the press that raised the question
+     * @param here    this screen
+     * @param command what confirming runs
+     */
+    public static List<Component> change(Change change, String name, String slug, String from,
+                                         ModrinthVersion version, List<DependencyView> needs,
+                                         Press asked, String here, String command) {
 
         List<Component> out = new ArrayList<>();
 
         out.add(line()
-                .append(Component.text(older ? "Roll back " : "Switch ", PENDING)
-                        .decorate(TextDecoration.BOLD))
-                .append(Component.text(plugin.displayName(), TEXT).decorate(TextDecoration.BOLD))
+                .append(Component.text(change.verb() + " ", PENDING).decorate(TextDecoration.BOLD))
+                .append(Component.text(name, TEXT).decorate(TextDecoration.BOLD))
                 .build());
 
-        out.add(line()
-                .append(Component.text(INDENT))
-                .append(Component.text(String.valueOf(plugin.versionNumber()), MUTED))
-                .append(Component.text(" → ", MUTED))
+        TextComponent.Builder builds = line().append(Component.text(INDENT));
+
+        if (from != null) {
+            builds.append(Component.text(from, MUTED)).append(Component.text(" → ", MUTED));
+        }
+
+        out.add(builds
                 .append(Component.text(version.versionNumber(), TEXT))
                 .append(Component.text("  " + (version.versionType() == null ? ""
                         : version.versionType().apiName()), MUTED))
                 .build());
 
         out.add(Component.text(INDENT + "Applied on restart."
-                + (older ? " Config and data are not rolled back with it." : ""), MUTED));
+                + (change == Change.ROLL_BACK ? " Config and data are not rolled back with it." : ""),
+                MUTED));
+
+        int missing = 0;
+        boolean reachable = true;
+
+        for (DependencyView row : needs) {
+            if (row.blocking()) {
+                missing++;
+                reachable &= row.available();
+            }
+        }
+
+        if (!needs.isEmpty()) {
+
+            out.add(Component.empty());
+
+            for (DependencyView row : needs) {
+                out.add(dependencyRow(row, here));
+            }
+        }
 
         out.add(Component.empty());
 
-        out.add(line()
-                .append(Component.text(INDENT))
-                .append(button("Confirm", confirming("/catalog install " + key(plugin)
-                                + " " + version.id(), from),
-                        PENDING, older ? "Roll back now" : "Switch now"))
-                .append(Component.space())
-                .append(button("Cancel", "/catalog versions " + key(plugin), MUTED,
-                        "Leave it as it is"))
-                .build());
+        Press press = asked == null ? Press.on(null) : asked;
+        String action = change.verb().toLowerCase(Locale.ROOT);
+        List<Component> row = new ArrayList<>();
+
+        // Hidden when a requirement has no build for this server.
+        if (reachable) {
+            row.add(button("Confirm", confirming(command, press), PENDING, missing == 0
+                    ? change.verb() + " " + name
+                    : "Install the " + missing + " required, then " + action + " " + name));
+        }
+
+        if (missing > 0) {
+            row.add(button("Without dependencies",
+                    confirming(command, press.answering(ClickContext.ALONE)), MUTED,
+                    change.verb() + " " + name + " without what it requires"));
+        }
+
+        row.add(button("Cancel", backTo(press.screen(), change == Change.INSTALL
+                        || change == Change.UPDATE ? "/catalog info " + slug : "/catalog versions " + slug),
+                MUTED, "Leave it as it is"));
+
+        out.add(buttons(row));
 
         return out;
     }
@@ -1728,14 +1723,6 @@ public final class Messages {
                 .append(Component.text(" and ", MUTED))
                 .append(Component.text(dependencies, TEXT))
                 .append(Component.text(dependencies == 1 ? " dependency installed, loads on restart"
-                        : " dependencies installed, load on restart", MUTED))
-                .build();
-    }
-
-    public static Component installedRequired(int count) {
-        return line()
-                .append(Component.text(count, DONE))
-                .append(Component.text(count == 1 ? " dependency installed, loads on restart"
                         : " dependencies installed, load on restart", MUTED))
                 .build();
     }
@@ -1893,10 +1880,6 @@ public final class Messages {
         return Component.text("No build of " + title + " called " + named, DANGER);
     }
 
-    public static Component nothingMissing() {
-        return Component.text("Nothing required is missing", DANGER);
-    }
-
     public static Component unreachable(String reason) {
         return Component.text("Could not reach Modrinth: " + reason, DANGER);
     }
@@ -2040,10 +2023,10 @@ public final class Messages {
     }
 
     /**
-     * Tags a command as the confirmation of one already asked about.
+     * The button that answers a confirmation, carrying everything the press that asked it carried.
      */
-    private static String confirming(String command, String screen) {
-        return from(command, ClickContext.CONFIRM + (screen == null ? "" : screen));
+    private static String confirming(String command, Press asked) {
+        return from(command, (asked == null ? Press.on(null) : asked).confirming().data());
     }
 
     private static TextComponent.Builder line() {

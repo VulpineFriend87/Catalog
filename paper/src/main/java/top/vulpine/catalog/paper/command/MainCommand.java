@@ -157,100 +157,116 @@ public final class MainCommand {
         String named = wanted == null || ClickContext.strip(wanted).isEmpty()
                 ? null : ClickContext.strip(wanted);
 
-        plugin.getScheduler().runAsync(task -> {
+        plugin.getScheduler().runAsync(task -> runInstall(sender, query, named, data));
+    }
 
-            try {
+    /**
+     * Installs a plugin, or moves an installed one to another build.
+     *
+     * @param data what the button carried, or null when the command was typed
+     */
+    private void runInstall(CommandSender sender, String query, String named, String data) {
 
-                ModrinthProject project = plugin.project(query);
+        try {
 
-                if (project == null) {
-                    send(sender, Messages.unknownPlugin(query));
-                    return;
-                }
+            ModrinthProject project = plugin.project(query);
 
-                TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
-
-                if (tracked != null && named == null) {
-                    send(sender, Messages.alreadyInstalled(tracked));
-                    return;
-                }
-
-                if (tracked != null && tracked.isPinned()) {
-                    send(sender, Messages.stillHeld(tracked.displayName()));
-                    return;
-                }
-
-                List<ModrinthVersion> compatible = plugin.compatibleVersions(project.id());
-                ModrinthVersion version = choose(compatible, named);
-
-                if (version == null && named != null
-                        && plugin.getConfiguration().allowIncompatibleInstalls) {
-                    version = choose(plugin.allVersions(project.id()), named);
-                }
-
-                if (version == null) {
-                    send(sender, named == null
-                            ? Messages.noBuild(project.title())
-                            : Messages.noVersion(project.title(), named));
-                    return;
-                }
-
-                ReleaseChannel follow = version.versionType() == null
-                        ? defaultChannel() : version.versionType();
-
-                DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
-                List<DependencyResolver.Requirement> missing = resolution.missing();
-                String answer = intent(data);
-
-                // A build that adds a dependency is checked whether it is a first install or a
-                // switch. Only the switch asks twice, because it replaces a jar that already works.
-                if ((!missing.isEmpty() || !resolution.conflicts().isEmpty()) && answer == null) {
-                    showDependencies(sender, project, version, resolution, screen(data));
-                    return;
-                }
-
-                if (tracked != null) {
-
-                    if (!confirmed(sender, "switch:" + tracked.projectId() + ":" + version.id(), data)) {
-                        send(sender, Messages.confirmSwitch(tracked, version,
-                                isOlder(version, tracked), screen(data)));
-                        return;
-                    }
-
-                    if (ClickContext.WITH_DEPENDENCIES.equals(answer)) {
-                        plugin.install(pendingFor(missing, project), sender.getName());
-                    }
-
-                    plugin.setChannel(tracked, follow, sender.getName());
-                    plugin.stage(tracked, version, sender.getName(),
-                            isOlder(version, tracked) ? Event.ROLLED_BACK : Event.SWITCHED);
-
-                    redraw(sender, screen(data));
-                    send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
-                    return;
-                }
-
-                List<CatalogPaper.Pending> pending = new ArrayList<>();
-
-                if (ClickContext.WITH_DEPENDENCIES.equals(answer)) {
-                    pending.addAll(pendingFor(missing, project));
-                }
-
-                pending.add(new CatalogPaper.Pending(project, version, follow, true, null));
-                plugin.install(pending, sender.getName());
-
-                // The dependency screen was a gate, not a destination. Once everything is written
-                // there is nothing left for it to say, so the plugin's own page is where to land.
-                redraw(sender, afterInstall(screen(data), project.slug()));
-                send(sender, pending.size() == 1
-                        ? Messages.installed(project.title(), version.versionNumber())
-                        : Messages.installedWith(project.title(), version.versionNumber(),
-                                pending.size() - 1));
-
-            } catch (Exception e) {
-                send(sender, Messages.failed(rootMessage(e)));
+            if (project == null) {
+                send(sender, Messages.unknownPlugin(query));
+                return;
             }
-        });
+
+            TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
+
+            if (tracked != null && named == null) {
+                send(sender, Messages.alreadyInstalled(tracked));
+                return;
+            }
+
+            if (tracked != null && tracked.isPinned()) {
+                send(sender, Messages.stillHeld(tracked.displayName()));
+                return;
+            }
+
+            ModrinthVersion version = build(project, named);
+
+            if (version == null) {
+                send(sender, named == null
+                        ? Messages.noBuild(project.title())
+                        : Messages.noVersion(project.title(), named));
+                return;
+            }
+
+            ReleaseChannel follow = version.versionType() == null
+                    ? defaultChannel() : version.versionType();
+
+            DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
+            String here = ClickContext.change("install", project.slug(), version.id());
+
+            boolean asks = tracked != null || needsAnswer(resolution) || redrawing(data, here);
+
+            if (asks && !confirmed(sender, "install:" + project.id() + ":" + version.id(), data)) {
+
+                Change change = tracked == null ? Change.INSTALL
+                        : isOlder(version, tracked) ? Change.ROLL_BACK : Change.SWITCH;
+
+                showChange(sender, change, project, tracked == null ? null : tracked.versionNumber(),
+                        version, resolution, data, here,
+                        "/catalog install " + project.slug() + " " + version.id());
+                return;
+            }
+
+            List<CatalogPaper.Pending> needed = alone(data)
+                    ? List.of() : pendingFor(resolution.missing(), project);
+
+            if (tracked != null) {
+
+                if (!needed.isEmpty()) {
+                    plugin.install(needed, sender.getName());
+                }
+
+                plugin.setChannel(tracked, follow, sender.getName());
+                plugin.stage(tracked, version, sender.getName(),
+                        isOlder(version, tracked) ? Event.ROLLED_BACK : Event.SWITCHED);
+
+                redraw(sender, screen(data));
+                send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
+                return;
+            }
+
+            List<CatalogPaper.Pending> pending = new ArrayList<>(needed);
+            pending.add(new CatalogPaper.Pending(project, version, follow, true, null));
+            plugin.install(pending, sender.getName());
+
+            redraw(sender, screen(data));
+            send(sender, pending.size() == 1
+                    ? Messages.installed(project.title(), version.versionNumber())
+                    : Messages.installedWith(project.title(), version.versionNumber(),
+                            pending.size() - 1));
+
+        } catch (Exception e) {
+            send(sender, Messages.failed(rootMessage(e)));
+        }
+    }
+
+    /**
+     * Whether a build has missing requirements or conflicts.
+     */
+    private static boolean needsAnswer(DependencyResolver.Resolution resolution) {
+        return !resolution.missing().isEmpty() || !resolution.conflicts().isEmpty();
+    }
+
+    /**
+     * Whether this call redraws the confirmation screen. A redraw never confirms.
+     */
+    private static boolean redrawing(String data, String here) {
+        Press press = Press.of(data);
+        return press != null && !press.confirmed() && here.equals(press.screen());
+    }
+
+    private static boolean alone(String data) {
+        Press press = Press.of(data);
+        return press != null && ClickContext.ALONE.equals(press.answer());
     }
 
     @Subcommand("versions")
@@ -315,6 +331,23 @@ public final class MainCommand {
         }
 
         return newest;
+    }
+
+    /**
+     * The named build, or the one an install would fetch.
+     *
+     * @param wanted a version id or number, or null for the default
+     * @return the build, or null when there is none
+     */
+    private ModrinthVersion build(ModrinthProject project, String wanted) {
+
+        ModrinthVersion version = choose(plugin.compatibleVersions(project.id()), wanted);
+
+        if (version == null && wanted != null && plugin.getConfiguration().allowIncompatibleInstalls) {
+            version = choose(plugin.allVersions(project.id()), wanted);
+        }
+
+        return version;
     }
 
     /**
@@ -493,32 +526,55 @@ public final class MainCommand {
             return;
         }
 
-        plugin.getScheduler().runAsync(task -> {
+        plugin.getScheduler().runAsync(task -> runUpdate(sender, tracked, data));
+    }
 
-            try {
+    /**
+     * Downloads the update for one plugin.
+     *
+     * @param data what the button carried, or null when the command was typed
+     */
+    private void runUpdate(CommandSender sender, TrackedPlugin tracked, String data) {
 
-                UpdateCandidate candidate = candidateFor(tracked);
+        try {
 
-                if (candidate == null) {
-                    send(sender, Messages.noUpdate(tracked.displayName()));
-                    return;
-                }
+            UpdateCandidate candidate = candidateFor(tracked);
 
-                // The same gate a switch goes through: a newer build may declare something this
-                // server does not have, and staging it anyway is a plugin that will not load.
-                if (blocked(sender, tracked, candidate, data)) {
-                    return;
-                }
-
-                plugin.stage(candidate, sender.getName());
-
-                redraw(sender, screen(data));
-                send(sender, Messages.staged(tracked.displayName(), candidate.to()));
-
-            } catch (Exception e) {
-                send(sender, Messages.failed(rootMessage(e)));
+            if (candidate == null) {
+                send(sender, Messages.noUpdate(tracked.displayName()));
+                return;
             }
-        });
+
+            ModrinthProject project = plugin.project(tracked.projectId());
+            DependencyResolver.Resolution resolution = plugin.dependenciesOf(candidate.version());
+
+            // Asks when the new build has missing requirements.
+            if (project != null) {
+
+                String here = ClickContext.change("update", project.slug(), null);
+
+                if ((needsAnswer(resolution) || redrawing(data, here)) && !confirmed(sender,
+                        "update:" + project.id() + ":" + candidate.version().id(), data)) {
+
+                    showChange(sender, Change.UPDATE, project, tracked.versionNumber(),
+                            candidate.version(), resolution, data, here,
+                            "/catalog update " + project.slug());
+                    return;
+                }
+            }
+
+            if (!alone(data) && !resolution.missing().isEmpty()) {
+                plugin.install(pendingFor(resolution.missing(), project), sender.getName());
+            }
+
+            plugin.stage(candidate, sender.getName());
+
+            redraw(sender, screen(data));
+            send(sender, Messages.staged(tracked.displayName(), candidate.to()));
+
+        } catch (Exception e) {
+            send(sender, Messages.failed(rootMessage(e)));
+        }
     }
 
     @Subcommand("history")
@@ -612,47 +668,6 @@ public final class MainCommand {
         });
     }
 
-    /**
-     * Where to land once an install has finished.
-     *
-     * @param from the screen it was started from
-     * @param slug the plugin that was installed
-     * @return the same screen, unless it was the dependency gate, which has nothing left to show
-     */
-    private static String afterInstall(String from, String slug) {
-
-        return from != null && from.startsWith(ClickContext.DEPENDENCIES)
-                ? ClickContext.INFO + slug : from;
-    }
-
-    /**
-     * Sends an update to the dependency screen when the new build needs something that is missing.
-     *
-     * @return true if the screen was shown, so the caller should stop
-     */
-    private boolean blocked(CommandSender sender, TrackedPlugin tracked, UpdateCandidate candidate,
-                            String data) {
-
-        if (intent(data) != null) {
-            return false;
-        }
-
-        DependencyResolver.Resolution resolution = plugin.dependenciesOf(candidate.version());
-
-        if (resolution.missing().isEmpty() && resolution.conflicts().isEmpty()) {
-            return false;
-        }
-
-        ModrinthProject project = plugin.project(tracked.projectId());
-
-        if (project == null) {
-            return false;
-        }
-
-        showDependencies(sender, project, candidate.version(), resolution, screen(data));
-        return true;
-    }
-
     private void updateAll(CommandSender sender, String data) {
 
         plugin.getScheduler().runAsync(task -> {
@@ -742,7 +757,7 @@ public final class MainCommand {
                     List<TrackedPlugin> dependents = plugin.dependentsOf(tracked);
 
                     if (!dependents.isEmpty()) {
-                        send(sender, Messages.confirmRemove(tracked, dependents, screen(data)));
+                        send(sender, Messages.confirmRemove(tracked, dependents, Press.of(data)));
                         return;
                     }
                 }
@@ -764,74 +779,75 @@ public final class MainCommand {
     @RequiresPermission("command.info")
     public void dependencies(CommandSender sender,
                              @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
-                             @Switch("install") boolean installMissing) {
+                             @Optional @Named("version") String wanted) {
 
         String data = context.take(sender);
 
-        plugin.getScheduler().runAsync(task -> {
-
-            try {
-
-                ModrinthProject project = projectFor(query);
-
-                if (project == null) {
-                    send(sender, Messages.unknownPlugin(query));
-                    return;
-                }
-
-                ModrinthVersion version = plugin.installTarget(project.id());
-
-                if (version == null) {
-                    send(sender, Messages.noBuild(project.title()));
-                    return;
-                }
-
-                DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
-
-                if (installMissing) {
-
-                    List<CatalogPaper.Pending> pending = pendingFor(resolution.missing(), project);
-
-                    if (pending.isEmpty()) {
-                        send(sender, Messages.nothingMissing());
-                        return;
-                    }
-
-                    plugin.install(pending, sender.getName());
-                    send(sender, Messages.installedRequired(pending.size()));
-
-                    resolution = plugin.dependenciesOf(version);
-                }
-
-                showDependencies(sender, project, version, resolution, screen(data));
-
-            } catch (Exception e) {
-                send(sender, Messages.failed(rootMessage(e)));
-            }
-        });
+        plugin.getScheduler().runAsync(task -> showDependencies(sender, query, wanted, screen(data)));
     }
 
     /**
-     * Draws the dependency screen.
+     * Draws what one build declares it needs.
      */
-    private void showDependencies(CommandSender sender, ModrinthProject project,
-                                  ModrinthVersion version, DependencyResolver.Resolution resolution,
-                                  String from) {
+    private void showDependencies(CommandSender sender, String query, String wanted, String from) {
 
-        List<DependencyResolver.Requirement> declared = new ArrayList<>(resolution.required());
-        declared.addAll(resolution.optional());
+        try {
 
-        List<DependencyView> rows = views(declared);
-        rows.addAll(conflicts(resolution.conflicts()));
+            ModrinthProject project = projectFor(query);
 
-        TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
+            if (project == null) {
+                send(sender, Messages.unknownPlugin(query));
+                return;
+            }
 
-        // Only a build other than the installed one is a switch worth carrying through the screen.
-        String switchingTo = tracked != null && version != null
-                && !version.id().equals(tracked.versionId()) ? version.id() : null;
+            ModrinthVersion version = build(project, wanted);
 
-        send(sender, Messages.dependencies(project, rows, tracked != null, version != null,
-                switchingTo, from));
+            if (version == null) {
+                send(sender, wanted == null
+                        ? Messages.noBuild(project.title())
+                        : Messages.noVersion(project.title(), wanted));
+                return;
+            }
+
+            DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
+
+            List<DependencyResolver.Requirement> declared = new ArrayList<>(resolution.required());
+            declared.addAll(resolution.optional());
+
+            List<DependencyView> rows = views(declared);
+            rows.addAll(conflicts(resolution.conflicts()));
+
+            send(sender, Messages.dependencies(project, version, rows, from));
+
+        } catch (Exception e) {
+            send(sender, Messages.failed(rootMessage(e)));
+        }
+    }
+
+    /**
+     * Draws the screen that asks before an install, update or switch.
+     *
+     * @param from    the version installed now, or null for a first install
+     * @param here    this screen, so a dependency installed from it comes back to it
+     * @param command what confirming runs
+     */
+    private void showChange(CommandSender sender, Change change, ModrinthProject project,
+                            String from, ModrinthVersion version,
+                            DependencyResolver.Resolution resolution, String data, String here,
+                            String command) {
+
+        List<DependencyView> needs = views(resolution.missing());
+        needs.addAll(conflicts(resolution.conflicts()));
+
+        Press asked = Press.of(data);
+
+        // Its buttons lead to the plugin's page, not back here.
+        if (asked != null && here.equals(asked.screen())) {
+            asked = Press.on(ClickContext.INFO + project.slug());
+        }
+
+        send(sender, Messages.change(change, project.title(), project.slug(), from, version, needs,
+                asked, here, command));
     }
 
     /**
@@ -944,16 +960,8 @@ public final class MainCommand {
      * Which answer to the dependency question a payload carries.
      */
     private static String intent(String data) {
-
-        if (data == null) {
-            return null;
-        }
-
-        if (data.startsWith(ClickContext.WITH_DEPENDENCIES)) {
-            return ClickContext.WITH_DEPENDENCIES;
-        }
-
-        return data.startsWith(ClickContext.ALONE) ? ClickContext.ALONE : null;
+        Press press = Press.of(data);
+        return press == null ? null : press.answer();
     }
 
     @Subcommand("trash")
@@ -1223,7 +1231,22 @@ public final class MainCommand {
         } else if (data.equals(ClickContext.TRASH)) {
             showTrash(sender, 1);
         } else if (data.startsWith(ClickContext.DEPENDENCIES)) {
-            dependencies(sender, data.substring(ClickContext.DEPENDENCIES.length()), false);
+            String[] about = ClickContext.dependenciesOf(data);
+            showDependencies(sender, about[0], about[1], null);
+        } else if (data.startsWith(ClickContext.CHANGE)) {
+
+            String[] change = ClickContext.changeOf(data);
+
+            if (!change[0].equals("update")) {
+                runInstall(sender, change[1], change[2], data);
+                return;
+            }
+
+            TrackedPlugin tracked = resolve(change[1]);
+
+            if (tracked != null) {
+                runUpdate(sender, tracked, data);
+            }
         } else if (data.startsWith(ClickContext.INFO)) {
             showProject(sender, data.substring(ClickContext.INFO.length()));
         } else if (data.startsWith(ClickContext.SETTINGS)) {
@@ -1269,7 +1292,7 @@ public final class MainCommand {
     private boolean confirmed(CommandSender sender, String action, String data) {
 
         if (data != null) {
-            return data.startsWith(ClickContext.CONFIRM);
+            return Press.of(data).confirmed();
         }
 
         Pending pending = confirmations.get(sender.getName());
@@ -1287,23 +1310,8 @@ public final class MainCommand {
      * The screen a payload points at.
      */
     private static String screen(String data) {
-
-        if (data == null) {
-            return null;
-        }
-
-        String screen = data;
-
-        for (String marker : new String[]{ClickContext.CONFIRM, ClickContext.WITH_DEPENDENCIES,
-                ClickContext.ALONE}) {
-
-            if (screen.startsWith(marker)) {
-                screen = screen.substring(marker.length());
-                break;
-            }
-        }
-
-        return screen.isEmpty() ? null : screen;
+        Press press = Press.of(data);
+        return press == null ? null : press.screen();
     }
 
     /**
