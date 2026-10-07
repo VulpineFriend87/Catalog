@@ -143,6 +143,21 @@ public final class HistoryEntry {
     }
 
     /**
+     * A plugin the server did not enable after an update or install.
+     *
+     * @param updated false for a first install, true for an update, switch or rollback
+     * @param reason  why, as the server reported it
+     */
+    public static HistoryEntry notEnabled(TrackedPlugin plugin, boolean updated, String reason) {
+        return about(plugin, null)
+                .event(updated ? Event.UPDATE_NOT_ENABLED : Event.INSTALL_NOT_ENABLED)
+                .from(updated ? plugin.previousVersionNumber() : null)
+                .to(plugin.versionNumber())
+                .value(reason)
+                .build();
+    }
+
+    /**
      * A downloaded build that left the update folder without a restart applying it.
      */
     public static HistoryEntry lost(TrackedPlugin plugin) {

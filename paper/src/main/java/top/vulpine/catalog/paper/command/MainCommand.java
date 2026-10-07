@@ -28,6 +28,7 @@ import top.vulpine.catalog.modrinth.model.SearchHit;
 import top.vulpine.catalog.modrinth.model.SearchResults;
 import top.vulpine.catalog.modrinth.model.TeamMember;
 import top.vulpine.catalog.paper.CatalogPaper;
+import top.vulpine.catalog.paper.EnableCheck;
 import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.trash.TrashBin;
@@ -255,12 +256,21 @@ public final class MainCommand {
                     plugin.install(needed, sender.getName());
                 }
 
+                boolean rollback = isOlder(version, tracked);
+
                 plugin.setChannel(tracked, follow, sender.getName());
                 plugin.stage(tracked, version, sender.getName(),
-                        isOlder(version, tracked) ? Event.ROLLED_BACK : Event.SWITCHED);
+                        rollback ? Event.ROLLED_BACK : Event.SWITCHED);
 
                 redraw(sender, screen(data));
                 send(sender, Messages.staged(tracked.displayName(), version.versionNumber()));
+
+                // Keeps the next check from downloading the newer build again.
+                if (rollback && tracked.autoUpdate()) {
+                    plugin.setAutoUpdate(tracked, false, sender.getName());
+                    send(sender, Messages.autoUpdateTurnedOff(tracked.versionNumber(), key(tracked)));
+                }
+
                 return;
             }
 
@@ -1370,7 +1380,13 @@ public final class MainCommand {
             }
         }
 
-        send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject(),
+        Map<String, EnableCheck.Failure> notEnabled = new HashMap<>();
+
+        for (EnableCheck.Failure failure : plugin.getEnableCheck().failures()) {
+            notEnabled.put(failure.plugin().projectId(), failure);
+        }
+
+        send(sender, Messages.list(plugin.getTracking().all(), plugin.updatesByProject(), notEnabled,
                 plugin.ownFileName(), plugin.untracked(), filters,
                 plugin.getUpdates().checkedAt(), plugin.getUpdates().unreachable()));
     }

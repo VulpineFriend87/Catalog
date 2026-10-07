@@ -117,6 +117,7 @@ public final class Reconciler {
                 .adopted(adopted)
                 .moved(changes.moved)
                 .applied(changes.applied)
+                .loaded(changes.loaded)
                 .notApplied(changes.notApplied)
                 .renamed(changes.renamed)
                 .removed(changes.removed)
@@ -133,6 +134,7 @@ public final class Reconciler {
 
         private final List<TrackedPlugin> moved = new ArrayList<>();
         private final List<TrackedPlugin> applied = new ArrayList<>();
+        private final List<TrackedPlugin> loaded = new ArrayList<>();
         private final List<TrackedPlugin> notApplied = new ArrayList<>();
         private final List<TrackedPlugin> renamed = new ArrayList<>();
         private final List<TrackedPlugin> removed = new ArrayList<>();
@@ -166,6 +168,9 @@ public final class Reconciler {
             }
 
             // A fresh install is a different case entirely: the jar was always the right one.
+            if (tracked.pendingLoad()) {
+                changes.loaded.add(tracked);
+            }
             tracked.pendingLoad(false);
 
             complete(tracked, identified.get(sameContent.sha512()), changes);

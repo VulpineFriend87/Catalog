@@ -28,6 +28,10 @@ public final class ReconcileReport {
     @Builder.Default
     private final List<TrackedPlugin> applied = Collections.emptyList();
 
+    /** Installed by Catalog and loaded by the server for the first time on this start. */
+    @Builder.Default
+    private final List<TrackedPlugin> loaded = Collections.emptyList();
+
     /**
      * An update Catalog staged is still not the jar on disk after a restart.
      *

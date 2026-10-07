@@ -8,6 +8,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import top.vulpine.catalog.history.Event;
+import top.vulpine.catalog.paper.EnableCheck;
 import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.modrinth.model.DependencyType;
@@ -194,6 +195,7 @@ public final class Messages {
         int count = plugins.size();
 
         String words = switch (notice.kind()) {
+            case DID_NOT_ENABLE -> "did not enable";
             case DID_NOT_APPLY -> "did not apply";
             case AUTO_UPDATE_FAILED -> count == 1 ? "auto-update failed" : "auto-updates failed";
             case APPLIED -> "applied";
@@ -202,12 +204,13 @@ public final class Messages {
         };
 
         TextColor colour = switch (notice.kind()) {
-            case DID_NOT_APPLY, AUTO_UPDATE_FAILED -> PENDING;
+            case DID_NOT_ENABLE, DID_NOT_APPLY, AUTO_UPDATE_FAILED -> PENDING;
             case APPLIED -> DONE;
             case WAITING, AVAILABLE -> BRAND;
         };
 
         String meaning = switch (notice.kind()) {
+            case DID_NOT_ENABLE -> "Not enabled by the server after the last restart";
             case DID_NOT_APPLY -> "Downloaded, not installed by the last restart";
             case AUTO_UPDATE_FAILED -> "Not updated automatically";
             case APPLIED -> "Installed by the last restart";
@@ -217,16 +220,10 @@ public final class Messages {
 
         String command = switch (notice.kind()) {
             case APPLIED -> "/catalog history --event update";
-            case DID_NOT_APPLY -> "/catalog history --event failed";
+            case DID_NOT_ENABLE, DID_NOT_APPLY -> "/catalog history --event failed";
             case AUTO_UPDATE_FAILED, AVAILABLE -> "/catalog list --updates";
             case WAITING -> "/catalog list --restart";
         };
-
-        StringJoiner names = new StringJoiner(", ");
-
-        for (Notice.Item plugin : plugins.subList(0, Math.min(count, NOTICE_NAMES))) {
-            names.add(plugin.name());
-        }
 
         TextComponent.Builder hover = Component.text()
                 .append(Component.text(meaning, MUTED))
@@ -257,19 +254,83 @@ public final class Messages {
         hover.append(Component.newline()).append(explain(command.startsWith("/catalog history")
                 ? "Open the history" : "Open the plugin list", command));
 
+        ClickEvent click = ClickEvent.runCommand(command);
+        HoverEvent<Component> shown = HoverEvent.showText(hover.build());
+
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
-                .append(Component.text(count, colour))
-                .append(Component.text(" " + words + "  ", MUTED))
-                .append(Component.text(names.toString(), TEXT));
+                .append(Component.text(count, colour).clickEvent(click).hoverEvent(shown))
+                .append(Component.text(" " + words + "  ", MUTED).clickEvent(click).hoverEvent(shown));
 
-        if (count > NOTICE_NAMES) {
-            row.append(Component.text(" and " + (count - NOTICE_NAMES) + " more", MUTED));
+        List<Notice.Item> named = plugins.subList(0, Math.min(count, NOTICE_NAMES));
+
+        for (int i = 0; i < named.size(); i++) {
+
+            Notice.Item plugin = named.get(i);
+
+            if (i > 0) {
+                row.append(Component.text(", ", TEXT).clickEvent(click).hoverEvent(shown));
+            }
+
+            row.append(Component.text(plugin.name(), TEXT).clickEvent(click).hoverEvent(shown));
+
+            if (plugin.rollback() != null) {
+                row.append(Component.space()).append(rollbackIcon(plugin.rollback(),
+                        plugin.rollbackTo(), plugin.rollbackGone()));
+            }
         }
 
-        return row.build()
+        if (count > NOTICE_NAMES) {
+            String more = "/catalog list";
+            row.append(Component.text(" and " + (count - NOTICE_NAMES) + " more", MUTED)
+                    .clickEvent(ClickEvent.runCommand(more))
+                    .hoverEvent(HoverEvent.showText(explain("Open the plugin list", more))));
+        }
+
+        return row.build();
+    }
+
+    /**
+     * @return the switch back to the build the last update replaced
+     */
+    public static String rollbackCommand(TrackedPlugin plugin) {
+        return "/catalog install " + key(plugin) + " " + plugin.previousVersionId();
+    }
+
+    /**
+     * The button that switches a plugin back to the build its last update replaced, grey and inert
+     * when that build is gone from Modrinth.
+     */
+    private static Component rollbackIcon(String command, String to, boolean gone) {
+
+        if (gone) {
+            return Component.text("[", MUTED)
+                    .append(Component.text("«", MUTED))
+                    .append(Component.text("]", MUTED))
+                    .hoverEvent(HoverEvent.showText(
+                            Component.text("The previous build was removed from Modrinth", MUTED)));
+        }
+
+        return icon("«", BRAND, command, "Roll back to " + to);
+    }
+
+    /**
+     * The line after a rollback that turned auto-update off.
+     *
+     * @param from the build rolled back from
+     * @param key  what the settings command takes
+     */
+    public static Component autoUpdateTurnedOff(String from, String key) {
+
+        String command = "/catalog settings " + key;
+
+        return Component.text("Auto-update was turned off", MUTED)
                 .clickEvent(ClickEvent.runCommand(command))
-                .hoverEvent(HoverEvent.showText(hover.build()));
+                .hoverEvent(HoverEvent.showText(Component.text(
+                                "Turned off by the rollback, so " + from + " is not downloaded again",
+                                TEXT)
+                        .append(Component.newline())
+                        .append(explain("Open settings", command))));
     }
 
     // --- /catalog list ----------------------------------------------------------------------
@@ -279,6 +340,7 @@ public final class Messages {
      * @param unreachable why the last check could not reach it, or null when it did
      */
     public static List<Component> list(List<TrackedPlugin> plugins, Map<String, UpdateCandidate> updates,
+                                       Map<String, EnableCheck.Failure> notEnabled,
                                        String self, List<InstalledJar> untracked,
                                        Set<ListFilter> filters, Instant checkedAt,
                                        String unreachable) {
@@ -340,7 +402,8 @@ public final class Messages {
         out.add(Component.empty());
 
         for (TrackedPlugin plugin : ordered) {
-            out.add(row(plugin, updates.get(plugin.projectId()), plugin.fileName().equals(self),
+            out.add(row(plugin, updates.get(plugin.projectId()), notEnabled.get(plugin.projectId()),
+                    plugin.fileName().equals(self),
                     screen));
         }
 
@@ -381,12 +444,18 @@ public final class Messages {
                 .build();
     }
 
-    private static Component row(TrackedPlugin plugin, UpdateCandidate update, boolean self,
-                                 String screen) {
+    private static Component row(TrackedPlugin plugin, UpdateCandidate update,
+                                 EnableCheck.Failure failure, boolean self, String screen) {
 
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
                 .append(name(plugin, screen));
+
+        if (failure != null && failure.canRollBack()) {
+            row.append(Component.space()).append(rollbackIcon(
+                    from(rollbackCommand(plugin), screen), plugin.previousVersionNumber(),
+                    failure.previousRemoved()));
+        }
 
         if (update != null && !plugin.awaitingRestart()) {
             row.append(Component.space()).append(icon("↑", BRAND,
@@ -406,6 +475,8 @@ public final class Messages {
         // Which of the two it is belongs in the hover, where it is asked for rather than imposed.
         if (plugin.awaitingRestart()) {
             row.append(Component.text("  restart", PENDING));
+        } else if (failure != null) {
+            row.append(Component.text("  did not enable", PENDING));
         } else if (plugin.isPinned()) {
             row.append(Component.text("  held", MUTED));
         }
@@ -1601,7 +1672,8 @@ public final class Messages {
         return switch (event) {
             case INSTALLED, INSTALLED_AS_DEPENDENCY, RESTORED, UPDATES_APPLIED -> DONE;
             case UPDATE_STAGED, SWITCHED, ROLLED_BACK, UPDATE_HELD_BACK, AUTO_UPDATE_FAILED,
-                 UPDATE_NOT_APPLIED, UPDATE_LOST, REPLACED_BY_HAND -> PENDING;
+                 UPDATE_NOT_APPLIED, UPDATE_LOST, UPDATE_NOT_ENABLED, INSTALL_NOT_ENABLED,
+                 REPLACED_BY_HAND -> PENDING;
             case TRASHED, DELETED, TRASH_EMPTIED, NO_LONGER_INSTALLED -> DANGER;
             case ADOPTED, UNTRACKED -> TEXT;
             default -> MUTED;
@@ -1635,6 +1707,8 @@ public final class Messages {
             case AUTO_UPDATE_FAILED -> "auto-update failed";
             case UPDATE_NOT_APPLIED -> "update did not apply";
             case UPDATE_LOST -> "update removed from the update folder";
+            case UPDATE_NOT_ENABLED -> "update did not enable";
+            case INSTALL_NOT_ENABLED -> "install did not enable";
             case HELD -> "held";
             case UNHELD -> "unheld";
             case AUTO_UPDATE -> "auto-update " + entry.value();
@@ -1677,7 +1751,7 @@ public final class Messages {
         String reason = switch (entry.event()) {
             case UPDATE_HELD_BACK -> entry.names() == null || entry.names().isEmpty() ? null
                     : String.join(", ", entry.names()) + " required missing";
-            case AUTO_UPDATE_FAILED -> entry.value();
+            case AUTO_UPDATE_FAILED, UPDATE_NOT_ENABLED, INSTALL_NOT_ENABLED -> entry.value();
             default -> null;
         };
 

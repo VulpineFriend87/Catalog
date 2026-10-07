@@ -96,6 +96,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private Library library;
     private Dependents dependents;
     private History history;
+    private EnableCheck enableCheck;
 
     /**
      * When this server came up.
@@ -195,6 +196,8 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         lamp.register(new MainCommand(this, clicks), new ClickCommand(clicks));
         clicks.dispatcher(lamp);
 
+        this.enableCheck = new EnableCheck(this);
+        getServer().getPluginManager().registerEvents(enableCheck, this);
         getServer().getPluginManager().registerEvents(new JoinNotifier(this), this);
 
         Logger.debug(Action.SETUP, "Initializing metrics...");
@@ -279,7 +282,10 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
         downloader.clean();
 
-        if (library.index()) {
+        boolean indexed = library.index();
+        enableCheck.scanned();
+
+        if (indexed) {
             checkForUpdates();
         }
     }

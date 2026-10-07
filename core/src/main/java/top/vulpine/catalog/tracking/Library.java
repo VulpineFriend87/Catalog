@@ -19,6 +19,7 @@ import top.vulpine.commons.log.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -46,6 +47,10 @@ public final class Library {
 
     private final List<TrackedPlugin> applied = new CopyOnWriteArrayList<>();
     private volatile List<TrackedPlugin> notApplied = List.of();
+    private volatile List<TrackedPlugin> loaded = List.of();
+
+    /** The name each jar declares in its descriptor, by file name, from the last scan. */
+    private volatile Map<String, String> declared = Map.of();
 
     public Library(Platform platform, ModrinthClient modrinth, TrackingStore tracking,
                    IgnoreList ignored, Supplier<TrackingDefaults> defaults,
@@ -136,6 +141,21 @@ public final class Library {
     }
 
     /**
+     * @return the plugins Catalog installed that this start loaded for the first time
+     */
+    public List<TrackedPlugin> loaded() {
+        return loaded;
+    }
+
+    /**
+     * @param plugin a tracked plugin
+     * @return the name its jar declares, which is what the server knows it by, or null
+     */
+    public String declaredName(TrackedPlugin plugin) {
+        return plugin.fileName() == null ? null : declared.get(plugin.fileName());
+    }
+
+    /**
      * @return the downloaded builds this server's start did not take
      */
     public List<TrackedPlugin> notApplied() {
@@ -218,7 +238,18 @@ public final class Library {
 
         if (startup) {
             notApplied = List.copyOf(report.notApplied());
+            loaded = List.copyOf(report.loaded());
         }
+
+        Map<String, String> names = new HashMap<>();
+
+        for (InstalledJar jar : scan.jars()) {
+            if (jar.info() != null && jar.info().isPlugin()) {
+                names.put(jar.fileName(), jar.info().pluginName());
+            }
+        }
+
+        declared = Map.copyOf(names);
 
         scanned = true;
         describe(report, scan, startup);

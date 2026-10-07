@@ -30,6 +30,10 @@ public final class TrackedPlugin {
     private String versionNumber;
     private Instant datePublished;
 
+    /** The build the last update replaced, which a rollback returns to. */
+    private String previousVersionId;
+    private String previousVersionNumber;
+
     /** The file in {@code plugins/} as it is named right now, canonical once adopted. */
     private String fileName;
 
@@ -118,6 +122,12 @@ public final class TrackedPlugin {
      * @param sha512  its hash
      */
     public void moveTo(ModrinthVersion version, String fileName, String sha512) {
+
+        if (versionId != null && !versionId.equals(version.id())) {
+            this.previousVersionId = versionId;
+            this.previousVersionNumber = versionNumber;
+        }
+
         this.versionId = version.id();
         this.versionNumber = version.versionNumber();
         this.datePublished = version.datePublished();

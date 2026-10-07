@@ -25,7 +25,8 @@ public enum HistoryKind {
         // The only kind that overlaps another.
         if (this == FAILED) {
             return event == Event.UPDATE_HELD_BACK || event == Event.AUTO_UPDATE_FAILED
-                    || event == Event.UPDATE_NOT_APPLIED || event == Event.UPDATE_LOST;
+                    || event == Event.UPDATE_NOT_APPLIED || event == Event.UPDATE_LOST
+                    || event == Event.UPDATE_NOT_ENABLED || event == Event.INSTALL_NOT_ENABLED;
         }
 
         if (event.isSetting()) {
@@ -33,10 +34,10 @@ public enum HistoryKind {
         }
 
         return switch (event) {
-            case INSTALLED, INSTALLED_AS_DEPENDENCY -> this == INSTALL;
+            case INSTALLED, INSTALLED_AS_DEPENDENCY, INSTALL_NOT_ENABLED -> this == INSTALL;
             case UPDATE_STAGED, UPDATE_CANCELLED, SWITCHED, ROLLED_BACK, UPDATES_APPLIED,
                  UPDATE_HELD_BACK, AUTO_UPDATE_FAILED, UPDATE_NOT_APPLIED,
-                 UPDATE_LOST -> this == UPDATE;
+                 UPDATE_LOST, UPDATE_NOT_ENABLED -> this == UPDATE;
             case TRASHED, RESTORED, DELETED, TRASH_EMPTIED -> this == TRASH;
             case ADOPTED, UNTRACKED, REPLACED_BY_HAND, NO_LONGER_INSTALLED -> this == TRACKING;
             default -> false;

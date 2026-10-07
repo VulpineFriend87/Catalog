@@ -6,6 +6,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import top.vulpine.catalog.paper.CatalogPaper;
+import top.vulpine.catalog.paper.EnableCheck;
 import top.vulpine.catalog.paper.command.Messages;
 import top.vulpine.catalog.paper.command.Notice;
 import top.vulpine.catalog.paper.util.PermissionChecker;
@@ -108,6 +109,34 @@ public final class JoinNotifier implements Listener {
 
         List<Notice> out = new ArrayList<>();
 
+        List<Notice.Item> notEnabled = new ArrayList<>();
+        Set<String> failed = new HashSet<>();
+
+        for (EnableCheck.Failure failure : plugin.getEnableCheck().failures()) {
+
+            TrackedPlugin tracked = failure.plugin();
+            failed.add(tracked.projectId());
+            String key = "not-enabled:" + tracked.projectId() + ":" + tracked.versionId();
+
+            if (heardBefore.contains(key)) {
+                continue;
+            }
+
+            news.add(key);
+
+            boolean back = failure.canRollBack();
+
+            notEnabled.add(new Notice.Item(tracked.displayName(),
+                    back ? tracked.previousVersionNumber() + " → " + tracked.versionNumber()
+                            : tracked.versionNumber(),
+                    failure.reason(),
+                    back ? Messages.rollbackCommand(tracked) : null,
+                    tracked.previousVersionNumber(),
+                    failure.previousRemoved()));
+        }
+
+        add(out, Notice.Kind.DID_NOT_ENABLE, notEnabled);
+
         Set<TrackedPlugin> missed = new HashSet<>();
         List<Notice.Item> missedNews = new ArrayList<>();
 
@@ -151,7 +180,7 @@ public final class JoinNotifier implements Listener {
 
             String key = "applied:" + tracked.projectId() + ":" + tracked.versionId();
 
-            if (!heardBefore.contains(key)) {
+            if (!heardBefore.contains(key) && !failed.contains(tracked.projectId())) {
                 news.add(key);
                 applied.add(new Notice.Item(tracked.displayName(), tracked.versionNumber()));
             }
