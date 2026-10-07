@@ -90,7 +90,7 @@ public final class ModrinthClient implements AutoCloseable {
      *
      * @param sha512Hashes the hashes of the currently installed files
      * @param loaders      the loaders to accept, e.g. paper, purpur, folia
-     * @param gameVersions the Minecraft versions to accept
+     * @param gameVersions the Minecraft versions to accept, or null for all
      * @param channels     the release channels to accept
      * @return a future of hash to the newest matching version
      */
@@ -110,7 +110,9 @@ public final class ModrinthClient implements AutoCloseable {
             body.add("hashes", array(chunk));
             body.addProperty("algorithm", "sha512");
             body.add("loaders", array(loaders));
-            body.add("game_versions", array(gameVersions));
+            if (gameVersions != null) {
+                body.add("game_versions", array(gameVersions));
+            }
             body.add("version_types", array(channelNames));
             return body;
         });

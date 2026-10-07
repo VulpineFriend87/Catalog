@@ -137,7 +137,8 @@ public final class Updates {
         ServerTarget target = platform.target();
         Logger.debug(CatalogAction.UPDATE, "Checking against " + target + ", asking for loaders "
                 + String.join(", ", target.loaders())
-                + " and game versions " + String.join(", ", target.gameVersions()) + ".");
+                + (target.gameVersions() == null ? ", any game version."
+                        : " and game versions " + String.join(", ", target.gameVersions()) + "."));
 
         for (TrackedPlugin tracked : tracking.all()) {
             Logger.debug(CatalogAction.UPDATE, "  asking about " + state(tracked));

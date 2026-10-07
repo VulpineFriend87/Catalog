@@ -21,9 +21,8 @@ public final class ServerTarget {
     private final ServerPlatform platform;
 
     /**
-     * The exact Minecraft version.
+     * The exact Minecraft version, or null on a proxy, which has none.
      */
-    @NonNull
     private final String gameVersion;
 
     /** The Java feature version this server runs on, for checking a downloaded jar against it. */
@@ -41,15 +40,16 @@ public final class ServerTarget {
     /**
      * The game versions to accept, which is this one and nothing else.
      *
-     * @return the acceptable versions
+     * @return the acceptable versions, or null to accept every version
      */
     public List<String> gameVersions() {
-        return List.of(gameVersion);
+        return gameVersion == null ? null : List.of(gameVersion);
     }
 
     @Override
     public String toString() {
-        return platform.id() + " " + gameVersion + " on Java " + javaVersion;
+        return platform.id() + (gameVersion == null ? "" : " " + gameVersion) + " on Java "
+                + javaVersion;
     }
 
 }

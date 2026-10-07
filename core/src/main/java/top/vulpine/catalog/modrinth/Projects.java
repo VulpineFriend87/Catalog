@@ -69,7 +69,10 @@ public final class Projects {
         }
 
         facets.add(loaders);
-        facets.add(List.of("versions:" + target.gameVersion()));
+
+        if (target.gameVersion() != null) {
+            facets.add(List.of("versions:" + target.gameVersion()));
+        }
 
         return modrinth.search(query, facets, limit, offset).join();
     }
