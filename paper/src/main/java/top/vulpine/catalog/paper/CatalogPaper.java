@@ -32,6 +32,7 @@ import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.paper.config.Config;
 import top.vulpine.catalog.paper.notify.JoinNotifier;
 import top.vulpine.catalog.paper.util.PermissionChecker;
+import top.vulpine.catalog.platform.ExitTasks;
 import top.vulpine.catalog.platform.Platform;
 import top.vulpine.catalog.tracking.Dependents;
 import top.vulpine.catalog.tracking.IgnoreList;
@@ -88,6 +89,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     private TrashBin trash;
     private Settings settings;
     private Projects projects;
+    private ExitTasks exitTasks;
     private Removals removals;
     private Installer installer;
     private Updates updates;
@@ -170,7 +172,11 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
 
         this.settings = new Settings(tracking, this::defaults, history);
         this.projects = new Projects(this, modrinth, tracking);
-        this.removals = new Removals(this, trash, tracking, this::defaults, startedAt, history);
+        this.exitTasks = new ExitTasks(data, getFile().toPath());
+        this.exitTasks.report();
+
+        this.removals = new Removals(this, trash, tracking, this::defaults, startedAt, history,
+                exitTasks);
         this.installer = new Installer(this, downloader, tracking, removals, this::defaults, history);
         this.updates = new Updates(this, modrinth, tracking, installer,
                 () -> configuration.tracking.defaults.soakMinutes, projects::dependenciesOf,
@@ -194,7 +200,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         Logger.debug(Action.SETUP, "Initializing metrics...");
         new Metrics(this, PLUGIN_ID);
 
-        Runtime.getRuntime().addShutdownHook(new Thread(this::finishRemovals, "Catalog removals"));
+        Runtime.getRuntime().addShutdownHook(new Thread(exitTasks::run, "Catalog exit tasks"));
 
         getScheduler().runAsync(task -> index());
         getScheduler().runAsync(task -> pruneTrash());
@@ -522,10 +528,6 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
             Logger.debug(Action.SETUP, "Emptied " + dropped + " removals older than "
                     + days + " days from the trash.");
         }
-    }
-
-    private void finishRemovals() {
-        removals.finish();
     }
 
     public void setChannel(TrackedPlugin plugin, ReleaseChannel channel, String by) {

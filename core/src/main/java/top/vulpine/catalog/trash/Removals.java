@@ -4,6 +4,7 @@ import top.vulpine.catalog.history.Event;
 import top.vulpine.catalog.history.History;
 import top.vulpine.catalog.history.HistoryEntry;
 import top.vulpine.catalog.install.InstallException;
+import top.vulpine.catalog.platform.ExitTasks;
 import top.vulpine.catalog.platform.Platform;
 import top.vulpine.catalog.tracking.TrackingException;
 import top.vulpine.catalog.tracking.TrackingStore;
@@ -11,15 +12,12 @@ import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.tracking.model.TrackingDefaults;
 import top.vulpine.catalog.trash.model.TrashEntry;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -35,22 +33,23 @@ public final class Removals {
     private final History history;
 
     /**
-     * Jars this server would not let us delete, to be removed once it has let go of them.
+     * Deletes the jars that were locked when they were removed.
      *
-     * <p>A set drained at shutdown rather than {@link java.io.File#deleteOnExit()}, because a
-     * removal can be undone and {@code deleteOnExit} cannot be called off: an undone removal would
-     * still lose the file at the next shutdown.</p>
+     * <p>Rather than {@link java.io.File#deleteOnExit()}, because a removal can be undone and
+     * {@code deleteOnExit} cannot be called off.</p>
      */
-    private final Set<Path> deleteAtShutdown = ConcurrentHashMap.newKeySet();
+    private final ExitTasks exitTasks;
 
     public Removals(Platform platform, TrashBin trash, TrackingStore tracking,
-                    Supplier<TrackingDefaults> defaults, Instant startedAt, History history) {
+                    Supplier<TrackingDefaults> defaults, Instant startedAt, History history,
+                    ExitTasks exitTasks) {
         this.platform = platform;
         this.trash = trash;
         this.tracking = tracking;
         this.defaults = defaults;
         this.startedAt = startedAt;
         this.history = history;
+        this.exitTasks = exitTasks;
     }
 
     /**
@@ -71,7 +70,7 @@ public final class Removals {
             result = trash.bin(jar, plugin, by);
 
             if (!result.deleted()) {
-                deleteAtShutdown.add(jar);
+                exitTasks.delete(jar);
             }
         }
 
@@ -127,7 +126,7 @@ public final class Removals {
 
         // A removal this server would not carry out left the jar exactly where it belongs, so
         // undoing that one is a matter of calling the deletion off rather than copying anything.
-        if (deleteAtShutdown.remove(target)) {
+        if (exitTasks.withdraw(target)) {
             trash.discard(entry);
         } else {
             trash.restore(entry, target);
@@ -241,7 +240,7 @@ public final class Removals {
      * @return true if the pending deletion was called off, so the file may be reused
      */
     public boolean claimPendingDelete(Path jar) {
-        return deleteAtShutdown.remove(jar);
+        return exitTasks.withdraw(jar);
     }
 
     /**
@@ -288,20 +287,6 @@ public final class Removals {
         return days <= 0 ? 0 : trash.prune(Duration.ofDays(days), Instant.now());
     }
 
-    /**
-     * Deletes the jars this server would not let go of, once it has.
-     */
-    public void finish() {
-
-        for (Path jar : deleteAtShutdown) {
-
-            try {
-                Files.deleteIfExists(jar);
-            } catch (IOException ignored) {
-                // There is no longer anywhere to report this to.
-            }
-        }
-    }
 
     /**
      * Where a staged build is sitting.
