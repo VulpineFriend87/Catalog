@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
+import top.vulpine.catalog.jar.model.InstalledJar;
 import top.vulpine.catalog.modrinth.model.ModrinthProject;
 import top.vulpine.catalog.modrinth.model.ModrinthVersion;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
@@ -37,6 +38,9 @@ public final class ProjectView {
 
     /** Null when the project is not installed. */
     private final TrackedPlugin installed;
+
+    /** The project's jar when it is in the plugins folder but untracked, otherwise null. */
+    private final InstalledJar untracked;
 
     /** True when this page is Catalog's own, which may be updated but never removed. */
     private final boolean self;

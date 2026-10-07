@@ -614,7 +614,7 @@ public final class Messages {
     private static Component status(ProjectView view) {
 
         if (view.installed() == null) {
-            return Component.text("  not installed", MUTED);
+            return Component.text(view.untracked() != null ? "  untracked" : "  not installed", MUTED);
         }
 
         if (view.installed().pendingRestart()) {
@@ -767,6 +767,22 @@ public final class Messages {
         String here = ClickContext.INFO + key;
 
         List<Component> row = new ArrayList<>();
+
+        if (installed == null && view.untracked() != null) {
+
+            row.add(button("Track", from("/catalog track " + quoted(view.untracked().fileName()), here),
+                    BRAND, "Track " + view.project().title()));
+
+            row.add(button("Versions", from("/catalog versions " + key, here), MUTED,
+                    "The newest release, beta and alpha for this server"));
+
+            if (view.declaresAnything()) {
+                row.add(button("Dependencies", from("/catalog dependencies " + key + described(view), here),
+                        MUTED, "Show dependencies"));
+            }
+
+            return buttons(row);
+        }
 
         if (installed == null) {
 
@@ -995,10 +1011,13 @@ public final class Messages {
     /**
      * The newest build of each channel to pick one from.
      */
+    /**
+     * @param untracked whether the project's jar is in the plugins folder but untracked
+     */
     public static List<Component> versions(ModrinthProject project, String gameVersion,
                                            Map<ReleaseChannel, ModrinthVersion> newest,
-                                           TrackedPlugin installed, boolean offerEverything,
-                                           String from) {
+                                           TrackedPlugin installed, boolean untracked,
+                                           boolean offerEverything, String from) {
 
         List<Component> out = new ArrayList<>();
 
@@ -1018,7 +1037,7 @@ public final class Messages {
             ModrinthVersion version = newest.get(channel);
 
             if (version != null) {
-                out.add(versionRow(project, channel, version, installed, from));
+                out.add(versionRow(project, channel, version, installed, untracked, from));
             }
         }
 
@@ -1143,7 +1162,7 @@ public final class Messages {
 
     private static Component versionRow(ModrinthProject project, ReleaseChannel channel,
                                         ModrinthVersion version, TrackedPlugin installed,
-                                        String from) {
+                                        boolean untracked, String from) {
 
         TextComponent.Builder row = line()
                 .append(Component.text(INDENT))
@@ -1167,6 +1186,7 @@ public final class Messages {
                 .append(Component.text(staged ? "Waiting for a restart"
                         : current && waiting ? "Cancel the downloaded update and stay here"
                         : current ? "Already installed"
+                        : untracked ? "Installed, untracked"
                         : (installed == null ? "Install this build" : "Switch to this build")
                                 + " and follow the " + channel.apiName() + " channel", TEXT));
 
@@ -1184,7 +1204,7 @@ public final class Messages {
         // While a build is waiting, the installed row is the way back out of it.
         String command = staged ? null
                 : current && waiting ? from("/catalog cancel " + project.slug(), here)
-                : current ? null
+                : current || untracked ? null
                 : from("/catalog install " + project.slug() + " " + version.id(), here);
 
         return row.hoverEvent(HoverEvent.showText(hover))
@@ -1939,6 +1959,14 @@ public final class Messages {
                 .append(Component.text(count, DONE))
                 .append(Component.text(count == 1 ? " update downloaded, applies on restart"
                         : " updates downloaded, apply on restart", MUTED))
+                .build();
+    }
+
+    public static Component installedUntracked(String name, String fileName) {
+        return line()
+                .append(Component.text(name, TEXT))
+                .append(Component.text(" is installed, untracked  ", MUTED))
+                .append(button("Track", "/catalog track " + quoted(fileName), BRAND, "Track " + name))
                 .build();
     }
 

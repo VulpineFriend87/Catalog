@@ -208,6 +208,12 @@ public final class MainCommand {
             }
 
             TrackedPlugin tracked = plugin.getTracking().byProjectId(project.id());
+            InstalledJar untracked = tracked == null ? plugin.getLibrary().untrackedJar(project.id()) : null;
+
+            if (untracked != null) {
+                send(sender, Messages.installedUntracked(project.title(), untracked.fileName()));
+                return;
+            }
 
             if (tracked != null && named == null) {
                 send(sender, Messages.alreadyInstalled(tracked));
@@ -344,8 +350,9 @@ public final class MainCommand {
                 }
 
                 send(sender, Messages.versions(project, plugin.gameVersion(),
-                        newestOfEachChannel(plugin.compatibleVersions(project.id())),
-                        installed, allowed, screen(data)));
+                        newestOfEachChannel(plugin.compatibleVersions(project.id())), installed,
+                        installed == null && plugin.getLibrary().untrackedJar(project.id()) != null,
+                        allowed, screen(data)));
 
             } catch (Exception e) {
                 send(sender, Messages.unreachable(rootMessage(e)));
@@ -1420,6 +1427,7 @@ public final class MainCommand {
                     .latest(latest)
                     .installTarget(CatalogPaper.installTarget(compatible))
                     .installed(tracked)
+                    .untracked(tracked == null ? plugin.getLibrary().untrackedJar(project.id()) : null)
                     .self(plugin.isSelf(tracked))
                     .updateAvailable(isNewer(latest, tracked))
                     .platformLoaders(plugin.platformLoaders());

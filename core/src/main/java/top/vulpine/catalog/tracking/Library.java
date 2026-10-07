@@ -49,6 +49,9 @@ public final class Library {
     private volatile List<TrackedPlugin> notApplied = List.of();
     private volatile List<TrackedPlugin> loaded = List.of();
 
+    /** The untracked jars Modrinth recognised, by project id, from the last scan. */
+    private volatile Map<String, InstalledJar> untrackedByProject = Map.of();
+
     /** The name each jar declares in its descriptor, by file name, from the last scan. */
     private volatile Map<String, String> declared = Map.of();
 
@@ -138,6 +141,14 @@ public final class Library {
      */
     public List<TrackedPlugin> applied() {
         return List.copyOf(applied);
+    }
+
+    /**
+     * @param projectId a Modrinth project
+     * @return its jar in the plugins folder when it is there but untracked, or null
+     */
+    public InstalledJar untrackedJar(String projectId) {
+        return projectId == null ? null : untrackedByProject.get(projectId);
     }
 
     /**
@@ -233,6 +244,19 @@ public final class Library {
         List<InstalledJar> loose = new ArrayList<>(report.ignored());
         loose.addAll(report.notAdopted());
         untracked = loose;
+
+        Map<String, InstalledJar> byProject = new HashMap<>();
+
+        for (InstalledJar jar : loose) {
+
+            ModrinthVersion version = jar.sha512() == null ? null : identified.get(jar.sha512());
+
+            if (version != null) {
+                byProject.putIfAbsent(version.projectId(), jar);
+            }
+        }
+
+        untrackedByProject = Map.copyOf(byProject);
 
         applied.addAll(report.applied());
 
