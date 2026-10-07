@@ -81,7 +81,7 @@ public final class Library {
      * <p>The ignore list is what makes this last: without it the next scan would adopt the plugin
      * straight back.</p>
      *
-     * @param plugin the plugin to let go of
+     * @param plugin the plugin to untrack
      * @param by     who asked, or null for Catalog
      */
     public void untrack(TrackedPlugin plugin, String by) {

@@ -21,7 +21,7 @@ import java.util.stream.Stream;
 /**
  * Where removed jars go instead of being deleted.
  *
- * <p>A failed delete is a normal outcome on Windows, where the running server holds the jar open.</p>
+ * <p>A failed delete is a normal outcome on Windows, where a loaded jar is locked.</p>
  */
 public final class TrashBin {
 
@@ -363,7 +363,7 @@ public final class TrashBin {
      *
      * @param entry   what was written, whose {@code storedAs} identifies this exact removal
      * @param stored  where the copy lives
-     * @param deleted whether the original is gone, which it is not while the JVM holds it open
+     * @param deleted whether the original is gone
      */
     public record Result(TrashEntry entry, Path stored, boolean deleted) {
     }

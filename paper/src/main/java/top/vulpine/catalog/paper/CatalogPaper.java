@@ -553,7 +553,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
     /**
      * Stops managing a plugin. The jar is not touched.
      *
-     * @param plugin the plugin to let go of
+     * @param plugin the plugin to untrack
      * @param by     who asked
      */
     public void untrack(TrackedPlugin plugin, String by) {
