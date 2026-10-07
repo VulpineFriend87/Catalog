@@ -1,0 +1,10 @@
+{
+  "id": "catalog",
+  "name": "Catalog",
+  "version": "${version}",
+  "description": "A free and open source Modrinth plugin manager with automatic tracking, updates and dependency management.",
+  "url": "https://vulpine.top",
+  "authors": ["VulpineFriend87"],
+  "dependencies": [],
+  "main": "top.vulpine.catalog.velocity.CatalogVelocity"
+}

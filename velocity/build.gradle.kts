@@ -9,14 +9,12 @@ dependencies {
     implementation(project(":core"))
 
     implementation(libs.okaeri.yaml.snakeyaml)
-    implementation(libs.bstats.velocity)
+    implementation(libs.commons)
     implementation(libs.lamp.common)
     implementation(libs.lamp.velocity)
+    implementation(libs.lamp.brigadier)
 
-    // Velocity generates velocity-plugin.json from the @Plugin annotation.
     compileOnly(libs.velocity)
-    annotationProcessor(libs.velocity)
-
     compileOnly(libs.gson)
 }
 
@@ -24,6 +22,14 @@ tasks {
 
     jar {
         enabled = false
+    }
+
+    processResources {
+        val version = project.version.toString()
+        inputs.property("version", version)
+        filesMatching("velocity-plugin.json") {
+            expand("version" to version)
+        }
     }
 
     shadowJar {
@@ -35,7 +41,8 @@ tasks {
         }
 
         shade("eu.okaeri", "okaeri")
-        shade("org.bstats", "bstats")
+        shade("org.yaml.snakeyaml", "snakeyaml")
+        shade("top.vulpine.commons", "commons")
         shade("revxrsal.commands", "lamp")
     }
 
