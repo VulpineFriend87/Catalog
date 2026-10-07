@@ -107,7 +107,7 @@ jobs:
           modrinth-id: i5brxoU7
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           files: build/libs/**/*.jar
-          version: ${{ needs.build.outputs.version }}
+          version: ${{ needs.build.outputs.version }}+paper
           name: ${{ needs.build.outputs.title || needs.build.outputs.version }}
           version-type: ${{ needs.build.outputs.type }}
           changelog: ${{ needs.build.outputs.changelog }}
