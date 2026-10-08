@@ -10,7 +10,9 @@ import top.vulpine.catalog.modrinth.model.VersionFile;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * Fetches a version's jar into staging and refuses to hand it back unless it is sound.
@@ -60,6 +62,17 @@ public final class Downloader {
                     + version.versionNumber() + ".");
         }
 
+        // The name becomes a path here, in the update folder and in the plugins folder.
+        if (!isPlainJarName(file.filename())) {
+            throw new InstallException("The file Modrinth lists for " + version.versionNumber()
+                    + " is not a plain jar name. Not downloaded.");
+        }
+
+        if (file.sha512() == null || file.sha512().isBlank()) {
+            throw new InstallException("Modrinth lists no hash for " + version.versionNumber()
+                    + ". Not downloaded.");
+        }
+
         Path target = staging.resolve(file.filename());
 
         try {
@@ -77,6 +90,27 @@ public final class Downloader {
         }
 
         return target;
+    }
+
+    /**
+     * A file name with no folder in it, that is not hidden and ends in {@code .jar}.
+     */
+    static boolean isPlainJarName(String name) {
+
+        if (name == null || name.isBlank() || name.startsWith(".")
+                || name.contains("/") || name.contains("\\") || name.contains(":")) {
+            return false;
+        }
+
+        try {
+            if (!name.equals(Path.of(name).getFileName().toString())) {
+                return false;
+            }
+        } catch (InvalidPathException e) {
+            return false;
+        }
+
+        return name.toLowerCase(Locale.ROOT).endsWith(".jar");
     }
 
     /**
@@ -116,7 +150,7 @@ public final class Downloader {
                     + expected.size() + ". Discarded.");
         }
 
-        if (expected.sha512() != null && !expected.sha512().equalsIgnoreCase(hash)) {
+        if (!expected.sha512().equalsIgnoreCase(hash)) {
             throw new InstallException("The download does not match the hash Modrinth published. Discarded.");
         }
     }
