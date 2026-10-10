@@ -6,7 +6,7 @@ Catalog analyses your plugins folder once the server boots, figuring out which M
 
 ## Requirements
 
-Paper 1.18.2 and newer, Purpur and Folia included. Java 17 and newer. If either one is missing, Catalog disables itself during startup and prints the reason in the console. Folia is supported.
+Paper 1.18.2 and newer, Purpur and Folia included. Java 17 and newer. If either one is missing, Catalog disables itself during startup and prints the reason in the console.
 
 Plugins have to be published on Modrinth to be managed. Custom jars and plugins from other marketplaces keep working as usual, Catalog only ignores them. If you install a plugin that is available on modrinth it will be recognized.
 
@@ -22,7 +22,7 @@ Installing is one click from there. The `.jar` goes into your plugins folder and
 
 Only builds made for your exact Minecraft version are offered. Purpur and Folia builds are recognized separately from plain Paper ones, so if a plugin ships both a Paper and a Purpur build, the Purpur one gets installed on a Purpur server.
 
-`/catalog install <plugin> <version>` puts a plugin on any other build, which is how you roll back. Replacing a jar that currently works asks for confirmation first.
+`/catalog install <plugin> <version>` puts a plugin on any other build you want.
 
 ## Updates
 
@@ -30,11 +30,17 @@ Catalog looks for updates when the server starts and every three hours after tha
 
 Nothing is ever swapped while the plugin runs. Catalog downloads the new build and gives it to the server, which installs it automatically once the next restart happens, before plugins load. `/catalog cancel <plugin>` drops a downloaded update.
 
-You can let Catalog handle that process. Once you enable automatic updates for a trusted plugin, it will stay up-to-date. Catalog waits a couple of hours after a build comes out before installing it. If the author notices a problem and puts out a fix in that time, you get the fixed build and never install the broken one. The pause time, the channel a plugin follows and the auto-update switch are set per each plugin, so you can choose which plugins you want updated immediately and which ones can wait.
+Catalog can automatically handle updates for plugins you trust. Once you enable automatic updates for a plugin, it will stay up-to-date. Catalog waits a couple of hours after a build comes out before installing it. If the author notices a problem and puts out a fix in that time, you get the fixed build and never install the broken one. The pause time, the channel a plugin follows and the auto-update switch are set per each plugin, so you can choose which plugins you want updated immediately and which ones can wait. If an update introduces new dependencies it won't auto update that version until you install the missing dependencies.
 
-Staff with `catalog.notify` get a summary when they join: what the last restart applied, what did not apply, which automatic updates failed and why, and what is waiting. `notify_on_join` in the config turns it off.
+Staff with `catalog.notify` get a summary when they join: updates that did not enable, what the last restart applied, what did not apply, which automatic updates failed and why, and what is waiting. `notify_on_join` in the config turns it off.
 
 Each downloaded file is being validated before being added to your plugin folder: the right file is expected, the right size is expected and it is being made for the Java version you can use on your server. Anything that does not pass this check will be deleted instead of being placed into your plugin folder.
+
+Files on Modrinth without a hash or with an unsafe file name are refused.
+
+## Broken builds
+
+After a restart, Catalog checks that every plugin it installed or updated is enabled. A plugin that isn't loaded or was disabled in startup is reported in the join summary. From there, you can also hit a button to roll back the update, and it will also turn auto-updates off so it won't install the broken build again. Nothing is rolled back automatically.
 
 ## Uninstallation
 
@@ -77,7 +83,7 @@ The settings screen sets everything below by clicking, but these also work as co
 | Command | | Permission |
 | --- | --- | --- |
 | `/catalog channel <plugin> <channel>` | Follow release, beta or alpha | `catalog.command.channel` |
-| `/catalog auto <plugin> <on\|off>` | Update this plugin without asking | `catalog.command.settings` |
+| `/catalog auto <plugin> <on\|off>` | Update this plugin automatically | `catalog.command.settings` |
 | `/catalog soak <plugin> <window>` | How long to wait before an automatic update, like `30m`, `2h` or `default` | `catalog.command.settings` |
 | `/catalog hold <plugin>` | Keep the current version and stop offering updates | `catalog.command.hold` |
 | `/catalog unhold <plugin>` | Allow updates again | `catalog.command.hold` |
