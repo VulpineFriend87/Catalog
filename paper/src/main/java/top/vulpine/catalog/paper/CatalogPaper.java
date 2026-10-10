@@ -244,6 +244,7 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
             configuration = ConfigManager.create(Config.class, it -> {
                 it.withConfigurer(new YamlBukkitConfigurer(), new SerdesBukkit());
                 it.withBindFile(new File(getDataFolder(), "config.yml"));
+                it.withRemoveOrphans(true);
                 it.saveDefaults();
                 it.load(true);
             });

@@ -90,14 +90,6 @@ public class Config extends OkaeriConfig {
 
     }
 
-    @Comment("Allow installing builds this server is not declared compatible with.")
-    @Comment("With this on, a plugin's info screen gains a button listing every build ever")
-    @Comment("published, and any of them can be installed. They are not filtered,")
-    @Comment("so most of them will fail to load. Keep off unless you know")
-    @Comment("exactly what you are doing.")
-    @CustomKey("allow_incompatible_installs")
-    public boolean allowIncompatibleInstalls = false;
-
     @Comment("Log level for this plugin. Can be: DEBUG, INFO, WARN, ERROR.")
     @Comment("Leave as it is if you don't know what to choose.")
     @CustomKey("log_level")

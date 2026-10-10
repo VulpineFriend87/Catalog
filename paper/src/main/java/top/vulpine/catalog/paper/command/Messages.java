@@ -1010,14 +1010,13 @@ public final class Messages {
 
     /**
      * The newest build of each channel to pick one from.
-     */
-    /**
+     *
      * @param untracked whether the project's jar is in the plugins folder but untracked
      */
     public static List<Component> versions(ModrinthProject project, String gameVersion,
                                            Map<ReleaseChannel, ModrinthVersion> newest,
                                            TrackedPlugin installed, boolean untracked,
-                                           boolean offerEverything, String from) {
+                                           String from) {
 
         List<Component> out = new ArrayList<>();
 
@@ -1043,24 +1042,17 @@ public final class Messages {
 
         out.add(Component.empty());
 
-        TextComponent.Builder footer = line()
+        out.add(line()
                 .append(Component.text(INDENT))
                 .append(button("Back", backTo(from, "/catalog info " + project.slug()), MUTED,
-                        "Back"));
-
-        if (offerEverything) {
-            footer.append(Component.space())
-                    .append(button("All versions", "/catalog versions " + project.slug() + " --all",
-                            PENDING, "Every build ever published"));
-        }
-
-        out.add(footer.build());
+                        "Back"))
+                .build());
 
         return out;
     }
 
     /**
-     * Every build a project has published unfiltered.
+     * Every build a project has published for this platform, on any Minecraft version.
      */
     public static List<Component> everyVersion(ModrinthProject project, List<ModrinthVersion> versions,
                                                TrackedPlugin installed, String gameVersion, int page) {
@@ -1076,7 +1068,7 @@ public final class Messages {
                 .append(Component.text("  " + versions.size() + " builds", MUTED))
                 .build());
 
-        out.add(Component.text(INDENT + "Not filtered for this server. Most will not load.", PENDING));
+        out.add(Component.text(INDENT + "Any Minecraft version. Most will not load.", PENDING));
         out.add(Component.empty());
 
         if (versions.isEmpty()) {
@@ -1113,7 +1105,7 @@ public final class Messages {
     }
 
     private static String everyPage(ModrinthProject project, int page) {
-        return "/catalog versions " + project.slug() + " --all --page " + page;
+        return "/catalog versions " + project.slug() + " --incompatible --page " + page;
     }
 
     /** How many builds one page of the unfiltered list shows. */
@@ -1156,7 +1148,8 @@ public final class Messages {
         return row.hoverEvent(HoverEvent.showText(hover))
                 .clickEvent(current ? ClickEvent.suggestCommand("/catalog info " + project.slug())
                         : ClickEvent.runCommand(from("/catalog install " + project.slug()
-                                + " " + version.id(), ClickContext.INFO + project.slug())))
+                                + " " + version.id() + (runs ? "" : " --incompatible"),
+                                ClickContext.INFO + project.slug())))
                 .build();
     }
 
@@ -1868,14 +1861,16 @@ public final class Messages {
      * The confirmation screen for an install, update or switch.
      *
      * @param from    the version installed now, or null for a first install
+     * @param notFor  the Minecraft version the build does not declare, or null when it does
      * @param needs   the required plugins that are missing, and the conflicts
      * @param asked   the press that raised the question
      * @param here    this screen
      * @param command what confirming runs
      */
     public static List<Component> change(Change change, String name, String slug, String from,
-                                         ModrinthVersion version, List<DependencyView> needs,
-                                         Press asked, String here, String command) {
+                                         ModrinthVersion version, String notFor,
+                                         List<DependencyView> needs, Press asked, String here,
+                                         String command) {
 
         List<Component> out = new ArrayList<>();
 
@@ -1899,6 +1894,10 @@ public final class Messages {
         out.add(Component.text(INDENT + "Applied on restart."
                 + (change == Change.ROLL_BACK ? " Config and data are not rolled back with it." : ""),
                 MUTED));
+
+        if (notFor != null) {
+            out.add(Component.text(INDENT + "Not marked compatible with " + notFor, DANGER));
+        }
 
         int missing = 0;
         boolean reachable = true;

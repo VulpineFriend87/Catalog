@@ -84,6 +84,20 @@ public final class Projects {
      * @return the compatible versions, newest published first
      */
     public List<ModrinthVersion> compatibleVersions(String idOrSlug) {
+        return versions(idOrSlug, platform.target().gameVersions());
+    }
+
+    /**
+     * Every build of a project for this server's platform, newest first, on any Minecraft version.
+     *
+     * @param idOrSlug the project to list
+     * @return the versions, newest published first
+     */
+    public List<ModrinthVersion> allVersions(String idOrSlug) {
+        return versions(idOrSlug, null);
+    }
+
+    private List<ModrinthVersion> versions(String idOrSlug, List<String> gameVersions) {
 
         ServerTarget target = platform.target();
 
@@ -92,7 +106,7 @@ public final class Projects {
             List<ModrinthVersion> versions;
 
             try {
-                versions = modrinth.versions(idOrSlug, tier, target.gameVersions()).join();
+                versions = modrinth.versions(idOrSlug, tier, gameVersions).join();
             } catch (Exception e) {
                 throw new InstallException("Could not reach Modrinth: " + Errors.rootMessage(e), e);
             }
@@ -105,26 +119,6 @@ public final class Projects {
         }
 
         return List.of();
-    }
-
-    /**
-     * Every build a project has ever published, newest first, not filtered.
-     *
-     * @param idOrSlug the project to list
-     * @return every version, newest published first
-     */
-    public List<ModrinthVersion> allVersions(String idOrSlug) {
-
-        List<ModrinthVersion> versions;
-
-        try {
-            versions = new ArrayList<>(modrinth.versions(idOrSlug, null, null).join());
-        } catch (Exception e) {
-            throw new InstallException("Could not reach Modrinth: " + Errors.rootMessage(e), e);
-        }
-
-        versions.sort(Comparator.comparing(ModrinthVersion::datePublished).reversed());
-        return versions;
     }
 
     /**

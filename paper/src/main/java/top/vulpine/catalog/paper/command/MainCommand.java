@@ -181,22 +181,25 @@ public final class MainCommand {
     @Description("Install a plugin from Modrinth")
     @RequiresPermission("command.install")
     public void install(CommandSender sender, @Named("plugin") @Single String query,
-                        @Optional @Named("version") String wanted) {
+                        @Optional @Named("version") String wanted,
+                        @Switch("incompatible") boolean incompatible) {
 
         String data = context.take(sender);
 
         String named = wanted == null || ClickContext.strip(wanted).isEmpty()
                 ? null : ClickContext.strip(wanted);
 
-        runAsync(sender, () -> runInstall(sender, query, named, data));
+        runAsync(sender, () -> runInstall(sender, query, named, incompatible, data));
     }
 
     /**
      * Installs a plugin, or moves an installed one to another build.
      *
-     * @param data what the button carried, or null when the command was typed
+     * @param incompatible whether builds for other Minecraft versions are accepted
+     * @param data         what the button carried, or null when the command was typed
      */
-    private void runInstall(CommandSender sender, String query, String named, String data) {
+    private void runInstall(CommandSender sender, String query, String named, boolean incompatible,
+                            String data) {
 
         try {
 
@@ -225,7 +228,7 @@ public final class MainCommand {
                 return;
             }
 
-            ModrinthVersion version = build(project, named);
+            ModrinthVersion version = build(project, named, incompatible);
 
             if (version == null) {
                 send(sender, named == null
@@ -234,13 +237,16 @@ public final class MainCommand {
                 return;
             }
 
+            String notFor = runsHere(version) ? null : plugin.gameVersion();
+
             ReleaseChannel follow = version.versionType() == null
                     ? defaultChannel() : version.versionType();
 
             DependencyResolver.Resolution resolution = plugin.dependenciesOf(version);
             String here = ClickContext.change("install", project.slug(), version.id());
 
-            boolean asks = tracked != null || needsAnswer(resolution) || redrawing(data, here);
+            boolean asks = tracked != null || notFor != null || needsAnswer(resolution)
+                    || redrawing(data, here);
 
             if (asks && !confirmed(sender, "install:" + project.id() + ":" + version.id(), data)) {
 
@@ -248,8 +254,9 @@ public final class MainCommand {
                         : isOlder(version, tracked) ? Change.ROLL_BACK : Change.SWITCH;
 
                 showChange(sender, change, project, tracked == null ? null : tracked.versionNumber(),
-                        version, resolution, data, here,
-                        "/catalog install " + project.slug() + " " + version.id());
+                        version, notFor, resolution, data, here,
+                        "/catalog install " + project.slug() + " " + version.id()
+                                + (notFor != null ? " --incompatible" : ""));
                 return;
             }
 
@@ -320,7 +327,7 @@ public final class MainCommand {
     @RequiresPermission("command.info")
     public void versions(CommandSender sender,
                          @Named("plugin") @Single @SuggestWith(Suggestions.Tracked.class) String query,
-                         @Switch("all") boolean everything,
+                         @Switch("incompatible") boolean incompatible,
                          @Flag("page") @Default("1") int page) {
 
         String data = context.take(sender);
@@ -341,9 +348,8 @@ public final class MainCommand {
                 }
 
                 TrackedPlugin installed = plugin.getTracking().byProjectId(project.id());
-                boolean allowed = plugin.getConfiguration().allowIncompatibleInstalls;
 
-                if (everything && allowed) {
+                if (incompatible) {
                     send(sender, Messages.everyVersion(project, plugin.allVersions(project.id()),
                             installed, plugin.gameVersion(), page));
                     return;
@@ -352,7 +358,7 @@ public final class MainCommand {
                 send(sender, Messages.versions(project, plugin.gameVersion(),
                         newestOfEachChannel(plugin.compatibleVersions(project.id())), installed,
                         installed == null && plugin.getLibrary().untrackedJar(project.id()) != null,
-                        allowed, screen(data)));
+                        screen(data)));
 
             } catch (Exception e) {
                 send(sender, Messages.unreachable(rootMessage(e)));
@@ -383,18 +389,23 @@ public final class MainCommand {
     /**
      * The named build, or the one an install would fetch.
      *
-     * @param wanted a version id or number, or null for the default
+     * @param wanted       a version id or number, or null for the default
+     * @param incompatible whether builds for other Minecraft versions count
      * @return the build, or null when there is none
      */
-    private ModrinthVersion build(ModrinthProject project, String wanted) {
+    private ModrinthVersion build(ModrinthProject project, String wanted, boolean incompatible) {
 
-        ModrinthVersion version = choose(plugin.compatibleVersions(project.id()), wanted);
+        ModrinthVersion version = incompatible ? choose(plugin.allVersions(project.id()), wanted) : null;
 
-        if (version == null && wanted != null && plugin.getConfiguration().allowIncompatibleInstalls) {
-            version = choose(plugin.allVersions(project.id()), wanted);
-        }
+        // The two lists can come from different loaders.
+        return version != null ? version : choose(plugin.compatibleVersions(project.id()), wanted);
+    }
 
-        return version;
+    /**
+     * Whether a build declares the Minecraft version this server runs.
+     */
+    private boolean runsHere(ModrinthVersion version) {
+        return version.gameVersions() != null && version.gameVersions().contains(plugin.gameVersion());
     }
 
     /**
@@ -604,7 +615,7 @@ public final class MainCommand {
                         "update:" + project.id() + ":" + candidate.version().id(), data)) {
 
                     showChange(sender, Change.UPDATE, project, tracked.versionNumber(),
-                            candidate.version(), resolution, data, here,
+                            candidate.version(), null, resolution, data, here,
                             "/catalog update " + project.slug());
                     return;
                 }
@@ -847,7 +858,7 @@ public final class MainCommand {
                 return;
             }
 
-            ModrinthVersion version = build(project, wanted);
+            ModrinthVersion version = build(project, wanted, wanted != null);
 
             if (version == null) {
                 send(sender, wanted == null
@@ -879,7 +890,7 @@ public final class MainCommand {
      * @param command what confirming runs
      */
     private void showChange(CommandSender sender, Change change, ModrinthProject project,
-                            String from, ModrinthVersion version,
+                            String from, ModrinthVersion version, String notFor,
                             DependencyResolver.Resolution resolution, String data, String here,
                             String command) {
 
@@ -893,8 +904,8 @@ public final class MainCommand {
             asked = Press.on(ClickContext.INFO + project.slug());
         }
 
-        send(sender, Messages.change(change, project.title(), project.slug(), from, version, needs,
-                asked, here, command));
+        send(sender, Messages.change(change, project.title(), project.slug(), from, version, notFor,
+                needs, asked, here, command));
     }
 
     /**
@@ -1285,7 +1296,7 @@ public final class MainCommand {
             String[] change = ClickContext.changeOf(data);
 
             if (!change[0].equals("update")) {
-                runInstall(sender, change[1], change[2], data);
+                runInstall(sender, change[1], change[2], true, data);
                 return;
             }
 

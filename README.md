@@ -63,10 +63,10 @@ Everything is clickable, so you rarely need to type any command. `/catalog help`
 | `/catalog list [--updates] [--restart] [--held] [--untracked]` | All plugins managed by Catalog, and what needs updating | `catalog.command.list` |
 | `/catalog info <plugin>` | All available information about any plugin, whether installed or not | `catalog.command.info` |
 | `/catalog search <query>` | Searches Modrinth for plugins compatible with your server | `catalog.command.search` |
-| `/catalog versions <plugin>` | Newest release, beta and alpha | `catalog.command.info` |
+| `/catalog versions <plugin> [--incompatible]` | Newest release, beta and alpha, or every build on any Minecraft version | `catalog.command.info` |
 | `/catalog dependencies <plugin> [version]` | What a plugin declares it needs, optionally for a specific build | `catalog.command.info` |
 | `/catalog history [--plugin <plugin>] [--author <name>] [--event <kind>]` | What Catalog has done, and who asked | `catalog.command.list` |
-| `/catalog install <slug> [version]` | Install a plugin, optionally a specific build | `catalog.command.install` |
+| `/catalog install <slug> [version] [--incompatible]` | Install a plugin, optionally a specific build, also for another Minecraft version | `catalog.command.install` |
 | `/catalog update <plugin\|all>` | Download updates, apply them on next restart | `catalog.command.update` |
 | `/catalog cancel <plugin>` | Drop a downloaded update | `catalog.command.update` |
 | `/catalog uninstall <plugin>` | Move a plugin to trash | `catalog.command.uninstall` |
@@ -112,7 +112,7 @@ No. Catalog does not touch plugins while the server is running, which is what pr
 They are ignored. Catalog never does anything to them.
 
 **Can it install something my server cannot run?**
-Only with `allow_incompatible_installs` turned on in the config. Otherwise builds are filtered by your Minecraft version and server platform, and every download is checked against the Java version your server runs.
+Only with `--incompatible` on `install`. Otherwise builds are filtered by your Minecraft version and server platform, and every download is checked against the Java version your server runs.
 
 **Does it phone home?**
 It talks to the Modrinth API, and reports anonymous server statistics to [bStats](https://bstats.org), which you can turn off in the bStats config.
