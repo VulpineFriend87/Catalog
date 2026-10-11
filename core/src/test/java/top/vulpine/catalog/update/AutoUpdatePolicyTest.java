@@ -73,11 +73,21 @@ class AutoUpdatePolicyTest {
     }
 
     @Test
-    @DisplayName("a build already staged is not downloaded again")
-    void skipsWhatIsAlreadyWaiting() {
+    @DisplayName("a newer build replaces a staged one")
+    void replacesWhatIsStaged() {
 
         TrackedPlugin plugin = plugin(true, 0);
         plugin.pendingRestart(true);
+
+        assertEquals(1, POLICY.readyToApply(List.of(candidate(plugin, "2026-01-01T00:00:00Z")), NOW).size());
+    }
+
+    @Test
+    @DisplayName("a fresh install not loaded yet is not updated on its own")
+    void skipsWhatHasNotLoaded() {
+
+        TrackedPlugin plugin = plugin(true, 0);
+        plugin.pendingLoad(true);
 
         assertTrue(POLICY.readyToApply(List.of(candidate(plugin, "2026-01-01T00:00:00Z")), NOW).isEmpty());
     }

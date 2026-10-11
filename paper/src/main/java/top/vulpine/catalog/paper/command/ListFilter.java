@@ -30,7 +30,7 @@ public enum ListFilter {
      */
     public boolean keeps(TrackedPlugin plugin, Map<String, UpdateCandidate> updates) {
         return switch (this) {
-            case UPDATES -> updates.containsKey(plugin.projectId()) && !plugin.awaitingRestart();
+            case UPDATES -> updates.containsKey(plugin.projectId()) && !plugin.pendingLoad();
             case RESTART -> plugin.awaitingRestart();
             case HELD -> plugin.isPinned();
             case UNTRACKED -> false;

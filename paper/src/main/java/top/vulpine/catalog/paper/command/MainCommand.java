@@ -33,6 +33,7 @@ import top.vulpine.catalog.paper.command.annotation.RequiresPermission;
 import top.vulpine.catalog.tracking.model.TrackedPlugin;
 import top.vulpine.catalog.trash.TrashBin;
 import top.vulpine.catalog.trash.model.TrashEntry;
+import top.vulpine.catalog.update.UpdateChecker;
 import top.vulpine.catalog.update.model.UpdateCandidate;
 
 import java.time.Duration;
@@ -253,8 +254,7 @@ public final class MainCommand {
                 Change change = tracked == null ? Change.INSTALL
                         : isOlder(version, tracked) ? Change.ROLL_BACK : Change.SWITCH;
 
-                showChange(sender, change, project, tracked == null ? null : tracked.versionNumber(),
-                        version, notFor, resolution, data, here,
+                showChange(sender, change, project, tracked, version, notFor, resolution, data, here,
                         "/catalog install " + project.slug() + " " + version.id()
                                 + (notFor != null ? " --incompatible" : ""));
                 return;
@@ -614,8 +614,8 @@ public final class MainCommand {
                 if ((needsAnswer(resolution) || redrawing(data, here)) && !confirmed(sender,
                         "update:" + project.id() + ":" + candidate.version().id(), data)) {
 
-                    showChange(sender, Change.UPDATE, project, tracked.versionNumber(),
-                            candidate.version(), null, resolution, data, here,
+                    showChange(sender, Change.UPDATE, project, tracked, candidate.version(), null,
+                            resolution, data, here,
                             "/catalog update " + project.slug());
                     return;
                 }
@@ -890,7 +890,7 @@ public final class MainCommand {
      * @param command what confirming runs
      */
     private void showChange(CommandSender sender, Change change, ModrinthProject project,
-                            String from, ModrinthVersion version, String notFor,
+                            TrackedPlugin installed, ModrinthVersion version, String notFor,
                             DependencyResolver.Resolution resolution, String data, String here,
                             String command) {
 
@@ -904,8 +904,12 @@ public final class MainCommand {
             asked = Press.on(ClickContext.INFO + project.slug());
         }
 
-        send(sender, Messages.change(change, project.title(), project.slug(), from, version, notFor,
-                needs, asked, here, command));
+        String from = installed == null ? null : installed.versionNumber();
+        String replaces = installed != null && installed.pendingRestart()
+                ? installed.stagedVersionNumber() : null;
+
+        send(sender, Messages.change(change, project.title(), project.slug(), from, replaces, version,
+                notFor, needs, asked, here, command));
     }
 
     /**
@@ -1613,12 +1617,7 @@ public final class MainCommand {
             return false;
         }
 
-        if (latest.id().equals(tracked.versionId())) {
-            return false;
-        }
-
-        return tracked.datePublished() == null
-                || latest.datePublished().isAfter(tracked.datePublished());
+        return UpdateChecker.isNewer(tracked, latest);
     }
 
     private Set<String> trackedProjectIds() {

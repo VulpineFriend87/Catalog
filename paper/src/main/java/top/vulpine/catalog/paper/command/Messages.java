@@ -457,10 +457,10 @@ public final class Messages {
                     failure.previousRemoved()));
         }
 
-        if (update != null && !plugin.awaitingRestart()) {
+        if (update != null && !plugin.pendingLoad()) {
             row.append(Component.space()).append(icon("↑", BRAND,
                     from("/catalog update " + key(plugin), screen),
-                    "Download " + update.to() + " for the next restart"));
+                    "Download " + update.to() + " for the next restart" + replaces(plugin)));
         }
 
         // No remove button on Catalog's own row: pressing it would delete the thing holding the
@@ -809,14 +809,14 @@ public final class Messages {
         }
 
         if (installed.pendingRestart()) {
-
             row.add(button("Cancel update", from("/catalog cancel " + key, here), PENDING,
                     "Leave " + installed.versionNumber() + " in place"));
+        }
 
-        } else if (view.updateAvailable()) {
+        if (view.updateAvailable() && !installed.pendingLoad()) {
             row.add(button("Update", from("/catalog update " + key, here), BRAND,
                     "Download " + (view.latest() == null ? "the new build" : view.latest().versionNumber())
-                            + " for the next restart"));
+                            + " for the next restart" + replaces(installed)));
         }
 
         row.add(button("Switch", from("/catalog versions " + key, here), MUTED,
@@ -1860,15 +1860,16 @@ public final class Messages {
     /**
      * The confirmation screen for an install, update or switch.
      *
-     * @param from    the version installed now, or null for a first install
-     * @param notFor  the Minecraft version the build does not declare, or null when it does
-     * @param needs   the required plugins that are missing, and the conflicts
-     * @param asked   the press that raised the question
-     * @param here    this screen
-     * @param command what confirming runs
+     * @param from     the version installed now, or null for a first install
+     * @param replaces the build already downloaded, or null when there is none
+     * @param notFor   the Minecraft version the build does not declare, or null when it does
+     * @param needs    the required plugins that are missing, and the conflicts
+     * @param asked    the press that raised the question
+     * @param here     this screen
+     * @param command  what confirming runs
      */
     public static List<Component> change(Change change, String name, String slug, String from,
-                                         ModrinthVersion version, String notFor,
+                                         String replaces, ModrinthVersion version, String notFor,
                                          List<DependencyView> needs, Press asked, String here,
                                          String command) {
 
@@ -1890,6 +1891,10 @@ public final class Messages {
                 .append(Component.text("  " + (version.versionType() == null ? ""
                         : version.versionType().apiName()), MUTED))
                 .build());
+
+        if (replaces != null) {
+            out.add(Component.text(INDENT + "Replaces " + replaces + ", downloaded.", MUTED));
+        }
 
         out.add(Component.text(INDENT + "Applied on restart."
                 + (change == Change.ROLL_BACK ? " Config and data are not rolled back with it." : ""),
@@ -2296,6 +2301,14 @@ public final class Messages {
 
     private static TextComponent.Builder line() {
         return Component.text();
+    }
+
+    /**
+     * The hover line naming the downloaded build an update would replace.
+     */
+    private static String replaces(TrackedPlugin plugin) {
+        return plugin.pendingRestart() && plugin.stagedVersionNumber() != null
+                ? "\nReplaces " + plugin.stagedVersionNumber() : "";
     }
 
     private static String key(TrackedPlugin plugin) {

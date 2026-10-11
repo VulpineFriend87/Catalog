@@ -48,13 +48,12 @@ public final class AutoUpdatePolicy {
     /**
      * Whether this plugin has asked to be updated on its own.
      *
-     * <p>A build already staged is not wanted again: it is waiting for a restart, and downloading
-     * over it would only replace one pending change with another.</p>
+     * <p>A newer build replaces a staged one. A fresh install waits for its first load.</p>
      */
     private static boolean wanted(UpdateCandidate candidate) {
 
         TrackedPlugin plugin = candidate.plugin();
-        return plugin.autoUpdate() && !plugin.awaitingRestart() && !plugin.isPinned();
+        return plugin.autoUpdate() && !plugin.pendingLoad() && !plugin.isPinned();
     }
 
     /**

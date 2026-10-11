@@ -151,12 +151,28 @@ public final class UpdateChecker {
     }
 
     /**
-     * Whether a version Modrinth offered is an upgrade.
+     * Whether a version Modrinth offered is newer than the installed build and the staged one.
      */
-    private static boolean isNewer(TrackedPlugin plugin, ModrinthVersion version) {
+    public static boolean isNewer(TrackedPlugin plugin, ModrinthVersion version) {
 
         if (version.id() == null || version.id().equals(plugin.versionId())) {
             return false;
+        }
+
+        if (plugin.pendingRestart()) {
+
+            if (version.id().equals(plugin.stagedVersionId())) {
+                return false;
+            }
+
+            // Staged by a Catalog that did not record the publish date.
+            if (plugin.stagedPublished() == null || version.datePublished() == null) {
+                return false;
+            }
+
+            if (!version.datePublished().isAfter(plugin.stagedPublished())) {
+                return false;
+            }
         }
 
         if (plugin.datePublished() == null || version.datePublished() == null) {

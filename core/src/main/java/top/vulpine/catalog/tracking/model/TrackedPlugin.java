@@ -52,6 +52,10 @@ public final class TrackedPlugin {
      * Which build is staged, so a picker can mark it while the installed one is still running.
      */
     private String stagedVersionId;
+    private String stagedVersionNumber;
+
+    /** When the staged build was published, which a newer build is compared against. */
+    private Instant stagedPublished;
 
     /**
      * Who queued the staged build, read by the restart that applies it. Absent means Catalog did.

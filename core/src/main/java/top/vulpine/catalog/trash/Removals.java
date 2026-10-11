@@ -172,6 +172,8 @@ public final class Removals {
         tracked.pendingRestart(false);
         tracked.stagedAs(null);
         tracked.stagedVersionId(null);
+        tracked.stagedVersionNumber(null);
+        tracked.stagedPublished(null);
         tracked.stagedBy(null);
 
         return tracked;

@@ -254,6 +254,56 @@ class UpdateCheckerTest {
     }
 
     @Test
+    @DisplayName("the staged build is not offered again")
+    void ignoresTheStagedBuild() {
+
+        ModrinthVersion staged = version("v2", "2.0", "2026-06-01T00:00:00Z");
+        TrackedPlugin plugin = tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"), staged);
+
+        stage(plugin, staged);
+
+        assertTrue(checker().check(PAPER).isEmpty());
+    }
+
+    @Test
+    @DisplayName("a build newer than the staged one is offered from the installed one")
+    void offersPastTheStagedBuild() {
+
+        ModrinthVersion staged = version("v2", "2.0", "2026-06-01T00:00:00Z");
+        TrackedPlugin plugin = tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"),
+                staged, version("v3", "3.0", "2026-06-03T00:00:00Z"));
+
+        stage(plugin, staged);
+
+        List<UpdateCandidate> candidates = checker().check(PAPER);
+
+        assertEquals(1, candidates.size());
+        assertEquals("1.0", candidates.get(0).from());
+        assertEquals("3.0", candidates.get(0).to());
+    }
+
+    @Test
+    @DisplayName("a build staged without a publish date blocks newer ones until it applies")
+    void waitsOnAStagedBuildWithoutADate() {
+
+        ModrinthVersion staged = version("v2", "2.0", "2026-06-01T00:00:00Z");
+        TrackedPlugin plugin = tracked("A", "hash-a", version("v1", "1.0", "2026-01-01T00:00:00Z"),
+                staged, version("v3", "3.0", "2026-06-03T00:00:00Z"));
+
+        stage(plugin, staged);
+        plugin.stagedPublished(null);
+
+        assertTrue(checker().check(PAPER).isEmpty());
+    }
+
+    private static void stage(TrackedPlugin plugin, ModrinthVersion version) {
+        plugin.pendingRestart(true);
+        plugin.stagedVersionId(version.id());
+        plugin.stagedVersionNumber(version.versionNumber());
+        plugin.stagedPublished(version.datePublished());
+    }
+
+    @Test
     @DisplayName("a pinned plugin is not even asked about")
     void skipsPinnedPlugins() {
 

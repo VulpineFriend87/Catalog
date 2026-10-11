@@ -162,9 +162,8 @@ public final class Updates {
 
             Logger.debug(CatalogAction.UPDATE, "  Modrinth offers " + candidate.plugin().displayName()
                     + " " + candidate.from() + " -> " + candidate.to()
-                    + (candidate.plugin().awaitingRestart()
-                            ? "; hidden from the list and skipped by auto-update, because it is"
-                                    + " already waiting for a restart"
+                    + (candidate.plugin().pendingLoad()
+                            ? "; hidden from the list and skipped by auto-update until it loads"
                             : ""));
         }
 
@@ -224,7 +223,7 @@ public final class Updates {
             Logger.debug(CatalogAction.UPDATE, "Not updating " + waiting.displayName()
                     + " on its own: " + (!waiting.autoUpdate() ? "auto-update is off"
                             : waiting.isPinned() ? "it is held"
-                            : waiting.awaitingRestart() ? "it is already waiting for a restart"
+                            : waiting.pendingLoad() ? "it has not loaded yet"
                             : policy.soaking(candidate, now)
                                     ? "the build is still soaking, " + policy.soakMinutes(waiting)
                                             + " minutes from " + candidate.version().datePublished()
@@ -242,12 +241,16 @@ public final class Updates {
 
             try {
 
+                String replacing = candidate.plugin().pendingRestart()
+                        ? candidate.plugin().stagedVersionNumber() : null;
+
                 installer.stage(candidate, null);
                 failed.remove(candidate.plugin().projectId());
 
                 Logger.info(CatalogAction.UPDATE, "Updated " + candidate.plugin().displayName()
                         + " " + candidate.from() + " -> " + candidate.to()
-                        + ", applies on the next restart.");
+                        + (replacing != null ? ", replacing " + replacing + ". Applies"
+                                : ", applies") + " on the next restart.");
 
             } catch (Exception e) {
 
@@ -335,7 +338,7 @@ public final class Updates {
     }
 
     /**
-     * The updates still worth offering: what the last check found, minus anything already staged.
+     * The updates still worth offering: what the last check found, minus fresh installs not loaded yet.
      *
      * @return the open update candidates
      */
@@ -344,7 +347,7 @@ public final class Updates {
         List<UpdateCandidate> out = new ArrayList<>();
 
         for (UpdateCandidate candidate : lastCheck) {
-            if (!candidate.plugin().pendingRestart()) {
+            if (!candidate.plugin().pendingLoad()) {
                 out.add(candidate);
             }
         }
@@ -401,6 +404,8 @@ public final class Updates {
             plugin.pendingRestart(false);
             plugin.stagedAs(null);
             plugin.stagedVersionId(null);
+            plugin.stagedVersionNumber(null);
+            plugin.stagedPublished(null);
             plugin.stagedBy(null);
             Logger.warn(CatalogAction.UPDATE, "The build downloaded for " + plugin.displayName()
                     + " is gone from the update folder and was never applied.");

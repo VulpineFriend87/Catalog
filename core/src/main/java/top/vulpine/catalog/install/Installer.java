@@ -76,10 +76,23 @@ public final class Installer {
         // The downloader already writes it under the file name Modrinth publishes it as.
         String published = staged.getFileName().toString();
 
+        // One staged build per plugin.
+        if (plugin.pendingRestart() && !platform.cancelStaged(Removals.stagedName(plugin))) {
+            try {
+                Files.deleteIfExists(staged);
+            } catch (IOException ignored) {
+                // Staging is emptied on startup.
+            }
+            throw new InstallException("Could not remove the build already downloaded for "
+                    + plugin.displayName());
+        }
+
         platform.applyAtRestart(staged, published);
 
         plugin.stagedAs(published);
         plugin.stagedVersionId(version.id());
+        plugin.stagedVersionNumber(version.versionNumber());
+        plugin.stagedPublished(version.datePublished());
         plugin.stagedBy(by);
         plugin.pendingRestart(true);
         tracking.save();
@@ -102,6 +115,8 @@ public final class Installer {
 
         plugin.stagedAs(null);
         plugin.stagedVersionId(null);
+        plugin.stagedVersionNumber(null);
+        plugin.stagedPublished(null);
         plugin.stagedBy(null);
         plugin.pendingRestart(false);
         tracking.save();
