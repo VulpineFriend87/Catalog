@@ -107,6 +107,8 @@ public final class JoinNotifier implements Listener {
      */
     private List<Notice> notices(Set<String> heardBefore, Set<String> news) {
 
+        plugin.noticeLoaded();
+
         List<Notice> out = new ArrayList<>();
 
         List<Notice.Item> notEnabled = new ArrayList<>();

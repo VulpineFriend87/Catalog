@@ -7,6 +7,7 @@ import eu.okaeri.configs.yaml.bukkit.YamlBukkitConfigurer;
 import eu.okaeri.configs.yaml.bukkit.serdes.SerdesBukkit;
 import lombok.Getter;
 import org.bstats.bukkit.Metrics;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import revxrsal.commands.Lamp;
 import revxrsal.commands.bukkit.BukkitLamp;
@@ -57,9 +58,11 @@ import top.vulpine.commons.text.Dialect;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.CodeSource;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -734,6 +737,40 @@ public final class CatalogPaper extends JavaPlugin implements Platform {
         } catch (IOException e) {
             throw new InstallException("Could not prepare the update: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public boolean isEnabled(Path jar) {
+
+        Path wanted = jar.toAbsolutePath().normalize();
+
+        for (Plugin running : getServer().getPluginManager().getPlugins()) {
+            if (running.isEnabled() && wanted.equals(jarOf(running))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return the jar a plugin's classes were loaded from, or null when it cannot be told
+     */
+    private static Path jarOf(Plugin plugin) {
+
+        try {
+            CodeSource source = plugin.getClass().getProtectionDomain().getCodeSource();
+            return source == null ? null : Path.of(source.getLocation().toURI()).toAbsolutePath().normalize();
+        } catch (URISyntaxException | IllegalArgumentException | SecurityException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Clears the restart fresh installs are waiting for once something else has enabled them.
+     */
+    public void noticeLoaded() {
+        saving(library::noticeLoaded);
     }
 
     @Override

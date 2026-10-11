@@ -51,9 +51,22 @@ public final class EnableCheck implements Listener {
     }
 
     /**
-     * @return the plugins this start did not enable
+     * @return the plugins this start did not enable that are still not enabled
      */
     public List<Failure> failures() {
+
+        List<Failure> still = new ArrayList<>();
+
+        for (Failure failure : failures) {
+            if (!plugin.isEnabled(plugin.pluginsFolder().resolve(failure.plugin().fileName()))) {
+                still.add(failure);
+            }
+        }
+
+        if (still.size() != failures.size()) {
+            failures = List.copyOf(still);
+        }
+
         return failures;
     }
 

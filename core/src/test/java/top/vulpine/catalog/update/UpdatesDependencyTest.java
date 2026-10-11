@@ -70,6 +70,11 @@ class UpdatesDependencyTest {
             return true;
         }
 
+        @Override
+        public boolean isEnabled(Path jar) {
+            return false;
+        }
+
     }
 
     @BeforeEach

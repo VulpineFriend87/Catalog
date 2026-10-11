@@ -152,6 +152,26 @@ public final class Library {
     }
 
     /**
+     * Clears the restart a fresh install is waiting for once its jar is enabled.
+     */
+    public void noticeLoaded() throws TrackingException {
+
+        boolean changed = false;
+
+        for (TrackedPlugin plugin : tracking.all()) {
+            if (plugin.pendingLoad()
+                    && platform.isEnabled(platform.pluginsFolder().resolve(plugin.fileName()))) {
+                plugin.pendingLoad(false);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            tracking.save();
+        }
+    }
+
+    /**
      * @return the plugins Catalog installed that this start loaded for the first time
      */
     public List<TrackedPlugin> loaded() {

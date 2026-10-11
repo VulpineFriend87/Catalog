@@ -1402,6 +1402,8 @@ public final class MainCommand {
             }
         }
 
+        plugin.noticeLoaded();
+
         Map<String, EnableCheck.Failure> notEnabled = new HashMap<>();
 
         for (EnableCheck.Failure failure : plugin.getEnableCheck().failures()) {
@@ -1419,6 +1421,7 @@ public final class MainCommand {
     private void showProject(CommandSender sender, String query) {
 
         abandonConfirmation(sender);
+        plugin.noticeLoaded();
 
         try {
 

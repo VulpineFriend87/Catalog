@@ -55,4 +55,10 @@ public interface Platform {
      */
     boolean cancelStaged(String fileName);
 
+    /**
+     * @param jar a jar in the plugins folder
+     * @return true if a plugin loaded from it is enabled right now
+     */
+    boolean isEnabled(Path jar);
+
 }
