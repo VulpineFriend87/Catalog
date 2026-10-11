@@ -33,6 +33,7 @@ public final class TrackedPlugin {
     /** The build the last update replaced, which a rollback returns to. */
     private String previousVersionId;
     private String previousVersionNumber;
+    private Instant previousPublished;
 
     /** The file in {@code plugins/} as it is named right now, canonical once adopted. */
     private String fileName;
@@ -130,6 +131,7 @@ public final class TrackedPlugin {
         if (versionId != null && !versionId.equals(version.id())) {
             this.previousVersionId = versionId;
             this.previousVersionNumber = versionNumber;
+            this.previousPublished = datePublished;
         }
 
         this.versionId = version.id();
@@ -137,6 +139,14 @@ public final class TrackedPlugin {
         this.datePublished = version.datePublished();
         this.fileName = fileName;
         this.sha512 = sha512;
+    }
+
+    /**
+     * Whether there is a previous build older than the installed one to roll back to.
+     */
+    public boolean canRollBack() {
+        return previousVersionId != null && (previousPublished == null || datePublished == null
+                || previousPublished.isBefore(datePublished));
     }
 
     /**

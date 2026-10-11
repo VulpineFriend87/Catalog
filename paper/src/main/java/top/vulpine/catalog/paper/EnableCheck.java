@@ -46,7 +46,7 @@ public final class EnableCheck implements Listener {
          * @return whether a rollback can be offered at all
          */
         public boolean canRollBack() {
-            return updated && plugin.previousVersionId() != null;
+            return updated && plugin.canRollBack();
         }
     }
 
@@ -127,7 +127,7 @@ public final class EnableCheck implements Listener {
         }
 
         Failure failure = new Failure(tracked, updated, reason,
-                updated && tracked.previousVersionId() != null && removed(tracked.previousVersionId()));
+                updated && tracked.canRollBack() && removed(tracked.previousVersionId()));
 
         found.add(failure);
         plugin.getHistory().add(HistoryEntry.notEnabled(tracked, updated, reason));
